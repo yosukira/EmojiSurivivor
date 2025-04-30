@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JS Emoji 幸存者 - 对象池优化版</title>
+    <style>
+        /* CSS 样式与之前版本相同 */
+        body { margin: 0; overflow: hidden; background-color: #1a1a1a; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: 'Segoe UI Emoji', 'Arial', sans-serif; color: #eee; }
+        canvas { border: 1px solid #666; background-color: #2d2d3a; cursor: none; }
+        #ui { position: absolute; top: 0; left: 0; width: 100%; display: flex; justify-content: space-between; pointer-events: none; z-index: 5; }
+        #topLeftUI, #topRightUI { background-color: rgba(0, 0, 0, 0.65); padding: 12px; margin: 10px; border-radius: 8px; font-size: 17px; color: white; max-width: 280px; }
+        #topRightUI { text-align: right; }
+        #healthBarContainer, #xpBarContainer { width: 220px; height: 16px; background-color: #555; border-radius: 5px; overflow: hidden; margin-bottom: 6px; border: 1px solid #333; }
+        #xpBarContainer { height: 11px; margin-top: 3px;}
+        #healthBar { height: 100%; width: 100%; background-color: #e74c3c; transition: width 0.2s ease-in-out; }
+        #xpBar { height: 100%; width: 0%; background-color: #3498db; transition: width 0.2s ease-in-out; }
+        .uiIcon { font-size: 20px; margin-right: 6px; vertical-align: middle; }
+        .uiItemLevel { font-size: 13px; color: #bbb; margin-left: 3px; vertical-align: middle; }
+        .overlayScreen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.85); display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; color: white; z-index: 10; font-size: 19px; }
+        .overlayScreen h1 { font-size: 2.6em; margin-bottom: 22px; }
+        .overlayScreen p { margin: 12px 0; }
+        .overlayScreen button { padding: 16px 32px; font-size: 1.15em; margin: 11px; cursor: pointer; background-color: #2ecc71; color: white; border: none; border-radius: 6px; min-width: 320px; text-align: left; display: flex; align-items: center; transition: background-color 0.2s ease; }
+        .overlayScreen button:hover { background-color: #27ae60; }
+        .overlayScreen button .upgradeIcon { font-size: 1.6em; margin-right: 18px; }
+        .overlayScreen button .upgradeText { flex-grow: 1; }
+        .overlayScreen button .upgradeLevel { font-size: 0.85em; color: #ddd; margin-left: 12px; }
+        .overlayScreen button p { font-size: 0.8em; margin: 6px 0 0 0; color: #e0e0e0 !important; }
+        #bossWarning { position: absolute; top: 25%; left: 50%; transform: translateX(-50%); font-size: 2.5em; color: #e74c3c; background-color: rgba(0,0,0,0.7); padding: 15px 30px; border-radius: 10px; z-index: 6; display: none; animation: fadeInOut 2s ease-in-out; }
+        @keyframes fadeInOut { 0%, 100% { opacity: 0; } 25%, 75% { opacity: 1; } }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+<!-- HTML 结构不变 -->
+<div id="ui">
+    <div id="topLeftUI">
+        <div>生命: <span id="healthValue">100</span> / <span id="maxHealthValue">100</span></div>
+        <div id="healthBarContainer"><div id="healthBar"></div></div>
+        <div>等级: <span id="levelValue">1</span></div>
+        <div>经验: <span id="xpValue">0</span> / <span id="xpNextLevelValue">10</span></div>
+        <div id="xpBarContainer"><div id="xpBar"></div></div>
+        <div>时间: <span id="timerValue">0:00</span></div>
+        <div id="killCount">击杀: <span id="killCountValue">0</span></div>
+    </div>
+    <div id="topRightUI">
+        <div>武器:</div>
+        <div id="weaponIcons"></div>
+        <div style="margin-top: 10px;">被动:</div>
+        <div id="passiveIcons"></div>
+    </div>
+</div>
+<canvas id="gameCanvas"></canvas>
+<div id="startScreen" class="overlayScreen">
+    <h1>Emoji 幸存者</h1>
+    <p>🧛 使用 WASD 移动。</p> <p>💀 在怪物群中活下来！</p>
+    <p>✨ 收集宝石升级。</p> <p>🅿️ 按 P 暂停/取消暂停。</p>
+    <button id="startButton"><span class="upgradeIcon">▶️</span> 开始游戏</button>
+</div>
+<div id="levelUpScreen" class="overlayScreen hidden"> <h1>升级!</h1> <p>选择一个强化:</p> <div id="upgradeOptions"></div> </div>
+<div id="pauseScreen" class="overlayScreen hidden"> <h1>已暂停</h1> <p>按 P 继续</p> <button id="resumeButton"><span class="upgradeIcon">▶️</span> 继续</button> </div>
+<div id="gameOverScreen" class="overlayScreen hidden"> <h1>游戏结束!</h1> <p>你存活了: <span id="finalTime">0:00</span></p> <p>最终等级: <span id="finalLevel">1</span></p> <p>击杀数: <span id="finalKills">0</span></p> <button id="restartButton"><span class="upgradeIcon">🔄</span> 再玩一次</button> </div>
+<div id="bossWarning">👹 BOSS 来袭! 👹</div>
+
+<script>
+    // --- 获取 DOM 元素 --- (不变)
+    const canvas = document.getElementById('gameCanvas'); const ctx = canvas.getContext('2d');
+    const ui = document.getElementById('ui'); const healthValueUI = document.getElementById('healthValue'); const maxHealthValueUI = document.getElementById('maxHealthValue'); const healthBarUI = document.getElementById('healthBar'); const levelValueUI = document.getElementById('levelValue'); const xpValueUI = document.getElementById('xpValue'); const xpNextLevelValueUI = document.getElementById('xpNextLevelValue'); const xpBarUI = document.getElementById('xpBar'); const timerValueUI = document.getElementById('timerValue'); const weaponIconsUI = document.getElementById('weaponIcons'); const passiveIconsUI = document.getElementById('passiveIcons'); const killCountValueUI = document.getElementById('killCountValue');
+    const startScreen = document.getElementById('startScreen'); const levelUpScreen = document.getElementById('levelUpScreen'); const pauseScreen = document.getElementById('pauseScreen'); const gameOverScreen = document.getElementById('gameOverScreen'); const upgradeOptionsContainer = document.getElementById('upgradeOptions'); const finalTimeUI = document.getElementById('finalTime'); const finalLevelUI = document.getElementById('finalLevel'); const finalKillsUI = document.getElementById('finalKills'); const startButton = document.getElementById('startButton'); const restartButton = document.getElementById('restartButton'); const resumeButton = document.getElementById('resumeButton'); const bossWarningUI = document.getElementById('bossWarning');
+
+    // --- 游戏配置 ---
+    let GAME_WIDTH = Math.min(window.innerWidth * 0.95, 1280); let GAME_HEIGHT = Math.min(window.innerHeight * 0.95, 720);
+    canvas.width = GAME_WIDTH; canvas.height = GAME_HEIGHT;
+    const PLAYER_DEFAULT_STATS = { health: 100, speed: 180, pickupRadius: 80, magnetBonus: 0, luck: 1.0, maxWeapons: 6, maxPassives: 6, damageMultiplier: 1.0, areaMultiplier: 1.0, durationMultiplier: 1.0, projectileSpeedMultiplier: 1.0, cooldownMultiplier: 1.0, projectileCountBonus: 0, armor: 0, regen: 0, };
+    const ENEMY_BASE_STATS = { health: 8, speed: 50, damage: 6, xp: 2 }; // 降低敌人基础生命和伤害，增加经验掉落
+    const BOSS_INTERVAL = 180; const BOSS_BASE_HEALTH_MULTIPLIER = 35; const BOSS_BASE_DAMAGE_MULTIPLIER = 2.0; // 降低Boss难度
+    const LEVEL_XP_REQUIREMENTS = [6, 15, 28, 45, 65, 90, 120, 155, 195, 240]; const MAX_LEVEL = 99; const GAME_FONT_SIZE = 24; // 进一步降低升级所需经验
+    const SPAWN_PADDING = 50;
+    const MAX_DAMAGE_NUMBERS = 30; // *** 进一步限制伤害数字 ***
+    // 添加双缓冲渲染相关变量
+    const offscreenCanvas = document.createElement('canvas');
+    const offscreenCtx = offscreenCanvas.getContext('2d', { alpha: false }); // 禁用 alpha 通道以提高性能
+    offscreenCanvas.width = GAME_WIDTH;
+    offscreenCanvas.height = GAME_HEIGHT;
+
+    // --- 游戏状态变量 ---
+    let player;
+    let enemies = [];
+    let projectiles = []; // 活动中的弹射物
+    let xpGems = [];
+    let worldObjects = [];
+    let damageNumbers = []; // 活动中的伤害数字
+    let keys = {}; let gameTime = 0; let killCount = 0; let lastTime = 0; let deltaTime = 0; let spawnTimer = 0;
+    let baseSpawnInterval = 2.8; // *** 再增加基础生成间隔 ***
+    let currentSpawnInterval = baseSpawnInterval; let difficultyTimer = 0; let nextBossTime = BOSS_INTERVAL; let currentBoss = null; let isGameOver = false; let isPaused = false; let isLevelUp = false; let animationFrameId;
+
+    // *** 对象池数组 ***
+    let inactiveProjectiles = [];
+    let inactiveDamageNumbers = [];
+
+    // --- Emoji 定义 --- (不变)
+    const EMOJI = { PLAYER: '🧛', ENEMY_NORMAL: '💀', ENEMY_FAST: '👻', ENEMY_TANK: '🧟', BOSS: '👹', PROJECTILE_DAGGER: '🔪', PROJECTILE_GARLIC: '💨', PROJECTILE_WHIP_L: '➬', PROJECTILE_WHIP_R: '➪', XP_GEM: '✨', CHEST: '🎁', HEART: '💖', MAGNET: '🧲', WEAPON_DAGGER: '🔪', WEAPON_GARLIC: '🧄', WEAPON_WHIP: '〰️', WEAPON_KNIVES: '⚔️', WEAPON_SOUL_EATER: '👻', WEAPON_BLOODY_TEAR: '🩸', PASSIVE_SPINACH: '🥬', PASSIVE_ARMOR: '🛡️', PASSIVE_WINGS: '🕊️', PASSIVE_TOMＥ: '📖', PASSIVE_CANDELABRADOR: '🕯️', PASSIVE_BRACER: '🥊', PASSIVE_HOLLOW_HEART: '❤️‍🔥', PASSIVE_PUMMAROLA: '🍅', };
+    const ENEMY_TYPES = [ { emoji: EMOJI.ENEMY_NORMAL, healthMult: 1, speedMult: 1, damageMult: 1, xpMult: 1, weight: 10 }, { emoji: EMOJI.ENEMY_FAST, healthMult: 0.7, speedMult: 1.5, damageMult: 0.8, xpMult: 1.2, weight: 5, minTime: 75 }, { emoji: EMOJI.ENEMY_TANK, healthMult: 2.5, speedMult: 0.6, damageMult: 1.2, xpMult: 1.5, weight: 3, minTime: 150 }, ];
+
+    // --- 基础类 --- (修改 GameObject 的 draw 方法)
+    class GameObject { constructor(x, y, emoji, size = GAME_FONT_SIZE) { this.x = x; this.y = y; this.emoji = emoji; this.size = size; this.width = size; this.height = size; this.isGarbage = false; /* 对象池新增: 活动状态 */ this.isActive = true; } draw(c) {
+        // 简化可视性检查，避免不必要的计算
+        if (!this.isActive || this.isGarbage) return;
+        try {
+            c.font = `${this.size}px 'Segoe UI Emoji', Arial`;
+            c.textAlign = 'center';
+            c.textBaseline = 'middle';
+            c.fillText(this.emoji, this.x, this.y);
+        } catch (e) {
+            console.error("绘制 GameObject 时出错:", e);
+            c.fillStyle = 'magenta';
+            c.fillRect(this.x - this.size/4, this.y - this.size/4, this.size/2, this.size/2);
+        }
+    } checkCollision(o) { if (!this.isActive || !o.isActive) return false; const h1=this.size/2,h2=o.size/2; return(this.x-h1<o.x+h2 && this.x+h1>o.x-h2 && this.y-h1<o.y+h2 && this.y+h1>o.y-h2); } update(dt){} reset() { /* 对象池需要：重置对象状态的方法 */ this.isGarbage = false; this.isActive = true; } }
+    // 伤害数字类 (移除阴影)
+    class DamageNumber extends GameObject {
+        constructor(x,y,t,s=20,c='white',d=0.8){super(x,y,'',s); this.init(x,y,t,c,d); }
+        init(x, y, text, color, duration) { // 用于对象池重置
+            this.x = x; this.y = y; this.text = text; this.color = color; this.duration = duration;
+            this.lifetime = 0; this.startY = y; this.vy = -90; this.isActive = true; this.isGarbage = false;
+            return this; // 支持链式调用
+        }
+        update(dt){if (!this.isActive || this.isGarbage) return; this.lifetime+=dt;if(this.lifetime>=this.duration){this.isGarbage=true; this.isActive=false; /* 回收前标记非活动 */ return;} this.y+=this.vy*dt;this.vy+=160*dt;}
+        draw(c){ if (!this.isActive || this.isGarbage) return; const opacity = Math.max(0, 1.0 - (this.lifetime / this.duration)**0.7); c.font=`bold ${this.size}px Arial`; c.fillStyle=`rgba(${this.color==='white'?'255,255,255':'255,210,0'}, ${opacity})`; /* c.shadowColor="rgba(0,0,0,0.9)"; c.shadowBlur=5; */ /* 移除阴影 */ c.textAlign='center'; c.textBaseline='middle'; c.fillText(this.text, this.x, this.y); /* c.shadowBlur=0; */ }
+        reset() { super.reset(); this.lifetime = 0; this.vy = -90; } // 重置特定状态
+    }
+
+    // --- 角色基础类 (使用新的 spawnDamageNumber) ---
+    class Character extends GameObject {
+        constructor(x,y,e,s,stats){super(x,y,e,s);this.stats={...stats};this.health=this.stats.health;this.speed=this.stats.speed;this.damage=this.stats.damage||0;this.xpValue=this.stats.xp||0;}
+        takeDamage(amount, source) {
+            const damageReduction = (this instanceof Player && typeof this.getStat === 'function') ? this.getStat('armor') : (this.stats.armor || 0);
+            const damageTaken = Math.max(1, Math.round(amount - damageReduction));
+            this.health -= damageTaken; this.health = Math.max(0, this.health);
+            // *** 使用对象池生成伤害数字 ***
+            if (damageNumbers.length < MAX_DAMAGE_NUMBERS) {
+                const dmgNumX = this.x + (Math.random() - 0.5) * this.size * 0.5;
+                const dmgNumY = this.y - this.size * 0.5;
+                spawnDamageNumber(dmgNumX, dmgNumY, damageTaken.toString()); // 使用生成函数
+            }
+            if (this.health <= 0) { this.onDeath(source); return true; }
+            return false;
+        }
+        onDeath(k){this.isGarbage=true; this.isActive = false;} // 死亡时也标记非活动
+    }
+
+    // --- 玩家类 --- (不变)
+    class Player extends Character { constructor(x,y){super(x,y,EMOJI.PLAYER,GAME_FONT_SIZE*1.2,PLAYER_DEFAULT_STATS);this.maxHealth=this.stats.health;this.level=1;this.xp=0;this.xpToNextLevel=this.getXPForLevel(1);this.weapons=[];this.passiveItems=[];this.maxWeapons=this.stats.maxWeapons;this.maxPassives=this.stats.maxPassives;this.pickupRadius=this.stats.pickupRadius;this.pickupRadiusSq=this.pickupRadius*this.pickupRadius;this.luck=this.stats.luck;this.regenTimer=0;this.moveDirection={x:0,y:0};this.lastMoveDirection={x:1,y:0};this.recalculateStats();} getXPForLevel(l){if(l-1<LEVEL_XP_REQUIREMENTS.length)return LEVEL_XP_REQUIREMENTS[l-1];return Math.floor(LEVEL_XP_REQUIREMENTS[LEVEL_XP_REQUIREMENTS.length-1]*Math.pow(1.15,l-LEVEL_XP_REQUIREMENTS.length));} update(dt,k){ if(this.isGarbage || !this.isActive)return;let dx=0,dy=0;if(k['w']||k['W']||k['ArrowUp'])dy-=1;if(k['s']||k['S']||k['ArrowDown'])dy+=1;if(k['a']||k['A']||k['ArrowLeft'])dx-=1;if(k['d']||k['D']||k['ArrowRight'])dx+=1;const l=Math.sqrt(dx*dx+dy*dy);let mX=0,mY=0;const cs=this.getStat('speed');if(l>0){mX=(dx/l)*cs*dt;mY=(dy/l)*cs*dt;this.moveDirection={x:dx/l,y:dy/l};this.lastMoveDirection={...this.moveDirection};}else{this.moveDirection={x:0,y:0};} this.x+=mX; this.y+=mY; this.x = Math.max(this.size / 2, Math.min(GAME_WIDTH - this.size / 2, this.x)); this.y = Math.max(this.size / 2, Math.min(GAME_HEIGHT - this.size / 2, this.y)); this.weapons.forEach(w=>w.update(dt,this));this.passiveItems.forEach(i=>i.update&&i.update(dt,this));this.regenTimer+=dt;if(this.regenTimer>=1.0){const ra=this.getStat('regen');if(ra>0)this.heal(ra);this.regenTimer-=1.0;}} gainXP(a){if(this.level>=MAX_LEVEL)return;this.xp+=a;while(this.xp>=this.xpToNextLevel&&this.level<MAX_LEVEL){this.xp-=this.xpToNextLevel;this.level++;this.xpToNextLevel=this.getXPForLevel(this.level);this.onLevelUp();} updateUI();} onLevelUp(){this.heal(this.getStat('health')*0.25);isLevelUp=true;} heal(a){this.health=Math.min(this.getStat('health'),this.health+a);updateUI();} addWeapon(w){if(this.weapons.length<this.maxWeapons){this.weapons.push(w);w.owner=this;this.recalculateStats();updateUI();return true;}return false;} addPassive(p){if(this.passiveItems.length<this.maxPassives){this.passiveItems.push(p);p.owner=this;this.recalculateStats();updateUI();return true;}return false;} getStat(statName){let baseValue=PLAYER_DEFAULT_STATS[statName]??(statName.endsWith('Multiplier')||statName==='luck'?1.0:0.0);let addBonus=0;let multBonusPercent=0;this.passiveItems.forEach(item=>{const itemBonus=item.bonuses[statName];if(itemBonus){addBonus+=itemBonus.add||0;multBonusPercent+=itemBonus.mult||0;}});let finalValue=(baseValue+addBonus)*(1.0+multBonusPercent);if(statName==='cooldownMultiplier'){finalValue=Math.max(0.1,1.0+multBonusPercent);return finalValue;} if(statName==='health'||statName==='armor'){return Math.max(1,Math.round(finalValue));} if(statName==='speed'){return Math.max(10,finalValue);} if(statName==='damageMultiplier'||statName==='areaMultiplier'||statName==='durationMultiplier'||statName==='projectileSpeedMultiplier'){return Math.max(0.1,finalValue);} if(statName==='projectileCountBonus'){return Math.floor(finalValue);} return finalValue;} recalculateStats(){this.maxHealth=this.getStat('health');this.speed=this.getStat('speed');this.pickupRadiusSq=Math.pow(this.pickupRadius*(1+this.getStat('magnetBonus')),2);this.luck=this.getStat('luck');this.health=Math.max(1,Math.min(this.health,this.maxHealth));updateUI();} onDeath(k){super.onDeath(k);gameOver();} findNearestEnemy(r=Infinity){let ce=null,mds=r*r;enemies.forEach(e=>{if(e.isGarbage||!e.isActive)return;const dx=this.x-e.x;const dy=this.y-e.y;const ds=dx*dx+dy*dy;if(ds<mds){mds=ds;ce=e;}});return ce;} findEnemiesInRadius(r){const rs=r*r;return enemies.filter(e=>{if(e.isGarbage||!e.isActive)return false;const dx=this.x-e.x;const dy=this.y-e.y;return dx*dx+dy*dy<=rs;});} findRandomEnemy(r=Infinity){const n=enemies.filter(e=>{if(e.isGarbage||!e.isActive)return false;const dx=this.x-e.x;const dy=this.y-e.y;return dx*dx+dy*dy<=r*r;});return n.length===0?null:n[Math.floor(Math.random()*n.length)];} }
+
+    // --- 敌人基础类 --- (修复经验掉落问题) ---
+    class Enemy extends Character { constructor(x,y,typeData,diffMult){ const tH=gameTime*0.06; const tS=gameTime*0.03; const tD=gameTime*0.04; const s={health:Math.ceil((ENEMY_BASE_STATS.health+tH)*typeData.healthMult*diffMult),speed:(ENEMY_BASE_STATS.speed+tS)*typeData.speedMult,damage:Math.ceil((ENEMY_BASE_STATS.damage+tD)*typeData.damageMult),xp:Math.ceil(ENEMY_BASE_STATS.xp*typeData.xpMult),armor:0}; super(x,y,typeData.emoji,GAME_FONT_SIZE,s);this.baseSpeed=s.speed;this.damageCooldown=0.5;this.damageTimer=0;} update(dt,target){ if(this.isGarbage || !this.isActive)return; const dx=target.x-this.x; const dy=target.y-this.y; const d=Math.sqrt(dx*dx+dy*dy); if(d>target.size/4){ this.x+=(dx/d)*this.speed*dt;this.y+=(dy/d)*this.speed*dt;} this.damageTimer-=dt; if(this.damageTimer<=0&&this.checkCollision(target)){target.takeDamage(this.damage,this);this.damageTimer=this.damageCooldown;}} onDeath(k){super.onDeath(k);if(k instanceof Player){xpGems.push(new ExperienceGem(this.x,this.y,this.xpValue));killCount++;if(Math.random()<0.02*k.getStat('luck')){worldObjects.push(new Pickup(this.x,this.y,EMOJI.HEART,'heal',20));}}} }
+
+    // --- Boss 类 --- (不变)
+    class BossEnemy extends Enemy { constructor(x,y){ const bc=Math.floor(gameTime/BOSS_INTERVAL); const bm=BOSS_BASE_HEALTH_MULTIPLIER+bc*15; const td={emoji:EMOJI.BOSS,healthMult:bm,speedMult:0.7+Math.random()*0.3,damageMult:BOSS_BASE_DAMAGE_MULTIPLIER+bc*0.6, xpMult:bm*2.5,};super(x,y,td,1);this.size=GAME_FONT_SIZE*3.5;this.isBoss=true;this.stats.health=Math.max(150,this.stats.health);} onDeath(k){this.isGarbage=true; this.isActive = false; if(k instanceof Player){killCount++;worldObjects.push(new Chest(this.x,this.y));for(let i=0;i<15;i++){xpGems.push(new ExperienceGem(this.x+(Math.random()-0.5)*60,this.y+(Math.random()-0.5)*60,Math.ceil(this.xpValue/15)));}} currentBoss=null;console.log("Boss 被击败!");} draw(c){ super.draw(c); if(!this.isGarbage&&this.isActive&&this.health>0){const bW=100,bH=10;const bX=this.x-bW/2;const bY=this.y-this.size/1.4-bH;const hpP=Math.max(0,this.health/this.stats.health);c.fillStyle='#444'; c.fillRect(bX,bY,bW,bH);c.fillStyle='#c0392b'; c.fillRect(bX,bY,bW*hpP,bH);c.strokeStyle='#222'; c.lineWidth=2; c.strokeRect(bX,bY,bW,bH); c.lineWidth=1;}} }
+
+    // --- 弹射物类 (添加对象池相关方法) ---
+    class Projectile extends GameObject {
+        constructor(x,y,e,s,vx,vy,dmg,p,dur,ownerStats){ super(x,y,e,s); this.init(x,y,e,s,vx,vy,dmg,p,dur,ownerStats); }
+        init(x,y,e,s,vx,vy,dmg,p,dur,ownerStats) { // 用于对象池重置
+            this.x = x; this.y = y; this.emoji = e; this.size = s;
+            this.vx=vx; this.vy=vy; this.baseDamage=dmg; this.pierce=p; this.duration=dur;
+            this.ownerStats=ownerStats; const dmgM=this.ownerStats&&typeof this.ownerStats.damageMultiplier==='number'?this.ownerStats.damageMultiplier:1.0;
+            this.damage=this.baseDamage*dmgM; this.hitTargets = new Set(); // 重置命中目标
+            this.lifetime = 0; // 重置生命周期
+            this.isActive = true; this.isGarbage = false;
+            return this;
+        }
+        update(dt){
+            if (!this.isActive || this.isGarbage) return;
+            this.x+=this.vx*dt; this.y+=this.vy*dt; this.lifetime+=dt;
+            if(this.lifetime>=this.duration||this.pierce<0){ this.isGarbage=true; this.isActive = false; return; } // 标记非活动
+            if (this.x < -this.width || this.x > GAME_WIDTH + this.width || this.y < -this.height || this.y > GAME_HEIGHT + this.height){ this.isGarbage = true; this.isActive = false; return; } // 标记非活动
+            enemies.forEach(e=>{ if(this.isGarbage||e.isGarbage||!e.isActive||this.hitTargets.has(e))return; if(this.checkCollision(e)){ e.takeDamage(this.damage,player); this.hitTargets.add(e); this.pierce--; if(this.pierce<0){ this.isGarbage=true; this.isActive = false; } } });
+        }
+        reset() { // 对象池需要的重置方法
+            super.reset(); this.lifetime = 0; this.pierce = 0; this.hitTargets.clear();
+        }
+    }
+
+    // --- 经验宝石/拾取物/宝箱类 --- (不变)
+    class ExperienceGem extends GameObject {constructor(x,y,v){super(x,y,EMOJI.XP_GEM,GAME_FONT_SIZE*0.7);this.value=v;this.attractionSpeed=450;} update(dt,t){if(this.isGarbage || !this.isActive)return;const prs=t.pickupRadiusSq;const dx=t.x-this.x; const dy=t.y-this.y; const ds=dx*dx+dy*dy; if(ds<prs&&ds>1){const d=Math.sqrt(ds);const sm=1+(prs-ds)/prs*2.5;this.x+=(dx/d)*this.attractionSpeed*sm*dt;this.y+=(dy/d)*this.attractionSpeed*sm*dt;} if(this.checkCollision(t)){t.gainXP(this.value);this.isGarbage=true; this.isActive = false;}}}
+    class Pickup extends GameObject {constructor(x,y,e,type,val){super(x,y,e,GAME_FONT_SIZE);this.type=type;this.value=val;this.lifetime=12;this.attractionSpeed=350;} update(dt,t){if (this.isGarbage || !this.isActive) return; this.lifetime-=dt;if(this.lifetime<=0){this.isGarbage=true; this.isActive = false; return;} const prs=t.pickupRadiusSq; const dx=t.x-this.x; const dy=t.y-this.y; const ds=dx*dx+dy*dy; if(ds<prs&&ds>1){const d=Math.sqrt(ds);this.x+=(dx/d)*this.attractionSpeed*dt;this.y+=(dy/d)*this.attractionSpeed*dt;} if(this.checkCollision(t)){this.applyEffect(t);this.isGarbage=true; this.isActive = false;}} applyEffect(t){if(this.type==='heal')t.heal(this.value);}}
+    class Chest extends GameObject {constructor(x,y){super(x,y,EMOJI.CHEST,GAME_FONT_SIZE*1.8);this.lifetime=45;this.collected=false;} update(dt,t){if (this.isGarbage || !this.isActive || this.collected) return; this.lifetime-=dt;if(this.lifetime<=0){this.isGarbage=true; this.isActive=false; return;} if(this.checkCollision(t)){this.open(t);this.collected=true; this.isGarbage=true; this.isActive=false;}} open(p){console.log("宝箱已开启!");p.gainXP(p.xpToNextLevel*1.5);}}
+
+    // --- 对象池生成函数 ---
+    function spawnProjectile(x,y,e,s,vx,vy,dmg,p,dur,ownerStats) {
+        let proj = null;
+        if (inactiveProjectiles.length > 0) {
+            proj = inactiveProjectiles.pop();
+            proj.init(x,y,e,s,vx,vy,dmg,p,dur,ownerStats); // 使用 init 重置
+        } else {
+            proj = new Projectile(x,y,e,s,vx,vy,dmg,p,dur,ownerStats);
+        }
+        projectiles.push(proj); // 添加到活动列表
+    }
+
+    function spawnDamageNumber(x, y, text) {
+        let dn = null;
+        if (inactiveDamageNumbers.length > 0) {
+            dn = inactiveDamageNumbers.pop();
+            dn.init(x, y, text, 'white', 0.8); // 使用 init 重置 (默认白色, 0.8秒)
+        } else {
+            dn = new DamageNumber(x, y, text, 20, 'white', 0.8);
+        }
+        damageNumbers.push(dn); // 添加到活动列表
+    }
+
+    // --- 武器 & 物品系统基类 --- (不变)
+    class UpgradeableItem {constructor(n,e,m=8){this.name=n;this.emoji=e;this.level=1;this.maxLevel=m;this.owner=null;} getLevel(){return this.level;} isMaxLevel(){return this.level>=this.maxLevel;} upgrade(){if(!this.isMaxLevel()){this.level++;console.log(`${this.name} 升级到 ${this.level}级`);this.onUpgrade();return true;}return false;} onUpgrade(){} getUpgradeDescription(){return`提升 ${this.name} 效果。`;} getBaseUpgradeOptions(p){return[{item:this,type:this instanceof Weapon?'new_weapon':'new_passive',text:`获得 ${this.name}`,description:this.getInitialDescription?this.getInitialDescription():`添加 ${this.name}。`,icon:this.emoji,action:()=>{if(this instanceof Weapon)p.addWeapon(this);else p.addPassive(this);}}];} getCurrentUpgradeOptions(p){if(this.isMaxLevel())return[];return[{item:this,type:this instanceof Weapon?'upgrade_weapon':'upgrade_passive',text:`升级 ${this.name}`,description:this.getUpgradeDescription(),icon:this.emoji,level:this.level+1,action:()=>{this.upgrade();if(this instanceof Weapon||this instanceof PassiveItem)checkEvolution(p,this);}}];}}
+    class Weapon extends UpgradeableItem { constructor(n,e,bc,ml){super(n,e,ml);this.baseCooldown=bc;this.cooldownTimer=0;this.stats={};this.calculateStats();if(this.stats&&this.stats.cooldown&&!isNaN(this.stats.cooldown)&&this.stats.cooldown>0){this.cooldownTimer=this.stats.cooldown;}else{console.error(`!!! ${this.name} 无法计算初始属性, 使用基础冷却 ${this.baseCooldown}`);this.cooldownTimer=this.baseCooldown;}} update(dt,owner){if(!this.stats||Object.keys(this.stats).length===0){this.calculateStats();if(!this.stats||Object.keys(this.stats).length===0){console.error(`!!! ${this.name} 无法计算属性。无法攻击。`);return;}} if(isNaN(this.cooldownTimer)){console.warn(`!!! ${this.name} 计时器为 NaN。重置。`);this.cooldownTimer=this.stats?.cooldown||this.baseCooldown;} const cdM=owner.getStat('cooldownMultiplier');if(isNaN(cdM)||cdM<=0){this.cooldownTimer-=dt*1.0;}else{this.cooldownTimer-=dt*cdM;} if(this.cooldownTimer<=0){if(typeof this.fire==='function'){this.fire(owner);}else{console.error(`!!! ${this.name} 未找到 fire 方法`);} const rV=this.stats?.cooldown;if(isNaN(rV)||rV<=0){console.error(`!!! ${this.name} 冷却值无效: ${rV}。使用基础冷却: ${this.baseCooldown} 重置。`);this.cooldownTimer+=this.baseCooldown;}else{this.cooldownTimer+=rV;}}} fire(o){console.warn(`${this.name} fire() 未在子类中实现`);} calculateStats(){console.warn(`${this.name} calculateStats() 未在子类中实现`);} getOwnerStats(o){return{x:o.x,y:o.y,damageMultiplier:o.getStat('damageMultiplier'),areaMultiplier:o.getStat('areaMultiplier'),durationMultiplier:o.getStat('durationMultiplier'),projectileSpeedMultiplier:o.getStat('projectileSpeedMultiplier'),projectileCountBonus:o.getStat('projectileCountBonus')||0,luck:o.luck,lastMoveDirection:o.lastMoveDirection};}}
+    class PassiveItem extends UpgradeableItem {constructor(n,e,m,b={}){super(n,e,m);this.baseBonuses=b;this.bonuses={};this.calculateStats();} applyInitialBonus(p){this.calculateStats();p.recalculateStats();} onUpgrade(){this.calculateStats();if(this.owner){this.owner.recalculateStats();checkEvolution(this.owner,this);}} calculateStats(){this.bonuses={};for(const s in this.baseBonuses){const b=this.baseBonuses[s];this.bonuses[s]={};if(b.add!==undefined)this.bonuses[s].add=b.add*this.level;if(b.mult!==undefined)this.bonuses[s].mult=b.mult*this.level;}} getUpgradeDescription(){let d=`提升 ${this.name}。`;const nl={};for(const s in this.baseBonuses){const b=this.baseBonuses[s];nl[s]={};if(b.add!==undefined)nl[s].add=b.add*(this.level+1);if(b.mult!==undefined)nl[s].mult=b.mult*(this.level+1);} if(nl.damageMultiplier?.mult)d+=` (总伤害+${(nl.damageMultiplier.mult*100).toFixed(0)}%)`;if(nl.health?.mult)d+=` (总生命+${(nl.health.mult*100).toFixed(0)}%)`;if(nl.armor?.add)d+=` (总护甲 ${nl.armor.add})`;return d;} getInitialDescription(){let d=`获得 ${this.name}。`;if(this.bonuses.damageMultiplier?.mult)d+=` (伤害+${(this.bonuses.damageMultiplier.mult*100).toFixed(0)}%)`;if(this.bonuses.health?.mult)d+=` (生命+${(this.bonuses.health.mult*100).toFixed(0)}%)`;if(this.bonuses.armor?.add)d+=` (护甲 ${this.bonuses.armor.add})`;return d;}}
+
+    // --- 具体武器实现 (DaggerWeapon 使用 spawnProjectile) ---
+    class DaggerWeapon extends Weapon {
+        static Name="匕首";static Emoji=EMOJI.WEAPON_DAGGER;static MaxLevel=8;static Evolution={requires:"Bracer",evolvesTo:"ThousandKnives"};
+        constructor(){super(DaggerWeapon.Name,DaggerWeapon.Emoji,0.95,DaggerWeapon.MaxLevel);}
+        calculateStats(){this.stats={ damage: 12 + (this.level-1)*3, projectileSpeed:350+(this.level-1)*15, cooldown:Math.max(0.16,this.baseCooldown-(this.level-1)*0.09), count:1+Math.floor((this.level-1)/2), pierce:0+Math.floor(this.level/4), duration:1.5,}; }
+        fire(owner){const os=this.getOwnerStats(owner);const count=this.stats.count+(os.projectileCountBonus||0);const speed=this.stats.projectileSpeed*(os.projectileSpeedMultiplier||1);const damage=this.stats.damage;const pierce=this.stats.pierce;const duration=this.stats.duration*(os.durationMultiplier||1);const size=GAME_FONT_SIZE*(os.areaMultiplier||1);let target=owner.findNearestEnemy(GAME_WIDTH*1.5)||{x:owner.x+owner.lastMoveDirection.x*100,y:owner.y+owner.lastMoveDirection.y*100}; const dx=target.x-owner.x,dy=target.y-owner.y; const dist=Math.sqrt(dx*dx+dy*dy); const dirX=dist>0?dx/dist:owner.lastMoveDirection.x; const dirY=dist>0?dy/dist:owner.lastMoveDirection.y; const angleStep=count>1?(Math.PI/18):0; const startAngle=Math.atan2(dirY,dirX)-(angleStep*(count-1)/2);
+            for(let i=0;i<count;i++){ const angle=startAngle+i*angleStep;const vx=Math.cos(angle)*speed;const vy=Math.sin(angle)*speed;
+                // *** 使用对象池生成弹射物 ***
+                spawnProjectile(owner.x,owner.y,EMOJI.PROJECTILE_DAGGER,size,vx,vy,damage,pierce,duration,os);
+            }
+        }
+        getUpgradeDescription(){let d=`Lv${this.level+1}: `;if(this.level%2===1)d+="+1 投射物。";else if(this.level===3||this.level===7)d+="+1 穿透。";else d+="+伤害/速度。";return d+` (冷却: ${Math.max(0.16,this.baseCooldown-this.level*0.09).toFixed(2)}s)`;}
+    }
+    // 其他武器和被动类不变...
+    class GarlicWeapon extends Weapon {static Name="大蒜";static Emoji=EMOJI.WEAPON_GARLIC;static MaxLevel=8;static Evolution={requires:"Pummarola",evolvesTo:"SoulEater"};constructor(){super(GarlicWeapon.Name,GarlicWeapon.Emoji,1.0,GarlicWeapon.MaxLevel);this.auraRadius=0;this.damageTickTimer=0;this.damageTickInterval=0.35;} // 降低伤害间隔
+        calculateStats(){this.stats={damage:3+(this.level-1)*1.5,area:65+(this.level-1)*12,knockback:6+this.level*1.5,cooldown:1.0,};} // 提高伤害
+        fire(o){} update(dt,o){this.damageTickTimer-=dt;if(this.damageTickTimer<=0){const os=this.getOwnerStats(o);const r=this.stats.area*(os.areaMultiplier||1);const rs=r*r;const d=this.stats.damage;const k=this.stats.knockback;enemies.forEach(e=>{if(e.isGarbage||!e.isActive)return;const dx=o.x-e.x;const dy=o.y-e.y;const ds=dx*dx+dy*dy;if(ds<=rs){e.takeDamage(d*(os.damageMultiplier||1),o);if(k>0&&ds>1){const dist=Math.sqrt(ds);const pf=k*(1-dist/r);const px=(e.x-o.x)/dist*pf*dt*18;const py=(e.y-o.y)/dist*pf*dt*18;e.x+=px;e.y+=py;}}});this.damageTickTimer+=this.damageTickInterval;} this.auraRadius=this.stats.area*(this.getOwnerStats(o).areaMultiplier||1);} drawAura(c,o){if(this.auraRadius>0){c.beginPath();c.arc(o.x,o.y,this.auraRadius,0,Math.PI*2);c.fillStyle='rgba(255,255,255,0.07)';c.fill();}} getUpgradeDescription(){return`Lv${this.level+1}: +伤害/范围/击退。`;}}
+    class WhipWeapon extends Weapon {static Name="鞭子";static Emoji=EMOJI.WEAPON_WHIP;static MaxLevel=8;static Evolution={requires:"HollowHeart",evolvesTo:"BloodyTear"};constructor(){super(WhipWeapon.Name,WhipWeapon.Emoji,1.6,WhipWeapon.MaxLevel);this.whipHitboxes=[];} calculateStats(){this.stats={damage:20+(this.level-1)*7,cooldown:Math.max(0.65,this.baseCooldown-(this.level-1)*0.13),area:110+(this.level-1)*18,count:1+Math.floor(this.level/4),pierce:Infinity,};} fire(o){const os=this.getOwnerStats(o);const d=this.stats.damage;const a=this.stats.area*(os.areaMultiplier||1);const c=this.stats.count+Math.floor((os.projectileCountBonus||0)/2);const wd=25*(os.areaMultiplier||1);const fr=o.lastMoveDirection.x>=0;for(let i=0;i<c;i++){const ar=(i%2===0)?fr:!fr;const hitX=o.x+(ar?a/2:-a/2); const hitY=o.y; const hb={x:hitX,y:hitY,width:a,height:wd,damage:d,ownerStats:os,lifetime:0.25,hitTargets:new Set(),isGarbage:false, update:function(dt){this.lifetime-=dt;if(this.lifetime<=0){this.isGarbage=true;return;} enemies.forEach(e=>{if(this.isGarbage||e.isGarbage||!e.isActive||this.hitTargets.has(e))return;const hW=this.width/2;const hH=this.height/2;const eHs=e.size/2;if(this.x-hW<e.x+eHs&&this.x+hW>e.x-eHs&&this.y-hH<e.y+eHs&&this.y+hH>e.y-eHs){e.takeDamage(this.damage*(this.ownerStats.damageMultiplier||1),o);this.hitTargets.add(e);}});}, draw:function(c){if(!this.isGarbage){c.fillStyle='rgba(210,210,210,0.35)';c.fillRect(this.x-this.width/2,this.y-this.height/2,this.width,this.height);}}}; this.whipHitboxes.push(hb);}} update(dt,o){super.update(dt,o);this.whipHitboxes=this.whipHitboxes.filter(hb=>{hb.update(dt);return!hb.isGarbage;});} drawHitboxes(c){this.whipHitboxes.forEach(hb=>hb.draw(c));} getUpgradeDescription(){let d=`Lv${this.level+1}: +伤害/范围。`;if(this.level===3)d+="+1 鞭击。";return d+` (冷却: ${Math.max(0.65,this.baseCooldown-this.level*0.13).toFixed(2)}s)`;}}
+    class ThousandKnives extends DaggerWeapon {static Name="千刃";static Emoji=EMOJI.WEAPON_KNIVES;static MaxLevel=1;constructor(bw){super();this.name=ThousandKnives.Name;this.emoji=ThousandKnives.Emoji;this.level=bw.maxLevel;this.maxLevel=bw.maxLevel;this.isEvolved=true;this.baseCooldown=0.1; this.calculateStats();} calculateStats(){this.stats={damage:22,projectileSpeed:550,cooldown:this.baseCooldown,count:6,pierce:4, duration:1.1,};} getCurrentUpgradeOptions(p){return[];} getBaseUpgradeOptions(p){return[];}}
+    class Spinach extends PassiveItem {static Name="菠菜";static Emoji=EMOJI.PASSIVE_SPINACH;constructor(){super(Spinach.Name,Spinach.Emoji,5,{damageMultiplier:{mult:0.1}});}getInitialDescription(){return`提升 10% 伤害。`;}getUpgradeDescription(){return`再提升 10% 伤害 (总计: +${((this.level+1)*10).toFixed(0)}%)。`;}} class Armor extends PassiveItem {static Name="盔甲";static Emoji=EMOJI.PASSIVE_ARMOR;constructor(){super(Armor.Name,Armor.Emoji,5,{armor:{add:1}});}getInitialDescription(){return`减少 1 点受到的伤害。`;}getUpgradeDescription(){return`再减少 1 点伤害 (总计: ${this.level+1})。`;}} class Wings extends PassiveItem {static Name="翅膀";static Emoji=EMOJI.PASSIVE_WINGS;constructor(){super(Wings.Name,Wings.Emoji,5,{speed:{mult:0.1}});}getInitialDescription(){return`提升 10% 移动速度。`;}getUpgradeDescription(){return`再提升 10% 移动速度 (总计: +${((this.level+1)*10).toFixed(0)}%)。`;}} class EmptyTome extends PassiveItem {static Name="空白之书";static Emoji=EMOJI.PASSIVE_TOMＥ;constructor(){super(EmptyTome.Name,EmptyTome.Emoji,5,{cooldownMultiplier:{mult:-0.08}});}getInitialDescription(){return`减少 8% 武器冷却。`;}getUpgradeDescription(){return`再减少 8% 武器冷却 (总计: -${((this.level+1)*8).toFixed(0)}%)。`;}} class Candelabrador extends PassiveItem {static Name="烛台";static Emoji=EMOJI.PASSIVE_CANDELABRADOR;constructor(){super(Candelabrador.Name,Candelabrador.Emoji,5,{areaMultiplier:{mult:0.1}});}getInitialDescription(){return`提升 10% 效果范围。`;}getUpgradeDescription(){return`再提升 10% 范围 (总计: +${((this.level+1)*10).toFixed(0)}%)。`;}} class Bracer extends PassiveItem {static Name="护腕";static Emoji=EMOJI.PASSIVE_BRACER;constructor(){super(Bracer.Name,Bracer.Emoji,5,{projectileSpeedMultiplier:{mult:0.1}});}getInitialDescription(){return`提升 10% 投射物速度。`;}getUpgradeDescription(){return`再提升 10% 投射物速度 (总计: +${((this.level+1)*10).toFixed(0)}%)。`;}} class HollowHeart extends PassiveItem {static Name="空虚之心";static Emoji=EMOJI.PASSIVE_HOLLOW_HEART;constructor(){super(HollowHeart.Name,HollowHeart.Emoji,5,{health:{mult:0.1}});}getInitialDescription(){return`提升 10% 最大生命值。`;}getUpgradeDescription(){return`再提升 10% 最大生命值 (总计: +${((this.level+1)*10).toFixed(0)}%)。`;}} class Pummarola extends PassiveItem {static Name="番茄";static Emoji=EMOJI.PASSIVE_PUMMAROLA;constructor(){super(Pummarola.Name,Pummarola.Emoji,5,{regen:{add:0.2}});}getInitialDescription(){return`每秒恢复 0.2 生命值。`;}getUpgradeDescription(){return`每秒恢复量增加 0.2 (总计: ${((this.level+1)*0.2).toFixed(1)})。`;}}
+
+    // --- 物品池 & 升级逻辑 --- (不变)
+    const BASE_WEAPONS=[DaggerWeapon,GarlicWeapon,WhipWeapon];const BASE_PASSIVES=[Spinach,Armor,Wings,EmptyTome,Candelabrador,Bracer,HollowHeart,Pummarola];let availableWeapons=[...BASE_WEAPONS];let availablePassives=[...BASE_PASSIVES];
+    function getAvailableUpgrades(p){let o=[];p.weapons.forEach(w=>{if(!w.isEvolved)o.push(...w.getCurrentUpgradeOptions(p));});p.passiveItems.forEach(i=>{o.push(...i.getCurrentUpgradeOptions(p));});if(p.weapons.length<p.maxWeapons){availableWeapons.forEach(W=>{if(!p.weapons.some(w=>w instanceof W||(w.constructor.Evolution&&w.constructor.Evolution.evolvesTo===W.Name))){o.push(...(new W()).getBaseUpgradeOptions(p));}}); } if(p.passiveItems.length<p.maxPassives){availablePassives.forEach(P=>{if(!p.passiveItems.some(i=>i instanceof P)){o.push(...(new P()).getBaseUpgradeOptions(p));}}); } if(o.length<4){o.push({type:'utility',text:'恢复 30% 生命',description:'一点慰藉。',icon:'🍗',action:()=>{p.heal(p.getStat('health')*0.3);}});o.push({type:'utility',text:'获得 25 金币',description:'积少成多。',icon:'🪙',action:()=>{console.log("获得金币 (功能待实现)");}}); } shuffleArray(o);return o.slice(0,4);}
+    function presentLevelUpOptions(){pauseGame(true);isLevelUp=true;const c=getAvailableUpgrades(player);upgradeOptionsContainer.innerHTML='';c.forEach(u=>{const b=document.createElement('button');const i=document.createElement('span');i.className='upgradeIcon';i.textContent=u.icon||'❓';const t=document.createElement('span');t.className='upgradeText';t.textContent=u.text;if(u.level){const l=document.createElement('span');l.className='upgradeLevel';l.textContent=`Lv ${u.level}`;t.appendChild(l);} const d=document.createElement('p');d.style.cssText='font-size:0.8em;margin:6px 0 0 0;color:#e0e0e0;'; d.textContent=u.description||'';b.append(i,t,d);b.onclick=()=>{u.action();resumeGame();};upgradeOptionsContainer.appendChild(b);});levelUpScreen.classList.remove('hidden');}
+    function checkEvolution(p,ui){console.log("检查进化可能性...");let eo=false;for(let i=0;i<p.weapons.length;i++){const w=p.weapons[i];if(w.isEvolved||!w.constructor.Evolution)continue;const ei=w.constructor.Evolution;const rpn=ei.requires;const ecn=ei.evolvesTo;if(w.isMaxLevel()&&p.passiveItems.some(pi=>pi.name===rpn)){console.log(`满足进化条件: ${w.name} -> ${ecn}!`);let EC=null;if(ecn==="ThousandKnives")EC=ThousandKnives;if(EC){const ew=new EC(w);ew.owner=p;p.weapons[i]=ew;console.log(`${w.name} 进化为 ${ew.name}!`);eo=true;break;}else{console.error(`找不到进化后的类: ${ecn}`);}}} if(eo)updateUI();}
+
+    // --- 游戏逻辑函数 ---
+    function init(){
+        // 清空对象池和活动列表
+        inactiveProjectiles = []; inactiveDamageNumbers = [];
+        projectiles = []; damageNumbers = []; enemies = []; xpGems = []; worldObjects = [];
+        // 重置状态
+        isGameOver=false;isPaused=false;isLevelUp=false;gameTime=0;killCount=0;spawnTimer=0;currentSpawnInterval=baseSpawnInterval;difficultyTimer=0;nextBossTime=BOSS_INTERVAL;currentBoss=null;
+        player = new Player(GAME_WIDTH / 2, GAME_HEIGHT / 2); player.addWeapon(new DaggerWeapon());
+        availableWeapons=[...BASE_WEAPONS];availablePassives=[...BASE_PASSIVES];
+        gameOverScreen.classList.add('hidden');levelUpScreen.classList.add('hidden');pauseScreen.classList.add('hidden');startScreen.classList.add('hidden');
+        // 重置双缓冲画布尺寸
+        offscreenCanvas.width = GAME_WIDTH;
+        offscreenCanvas.height = GAME_HEIGHT;
+        lastTime=performance.now();
+        if(animationFrameId) {
+            cancelAnimationFrame(animationFrameId);
+            animationFrameId = null;
+        }
+        animationFrameId = requestAnimationFrame(gameLoop);
+        updateUI();
+    }
+    function spawnEnemy(){ if(currentBoss)return; let tw=0;const st=ENEMY_TYPES.filter(t=>gameTime>=(t.minTime||0));st.forEach(t=>tw+=t.weight);if(tw<=0)return;let rw=Math.random()*tw;let ct=st[st.length-1];for(const t of st){if(rw<t.weight){ct=t;break;}rw-=t.weight;} let sx,sy; const edge = Math.floor(Math.random() * 4); switch(edge){ case 0: sx=Math.random()*GAME_WIDTH; sy=-SPAWN_PADDING; break; case 1: sx=GAME_WIDTH+SPAWN_PADDING; sy=Math.random()*GAME_HEIGHT; break; case 2: sx=Math.random()*GAME_WIDTH; sy=GAME_HEIGHT+SPAWN_PADDING; break; case 3: sx=-SPAWN_PADDING; sy=Math.random()*GAME_HEIGHT; break;} const dm=1+(gameTime/150); enemies.push(new Enemy(sx,sy,ct,dm)); } // 降低难度增长速度
+    function spawnBoss(){ console.log("尝试生成 Boss...");currentBoss=null; let sx,sy; const edge = Math.floor(Math.random() * 4); const bossPadding = SPAWN_PADDING * 2; switch(edge){ case 0: sx=Math.random()*GAME_WIDTH; sy=-bossPadding; break; case 1: sx=GAME_WIDTH+bossPadding; sy=Math.random()*GAME_HEIGHT; break; case 2: sx=Math.random()*GAME_WIDTH; sy=GAME_HEIGHT+bossPadding; break; case 3: sx=-bossPadding; sy=Math.random()*GAME_HEIGHT; break;} const b=new BossEnemy(sx,sy);enemies.push(b);currentBoss=b;showBossWarning();}
+    function showBossWarning(){bossWarningUI.style.display='block';setTimeout(()=>{bossWarningUI.style.display='none';},2500);}
+
+    // 主更新循环 (使用对象池回收)
+    function update(dt){
+        if(isGameOver||isPaused||isLevelUp){
+            if(player&&xpGems.length>0){
+                xpGems.forEach(g=>g.update(dt*3.5,player));
+            }
+            return;
+        }
+        gameTime+=dt;difficultyTimer+=dt;spawnTimer+=dt;
+
+        // 难度调整
+        if(difficultyTimer>10){ currentSpawnInterval=Math.max(0.1, baseSpawnInterval*Math.pow(0.98, gameTime/60)); difficultyTimer=0;} // 再微调生成速度，进一步降低难度
+        if(spawnTimer>=currentSpawnInterval){ const sc=1+Math.floor(gameTime/35); for(let i=0;i<sc;i++)spawnEnemy(); spawnTimer=0;} // 再微调生成数量，进一步降低难度
+        if(gameTime>=nextBossTime&&!currentBoss){spawnBoss();nextBossTime+=BOSS_INTERVAL;}
+
+        // 更新活动对象
+        if(player) player.update(dt,keys);
+
+        // 使用 for 循环而不是 forEach 来避免潜在的数组修改问题
+        for(let i = 0; i < enemies.length; i++) {
+            if(!enemies[i].isGarbage && enemies[i].isActive) {
+                enemies[i].update(dt,player);
+            }
+        }
+
+        for(let i = 0; i < projectiles.length; i++) {
+            if(!projectiles[i].isGarbage && projectiles[i].isActive) {
+                projectiles[i].update(dt);
+            }
+        }
+
+        for(let i = 0; i < xpGems.length; i++) {
+            if(!xpGems[i].isGarbage && xpGems[i].isActive) {
+                xpGems[i].update(dt,player);
+            }
+        }
+
+        for(let i = 0; i < worldObjects.length; i++) {
+            if(!worldObjects[i].isGarbage && worldObjects[i].isActive) {
+                worldObjects[i].update(dt,player);
+            }
+        }
+
+        for(let i = 0; i < damageNumbers.length; i++) {
+            if(!damageNumbers[i].isGarbage && damageNumbers[i].isActive) {
+                damageNumbers[i].update(dt);
+            }
+        }
+
+        // *** 对象池回收逻辑 ***
+        // 倒序遍历以安全地使用 splice
+        for (let i = projectiles.length - 1; i >= 0; i--) {
+            if (projectiles[i].isGarbage) {
+                const proj = projectiles.splice(i, 1)[0]; // 从活动列表移除
+                proj.isActive = false; // 标记非活动
+                inactiveProjectiles.push(proj); // 添加到非活动池
+            }
+        }
+        for (let i = damageNumbers.length - 1; i >= 0; i--) {
+            if (damageNumbers[i].isGarbage) {
+                const dn = damageNumbers.splice(i, 1)[0];
+                dn.isActive = false;
+                inactiveDamageNumbers.push(dn);
+            }
+        }
+        // 其他对象的移除 (简单过滤，因为它们不使用池)
+        enemies=enemies.filter(e=>!e.isGarbage);
+        xpGems=xpGems.filter(g=>!g.isGarbage);
+        worldObjects=worldObjects.filter(o=>!o.isGarbage);
+
+        if(isLevelUp){presentLevelUpOptions();isLevelUp=false;}
+        updateUI();
+    }
+
+    // 主绘制循环 (改进双缓冲渲染)
+    function draw(){
+        try {
+            // 使用离屏画布进行绘制
+            offscreenCtx.fillStyle = '#2d2d3a'; // 设置背景色与 canvas 相同
+            offscreenCtx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT); // 填充背景而不是清除
+
+            // 确保只绘制活动对象
+            for(let i = 0; i < xpGems.length; i++) {
+                if(!xpGems[i].isGarbage && xpGems[i].isActive) {
+                    xpGems[i].draw(offscreenCtx);
+                }
+            }
+
+            for(let i = 0; i < worldObjects.length; i++) {
+                if(!worldObjects[i].isGarbage && worldObjects[i].isActive) {
+                    worldObjects[i].draw(offscreenCtx);
+                }
+            }
+
+            for(let i = 0; i < enemies.length; i++) {
+                if(!enemies[i].isGarbage && enemies[i].isActive) {
+                    enemies[i].draw(offscreenCtx);
+                }
+            }
+
+            for(let i = 0; i < projectiles.length; i++) {
+                if(!projectiles[i].isGarbage && projectiles[i].isActive) {
+                    projectiles[i].draw(offscreenCtx);
+                }
+            }
+
+            // 绘制玩家和武器效果
+            if(player && !player.isGarbage && player.isActive) {
+                for(let i = 0; i < player.weapons.length; i++) {
+                    const w = player.weapons[i];
+                    if(w.drawAura) w.drawAura(offscreenCtx, player);
+                    if(w.drawHitboxes) w.drawHitboxes(offscreenCtx);
+                }
+                player.draw(offscreenCtx);
+            }
+
+            // 绘制伤害数字
+            for(let i = 0; i < damageNumbers.length; i++) {
+                if(!damageNumbers[i].isGarbage && damageNumbers[i].isActive) {
+                    damageNumbers[i].draw(offscreenCtx);
+                }
+            }
+            // 一次性将离屏画布内容复制到显示画布
+            ctx.drawImage(offscreenCanvas, 0, 0);
+        } catch (error) {
+            console.error("绘制过程中发生错误:", error);
+        }
+    }
+
+    // --- UI & 工具函数 --- (不变)
+    function formatTime(s){const m=Math.floor(s/60);const se=Math.floor(s%60);return`${m}:${se.toString().padStart(2,'0')}`;}
+    function updateUI(){if(!player)return;healthValueUI.textContent=Math.ceil(player.health);maxHealthValueUI.textContent=player.getStat('health');healthBarUI.style.width=`${Math.max(0,(player.health/player.getStat('health')))*100}%`;levelValueUI.textContent=player.level;if(player.level<MAX_LEVEL){xpValueUI.textContent=player.xp;xpNextLevelValueUI.textContent=player.xpToNextLevel;xpBarUI.style.width=`${(player.xp/player.xpToNextLevel)*100}%`;xpBarUI.style.backgroundColor='#3498db';}else{xpValueUI.textContent="MAX";xpNextLevelValueUI.textContent="";xpBarUI.style.width=`100%`;xpBarUI.style.backgroundColor='#f1c40f';} timerValueUI.textContent=formatTime(gameTime);killCountValueUI.textContent=killCount;weaponIconsUI.innerHTML=player.weapons.map(w=>`<span class="uiIcon" title="${w.name}">${w.emoji}<span class="uiItemLevel">${w.isEvolved?'MAX':'Lv'+w.level}</span></span>`).join(' ');passiveIconsUI.innerHTML=player.passiveItems.map(p=>`<span class="uiIcon" title="${p.name}">${p.emoji}<span class="uiItemLevel">Lv${p.level}</span></span>`).join(' ');}
+    function gameOver(){isGameOver=true;if(animationFrameId){cancelAnimationFrame(animationFrameId);animationFrameId=null;}finalTimeUI.textContent=formatTime(gameTime);finalLevelUI.textContent=player.level;finalKillsUI.textContent=killCount;gameOverScreen.classList.remove('hidden');}
+    function pauseGame(f=false){if(isGameOver)return;isPaused=true;if(!f)pauseScreen.classList.remove('hidden');}
+    function resumeGame(){if(isGameOver)return;isPaused=false;isLevelUp=false;levelUpScreen.classList.add('hidden');pauseScreen.classList.add('hidden');lastTime=performance.now();if(!animationFrameId)gameLoop(lastTime);}
+
+    // 改进游戏循环，确保稳定的帧率和渲染
+    function gameLoop(t){
+        if(isGameOver){
+            if(animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+            }
+            return;
+        }
+
+        animationFrameId = requestAnimationFrame(gameLoop);
+
+        // 计算时间增量，限制最大值以避免大延迟后的跳跃
+        deltaTime = Math.min((t - lastTime) / 1000, 0.1);
+        lastTime = t;
+
+        // 更新游戏状态
+        update(deltaTime);
+
+        // 渲染游戏
+        draw();
+    }
+    function shuffleArray(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}}
+    window.addEventListener('keydown',(e)=>{keys[e.key.toLowerCase()]=true;if(e.key.toLowerCase()==='p'){if(isPaused&&!isLevelUp)resumeGame();else if(!isPaused&&!isLevelUp)pauseGame();}});
+    window.addEventListener('keyup',(e)=>{keys[e.key.toLowerCase()]=false;});
+    startButton.addEventListener('click',init);restartButton.addEventListener('click',init);resumeButton.addEventListener('click',resumeGame);
+    window.addEventListener('resize',()=>{
+        GAME_WIDTH=Math.min(window.innerWidth*0.95,1280);
+        GAME_HEIGHT=Math.min(window.innerHeight*0.95,720);
+        canvas.width=GAME_WIDTH;
+        canvas.height=GAME_HEIGHT;
+        // 更新离屏画布尺寸
+        offscreenCanvas.width=GAME_WIDTH;
+        offscreenCanvas.height=GAME_HEIGHT;
+        if(player){
+            player.x=Math.max(player.size/2,Math.min(GAME_WIDTH-player.size/2,player.x));
+            player.y=Math.max(player.size/2,Math.min(GAME_HEIGHT-player.size/2,player.y));
+        }
+        if(player&&!isGameOver&&!isPaused&&!isLevelUp)draw();
+    });
+    console.log("Emoji 幸存者 - 对象池优化版 已初始化。");
+</script>
+</body>
+</html>
