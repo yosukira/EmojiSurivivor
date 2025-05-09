@@ -1,0 +1,261 @@
+/* 全局样式 */
+body { 
+    margin: 0; 
+    overflow: hidden; 
+    background-color: #1a1a1a; 
+    display: flex; 
+    justify-content: center; 
+    align-items: center; 
+    height: 100vh; 
+    font-family: 'Segoe UI Emoji', 'Arial', sans-serif; 
+    color: #eee; 
+}
+
+canvas { 
+    border: 1px solid #666; 
+    background-color: #2d2d3a; 
+    cursor: none; 
+}
+
+/* UI 元素 */
+#ui { 
+    position: absolute; 
+    top: 0; 
+    left: 0; 
+    width: 100%; 
+    display: flex; 
+    justify-content: space-between; 
+    pointer-events: none; 
+    z-index: 5; 
+}
+
+#topLeftUI, #topRightUI { 
+    background-color: rgba(0, 0, 0, 0.65); 
+    padding: 12px; 
+    margin: 10px; 
+    border-radius: 8px; 
+    font-size: 17px; 
+    color: white; 
+    max-width: 280px; 
+}
+
+#topRightUI { 
+    text-align: right; 
+}
+
+/* 状态条 */
+#healthBarContainer, #xpBarContainer { 
+    width: 220px; 
+    height: 16px; 
+    background-color: #555; 
+    border-radius: 5px; 
+    overflow: hidden; 
+    margin-bottom: 6px; 
+    border: 1px solid #333; 
+}
+
+#xpBarContainer { 
+    height: 11px; 
+    margin-top: 3px;
+}
+
+#healthBar { 
+    height: 100%; 
+    width: 100%; 
+    background-color: #e74c3c; 
+    transition: width 0.2s ease-in-out; 
+}
+
+#xpBar { 
+    height: 100%; 
+    width: 0%; 
+    background-color: #3498db; 
+    transition: width 0.2s ease-in-out; 
+}
+
+/* UI 图标和等级 */
+.uiIcon { 
+    font-size: 20px; 
+    margin-right: 6px; 
+    vertical-align: middle; 
+}
+
+.uiItemLevel { 
+    font-size: 13px; 
+    color: #bbb; 
+    margin-left: 3px; 
+    vertical-align: middle; 
+}
+
+/* 覆盖屏幕 */
+.overlayScreen { 
+    position: absolute; 
+    top: 0; 
+    left: 0; 
+    width: 100%; 
+    height: 100%; 
+    background-color: rgba(0, 0, 0, 0.85); 
+    display: flex; 
+    flex-direction: column; 
+    justify-content: center; 
+    align-items: center; 
+    text-align: center; 
+    color: white; 
+    z-index: 10; 
+    font-size: 19px; 
+}
+
+.overlayScreen h1 { 
+    font-size: 2.6em; 
+    margin-bottom: 22px; 
+}
+
+.overlayScreen p { 
+    margin: 12px 0; 
+}
+
+.overlayScreen button { 
+    padding: 16px 32px; 
+    font-size: 1.15em; 
+    margin: 11px; 
+    cursor: pointer; 
+    background-color: #2ecc71; 
+    color: white; 
+    border: none; 
+    border-radius: 6px; 
+    min-width: 320px; 
+    text-align: left; 
+    display: flex; 
+    align-items: center; 
+    transition: background-color 0.2s ease; 
+}
+
+.overlayScreen button:hover { 
+    background-color: #27ae60; 
+}
+
+.overlayScreen button .upgradeIcon { 
+    font-size: 1.6em; 
+    margin-right: 18px; 
+}
+
+.overlayScreen button .upgradeText { 
+    flex-grow: 1; 
+}
+
+.overlayScreen button .upgradeLevel { 
+    font-size: 0.85em; 
+    color: #ddd; 
+    margin-left: 12px; 
+}
+
+.overlayScreen button p { 
+    font-size: 0.8em; 
+    margin: 6px 0 0 0; 
+    color: #e0e0e0 !important; 
+}
+
+/* Boss 警告 */
+#bossWarning { 
+    position: absolute; 
+    top: 25%; 
+    left: 50%; 
+    transform: translateX(-50%); 
+    font-size: 2.5em; 
+    color: #e74c3c; 
+    background-color: rgba(0,0,0,0.7); 
+    padding: 15px 30px; 
+    border-radius: 10px; 
+    z-index: 6; 
+    display: none; 
+    animation: fadeInOut 2s ease-in-out; 
+}
+
+@keyframes fadeInOut { 
+    0%, 100% { opacity: 0; } 
+    25%, 75% { opacity: 1; } 
+}
+
+.hidden { 
+    display: none !important; 
+}
+
+/* 小地图 */
+#minimap {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    width: 150px;
+    height: 150px;
+    background-color: rgba(0, 0, 0, 0.5);
+    border: 1px solid #666;
+    border-radius: 5px;
+    z-index: 5;
+}
+
+/* 伤害数字 */
+.damageNumber {
+    position: absolute;
+    color: white;
+    font-weight: bold;
+    pointer-events: none;
+    text-shadow: 0px 0px 3px rgba(0, 0, 0, 0.8);
+}
+
+/* 特殊效果 */
+.fireEffect {
+    position: absolute;
+    pointer-events: none;
+    z-index: 3;
+}
+
+.criticalHit {
+    color: #f1c40f !important;
+    font-size: 1.2em;
+}
+
+/* 道具提示 */
+.itemTooltip {
+    position: absolute;
+    background-color: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 8px;
+    border-radius: 4px;
+    font-size: 14px;
+    pointer-events: none;
+    z-index: 100;
+    max-width: 200px;
+}
+
+/* 新增的 Boss 血条 */
+.bossHealthBar {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 50%;
+    height: 20px;
+    background-color: #555;
+    border-radius: 5px;
+    overflow: hidden;
+    z-index: 6;
+    border: 2px solid #333;
+}
+
+.bossHealthFill {
+    height: 100%;
+    width: 100%;
+    background-color: #e74c3c;
+    transition: width 0.3s ease-in-out;
+}
+
+.bossName {
+    position: absolute;
+    top: 35px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: white;
+    font-size: 18px;
+    text-shadow: 0px 0px 3px rgba(0, 0, 0, 1);
+    z-index: 6;
+}

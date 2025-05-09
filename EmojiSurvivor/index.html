@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emoji 幸存者 - 忍者版</title>
+    <style>
+        /* 全局样式 */
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #1a1a1a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Segoe UI Emoji', 'Arial', sans-serif;
+            color: #eee;
+        }
+
+        /* 画布样式 */
+        canvas {
+            border: 1px solid #666;
+            background-color: #2d2d3a;
+            cursor: none;
+        }
+
+        /* UI样式 */
+        #ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        #topLeftUI, #topRightUI {
+            background-color: rgba(0, 0, 0, 0.65);
+            padding: 12px;
+            margin: 10px;
+            border-radius: 8px;
+            font-size: 17px;
+            color: white;
+            max-width: 280px;
+        }
+
+        #topRightUI {
+            text-align: right;
+        }
+
+        /* 生命条和经验条 */
+        #healthBarContainer, #xpBarContainer {
+            width: 220px;
+            height: 16px;
+            background-color: #555;
+            border-radius: 5px;
+            overflow: hidden;
+            margin-bottom: 6px;
+            border: 1px solid #333;
+        }
+
+        #xpBarContainer {
+            height: 11px;
+            margin-top: 3px;
+        }
+
+        #healthBar {
+            height: 100%;
+            width: 100%;
+            background-color: #2ecc71;
+            transition: width 0.2s ease-in-out;
+        }
+
+        #xpBar {
+            height: 100%;
+            width: 0%;
+            background-color: #3498db;
+            transition: width 0.2s ease-in-out;
+        }
+
+        /* UI图标 */
+        .uiIcon {
+            font-size: 20px;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+
+        .uiItemLevel {
+            font-size: 13px;
+            color: #bbb;
+            margin-left: 3px;
+            vertical-align: middle;
+        }
+
+        /* 覆盖屏幕 */
+        .overlayScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            color: white;
+            z-index: 10;
+            font-size: 19px;
+        }
+
+        .overlayScreen h1 {
+            font-size: 2.6em;
+            margin-bottom: 22px;
+        }
+
+        .overlayScreen p {
+            margin: 12px 0;
+        }
+
+        /* 按钮样式 */
+        .overlayScreen button {
+            padding: 16px 32px;
+            font-size: 1.15em;
+            margin: 11px;
+            cursor: pointer;
+            background-color: #2ecc71;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            min-width: 320px;
+            text-align: left;
+            display: flex;
+            align-items: center;
+            transition: background-color 0.2s ease;
+        }
+
+        .overlayScreen button:hover {
+            background-color: #27ae60;
+        }
+
+        .overlayScreen button .upgradeIcon {
+            font-size: 1.6em;
+            margin-right: 18px;
+        }
+
+        .overlayScreen button .upgradeText {
+            flex-grow: 1;
+        }
+
+        .overlayScreen button .upgradeLevel {
+            font-size: 0.85em;
+            color: #ddd;
+            margin-left: 12px;
+        }
+
+        .overlayScreen button p {
+            font-size: 0.8em;
+            margin: 6px 0 0 0;
+            color: #e0e0e0 !important;
+        }
+
+        /* Boss警告 */
+        #bossWarning {
+            position: absolute;
+            top: 25%;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 2.5em;
+            color: #e74c3c;
+            background-color: rgba(0,0,0,0.7);
+            padding: 15px 30px;
+            border-radius: 10px;
+            z-index: 6;
+            display: none;
+            animation: fadeInOut 2s ease-in-out;
+        }
+
+        @keyframes fadeInOut {
+            0%, 100% { opacity: 0; }
+            25%, 75% { opacity: 1; }
+        }
+
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <!-- UI界面 -->
+    <div id="ui">
+        <div id="topLeftUI">
+            <div>生命: <span id="healthValue">100</span> / <span id="maxHealthValue">100</span></div>
+            <div id="healthBarContainer"><div id="healthBar"></div></div>
+            <div>等级: <span id="levelValue">1</span></div>
+            <div>经验: <span id="xpValue">0</span> / <span id="xpNextLevelValue">10</span></div>
+            <div id="xpBarContainer"><div id="xpBar"></div></div>
+            <div>时间: <span id="timerValue">0:00</span></div>
+            <div id="killCount">击杀: <span id="killCountValue">0</span></div>
+        </div>
+        <div id="topRightUI">
+            <div>武器:</div>
+            <div id="weaponIcons"></div>
+            <div style="margin-top: 10px;">被动:</div>
+            <div id="passiveIcons"></div>
+        </div>
+    </div>
+    <!-- 游戏画布 -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- 开始屏幕 -->
+    <div id="startScreen" class="overlayScreen">
+        <h1>Emoji 幸存者 - 忍者版</h1>
+        <p>🥷 使用 WASD 移动。</p>
+        <p>💀 在怪物群中活下来！</p>
+        <p>✨ 收集宝石升级。</p>
+        <p>🅿️ 按 P 暂停/取消暂停。</p>
+        <button id="startButton"><span class="upgradeIcon">▶️</span> 开始游戏</button>
+    </div>
+
+    <!-- 升级屏幕 -->
+    <div id="levelUpScreen" class="overlayScreen hidden">
+        <h1>升级!</h1> 
+        <p>选择一个强化:</p> 
+        <div id="upgradeOptions"></div> 
+    </div>
+
+    <!-- 暂停屏幕 -->
+    <div id="pauseScreen" class="overlayScreen hidden">
+        <h1>已暂停</h1> 
+        <p>按 P 继续</p> 
+        <button id="resumeButton"><span class="upgradeIcon">▶️</span> 继续</button> 
+    </div>
+
+    <!-- 游戏结束屏幕 -->
+    <div id="gameOverScreen" class="overlayScreen hidden">
+        <h1>游戏结束!</h1> 
+        <p>你存活了: <span id="finalTime">0:00</span></p> 
+        <p>最终等级: <span id="finalLevel">1</span></p> 
+        <p>击杀数: <span id="finalKills">0</span></p> 
+        <button id="restartButton"><span class="upgradeIcon">🔄</span> 再玩一次</button> 
+    </div>
+
+    <!-- Boss警告 -->
+    <div id="bossWarning">👹 BOSS 来袭! 👹</div>
+
+    <!-- 游戏脚本 -->
+    <!-- 核心脚本 -->
+    <script src="js/core/config.js"></script>
+    <script src="js/core/cameraManager.js"></script>
+
+    <!-- 实体脚本 -->
+    <script src="js/entities/gameObject.js"></script>
+    <script src="js/entities/character.js"></script>
+    <script src="js/entities/player.js"></script>
+    <script src="js/entities/enemy.js"></script>
+    <script src="js/entities/bosses.js"></script>
+    <script src="js/entities/pickups.js"></script>
+    <script src="js/entities/damageNumber.js"></script>
+
+    <!-- 武器脚本 -->
+    <script src="js/weapons/weapon.js"></script>
+    <script src="js/weapons/projectile.js"></script>
+    <script src="js/weapons/basicWeapons.js"></script>
+    <script src="js/weapons/advancedWeapons.js"></script>
+
+    <!-- 被动物品脚本 -->
+    <script src="js/items/passiveItem.js"></script>
+    <script src="js/items/basicPassives.js"></script>
+
+    <!-- 游戏主脚本 -->
+    <script src="js/game.js"></script>
+</body>
+</html>
