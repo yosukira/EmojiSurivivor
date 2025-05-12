@@ -31,7 +31,7 @@ let damageNumbers = [];
 
 // 对象池
 let inactiveProjectiles = [];
-let inactiveDamageNumbers = [];
+let inactiveDamageNumbers = []
 
 // 按键状态
 let keys = {};
@@ -39,7 +39,7 @@ let keys = {};
 // 敌人管理器
 const enemyManager = {
     spawnTimer: 0,
-    currentSpawnInterval: 2.0, // 初始生成间隔
+    currentSpawnInterval: 3.5, // 初始生成间隔，增加为3.5秒
     BASE_SPAWN_INTERVAL: 2.0,
     difficultyTimer: 0,
 
@@ -52,7 +52,8 @@ const enemyManager = {
 
         // 每30秒增加难度
         if (this.difficultyTimer >= 30) {
-            this.currentSpawnInterval = Math.max(0.5, this.currentSpawnInterval * 0.9);
+            // 随着时间推移逐渐减少生成间隔，但不低于0.8秒
+            this.currentSpawnInterval = Math.max(0.8, this.currentSpawnInterval * 0.92);
             this.difficultyTimer = 0;
         }
 
@@ -257,7 +258,7 @@ function init() {
 
     // 重置敌人和Boss管理器
     enemyManager.spawnTimer = 0;
-    enemyManager.currentSpawnInterval = enemyManager.BASE_SPAWN_INTERVAL;
+    enemyManager.currentSpawnInterval = 3.5; // 使用更长的初始生成间隔
     enemyManager.difficultyTimer = 0;
     bossManager.nextBossTime = BOSS_INTERVAL;
     bossManager.currentBoss = null;
