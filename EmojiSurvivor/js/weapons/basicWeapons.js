@@ -101,40 +101,17 @@ class DaggerWeapon extends Weapon {
      * @returns {string} 升级描述
      */
     getUpgradeDescription() {
-        const nextLevel = this.level + 1;
-        if (nextLevel > this.maxLevel) return "已达最高等级";
+        let desc = `Lv${this.level + 1}: `;
 
-        const tempStats = JSON.parse(JSON.stringify(this.stats));
-        const originalLevel = this.level;
-        this.level = nextLevel;
-        const nextLevelStats = this.calculateStats(); // this.stats is modified here
-        const descParts = [];
-
-        if (nextLevelStats.damage > tempStats.damage) {
-            descParts.push(`伤害: ${tempStats.damage.toFixed(0)} → ${nextLevelStats.damage.toFixed(0)}`);
-        }
-        if (nextLevelStats.projectileSpeed > tempStats.projectileSpeed) {
-            descParts.push(`速度: ${tempStats.projectileSpeed.toFixed(0)} → ${nextLevelStats.projectileSpeed.toFixed(0)}`);
-        }
-        if (nextLevelStats.count > tempStats.count) {
-            descParts.push(`投射物: ${tempStats.count} → ${nextLevelStats.count}`);
-        }
-        if (nextLevelStats.pierce > tempStats.pierce) {
-            descParts.push(`穿透: ${tempStats.pierce} → ${nextLevelStats.pierce}`);
-        }
-        const nextCooldown = Math.max(0.3, this.baseCooldown - (nextLevel - 1) * 0.08);
-        const currentCooldown = Math.max(0.3, this.baseCooldown - (originalLevel - 1) * 0.08);
-        if (nextCooldown < currentCooldown) {
-             descParts.push(`冷却: ${currentCooldown.toFixed(2)}s → ${nextCooldown.toFixed(2)}s`);
+        if (this.level % 2 === 0) {
+            desc += "+1 投射物。";
+        } else if (this.level % 3 === 0) {
+            desc += "+1 穿透。";
+        } else {
+            desc += "+伤害/速度。";
         }
 
-        this.level = originalLevel; // Restore level
-        this.calculateStats(); // Restore stats
-
-        if (descParts.length === 0) {
-            return `Lv${nextLevel}: 属性小幅提升。`;
-        }
-        return `Lv${nextLevel}: ${descParts.join(', ')}。`;
+        return desc + ` (冷却: ${Math.max(0.3, this.baseCooldown - this.level * 0.08).toFixed(2)}s)`;
     }
 
     /**
@@ -276,37 +253,7 @@ class GarlicWeapon extends Weapon {
      * @returns {string} 升级描述
      */
     getUpgradeDescription() {
-        const nextLevel = this.level + 1;
-        if (nextLevel > this.maxLevel) return "已达最高等级";
-
-        const tempStats = JSON.parse(JSON.stringify(this.stats));
-        const originalLevel = this.level;
-        this.level = nextLevel;
-        const nextLevelStats = this.calculateStats();
-        const descParts = [];
-
-        if (nextLevelStats.damage > tempStats.damage) {
-            descParts.push(`伤害: ${tempStats.damage.toFixed(0)} → ${nextLevelStats.damage.toFixed(0)}`);
-        }
-        if (nextLevelStats.radius > tempStats.radius) {
-            descParts.push(`范围: ${tempStats.radius.toFixed(0)} → ${nextLevelStats.radius.toFixed(0)}`);
-        }
-        if (nextLevelStats.knockback > tempStats.knockback) {
-            descParts.push(`击退: ${tempStats.knockback.toFixed(0)} → ${nextLevelStats.knockback.toFixed(0)}`);
-        }
-        // Note: Slow effect changes might be harder to describe briefly if factor & duration change.
-        // For simplicity, we might just state that slow effect improves.
-        if (nextLevelStats.slowFactor < tempStats.slowFactor || nextLevelStats.slowDuration > tempStats.slowDuration) {
-             descParts.push(`减速效果提升`);
-        }
-
-        this.level = originalLevel;
-        this.calculateStats();
-
-        if (descParts.length === 0) {
-            return `Lv${nextLevel}: 属性小幅提升。`;
-        }
-        return `Lv${nextLevel}: ${descParts.join(', ')}。`;
+        return `Lv${this.level + 1}: +伤害/范围/减速效果。`;
     }
 
     /**
@@ -580,40 +527,13 @@ class WhipWeapon extends Weapon {
      * @returns {string} 升级描述
      */
     getUpgradeDescription() {
-        const nextLevel = this.level + 1;
-        if (nextLevel > this.maxLevel) return "已达最高等级";
-
-        const tempStats = JSON.parse(JSON.stringify(this.stats));
-        const originalLevel = this.level;
-        this.level = nextLevel;
-        const nextLevelStats = this.calculateStats();
-        const descParts = [];
-
-        if (nextLevelStats.damage > tempStats.damage) {
-            descParts.push(`伤害: ${tempStats.damage.toFixed(1)} → ${nextLevelStats.damage.toFixed(1)}`);
+        let desc = `Lv${this.level + 1}: `;
+        if (this.level % 4 === 0) {
+            desc += "+1 鞭子。";
+        } else {
+            desc += "+伤害/范围。";
         }
-         if (nextLevelStats.width > tempStats.width) {
-            descParts.push(`宽度: ${tempStats.width.toFixed(0)} → ${nextLevelStats.width.toFixed(0)}`);
-        }
-        if (nextLevelStats.count > tempStats.count) {
-            descParts.push(`鞭数: ${tempStats.count} → ${nextLevelStats.count}`);
-        }
-        if (nextLevelStats.pierce > tempStats.pierce) {
-            descParts.push(`穿透: ${tempStats.pierce} → ${nextLevelStats.pierce}`);
-        }
-        const nextCooldown = Math.max(0.3, this.baseCooldown - (nextLevel - 1) * 0.05);
-        const currentCooldown = Math.max(0.3, this.baseCooldown - (originalLevel - 1) * 0.05);
-         if (nextCooldown < currentCooldown) {
-             descParts.push(`冷却: ${currentCooldown.toFixed(2)}s → ${nextCooldown.toFixed(2)}s`);
-        }
-
-        this.level = originalLevel;
-        this.calculateStats();
-
-        if (descParts.length === 0) {
-            return `Lv${nextLevel}: 属性小幅提升。`;
-        }
-        return `Lv${nextLevel}: ${descParts.join(', ')}。`;
+        return desc + ` (冷却: ${Math.max(0.3, this.baseCooldown - this.level * 0.15).toFixed(2)}s)`;
     }
 
     /**

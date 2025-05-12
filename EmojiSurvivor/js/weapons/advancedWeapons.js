@@ -111,43 +111,17 @@ class FireBladeWeapon extends Weapon {
      * @returns {string} 升级描述
      */
     getUpgradeDescription() {
-        const nextLevel = this.level + 1;
-        if (nextLevel > this.maxLevel) return "已达最高等级";
+        let desc = `Lv${this.level + 1}: `;
 
-        const tempStats = JSON.parse(JSON.stringify(this.stats));
-        const originalLevel = this.level;
-        this.level = nextLevel;
-        const nextLevelStats = this.calculateStats();
-        const descParts = [];
-
-        if (nextLevelStats.damage > tempStats.damage) {
-            descParts.push(`伤害: ${tempStats.damage.toFixed(0)} → ${nextLevelStats.damage.toFixed(0)}`);
-        }
-        if (nextLevelStats.projectileSpeed > tempStats.projectileSpeed) {
-            descParts.push(`速度: ${tempStats.projectileSpeed.toFixed(0)} → ${nextLevelStats.projectileSpeed.toFixed(0)}`);
-        }
-        if (nextLevelStats.count > tempStats.count) {
-            descParts.push(`投射物: ${tempStats.count} → ${nextLevelStats.count}`);
-        }
-        if (nextLevelStats.pierce > tempStats.pierce) {
-            descParts.push(`穿透: ${tempStats.pierce} → ${nextLevelStats.pierce}`);
-        }
-        if (nextLevelStats.burnDamage > tempStats.burnDamage || nextLevelStats.burnDuration > tempStats.burnDuration) {
-             descParts.push(`燃烧效果提升`); // 简化描述
-        }
-        const nextCooldown = Math.max(0.4, this.baseCooldown - (nextLevel - 1) * 0.08);
-        const currentCooldown = Math.max(0.4, this.baseCooldown - (originalLevel - 1) * 0.08);
-        if (nextCooldown < currentCooldown) {
-             descParts.push(`冷却: ${currentCooldown.toFixed(2)}s → ${nextCooldown.toFixed(2)}s`);
+        if (this.level % 3 === 0) {
+            desc += "+1 投射物。";
+        } else if (this.level % 2 === 0) {
+            desc += "+燃烧伤害/持续时间。";
+        } else {
+            desc += "+伤害/速度。";
         }
 
-        this.level = originalLevel;
-        this.calculateStats();
-
-        if (descParts.length === 0) {
-            return `Lv${nextLevel}: 属性小幅提升。`;
-        }
-        return `Lv${nextLevel}: ${descParts.join(', ')}。`;
+        return desc;
     }
 
     /**
@@ -444,17 +418,15 @@ class StormBladeWeapon extends Weapon {
         const nextLevel = this.level + 1;
         if (nextLevel > this.maxLevel) return "已达最高等级";
 
-        const tempStats = JSON.parse(JSON.stringify(this.stats));
+        // 模拟下一级属性以准确描述
+        const tempStats = JSON.parse(JSON.stringify(this.stats)); // 深拷贝当前属性
         const originalLevel = this.level;
         this.level = nextLevel;
-        const nextLevelStats = this.calculateStats();
+        const nextLevelStats = this.calculateStats(); // 获取下一级属性，注意：这里直接调用了calculateStats，它会修改 this.stats
         const descParts = [];
 
         if (nextLevelStats.damage > tempStats.damage) {
             descParts.push(`伤害: ${tempStats.damage.toFixed(0)} → ${nextLevelStats.damage.toFixed(0)}`);
-        }
-        if (nextLevelStats.projectileSpeed > tempStats.projectileSpeed) {
-            descParts.push(`速度: ${tempStats.projectileSpeed.toFixed(0)} → ${nextLevelStats.projectileSpeed.toFixed(0)}`);
         }
         if (nextLevelStats.count > tempStats.count) {
             descParts.push(`投射物: ${tempStats.count} → ${nextLevelStats.count}`);
@@ -465,17 +437,18 @@ class StormBladeWeapon extends Weapon {
         if (nextLevelStats.chainRange > tempStats.chainRange) {
             descParts.push(`连锁范围: ${tempStats.chainRange.toFixed(0)} → ${nextLevelStats.chainRange.toFixed(0)}`);
         }
-        const nextCooldown = Math.max(0.3, this.baseCooldown - (nextLevel - 1) * 0.12);
-        const currentCooldown = Math.max(0.3, this.baseCooldown - (originalLevel - 1) * 0.12);
+        const nextCooldown = Math.max(0.3, this.baseCooldown - (nextLevel -1) * 0.12);
+        const currentCooldown = Math.max(0.3, this.baseCooldown - (originalLevel -1) * 0.12);
         if (nextCooldown < currentCooldown) {
              descParts.push(`冷却: ${currentCooldown.toFixed(2)}s → ${nextCooldown.toFixed(2)}s`);
         }
-
+        
+        // 还原等级和属性，防止影响实际游戏状态
         this.level = originalLevel;
-        this.calculateStats();
+        this.calculateStats(); // 还原 this.stats
 
         if (descParts.length === 0) {
-            return `Lv${nextLevel}: 属性小幅提升。`;
+            return `Lv${nextLevel}: 属性小幅提升。`; // 保底描述
         }
         return `Lv${nextLevel}: ${descParts.join(', ')}。`;
     }
@@ -860,40 +833,13 @@ class HandshakeWeapon extends Weapon {
      * @returns {string} 升级描述
      */
     getUpgradeDescription() {
-        const nextLevel = this.level + 1;
-        if (nextLevel > this.maxLevel) return "已达最高等级";
-
-        const tempStats = JSON.parse(JSON.stringify(this.stats));
-        const originalLevel = this.level;
-        this.level = nextLevel;
-        const nextLevelStats = this.calculateStats();
-        const descParts = [];
-
-        if (nextLevelStats.damage > tempStats.damage) {
-            descParts.push(`伤害: ${tempStats.damage.toFixed(0)} → ${nextLevelStats.damage.toFixed(0)}`);
+        let desc = `Lv${this.level + 1}: `;
+        if (this.level % 4 === 0) {
+            desc += "+1 投射物。";
+        } else {
+            desc += "+伤害/范围/眩晕时间。";
         }
-         if (nextLevelStats.area > tempStats.area) {
-            descParts.push(`范围: ${tempStats.area.toFixed(0)} → ${nextLevelStats.area.toFixed(0)}`);
-        }
-        if (nextLevelStats.stunDuration > tempStats.stunDuration) {
-            descParts.push(`眩晕: ${tempStats.stunDuration.toFixed(1)}s → ${nextLevelStats.stunDuration.toFixed(1)}s`);
-        }
-        if (nextLevelStats.count > tempStats.count) {
-            descParts.push(`投射物: ${tempStats.count} → ${nextLevelStats.count}`);
-        }
-        const nextCooldown = Math.max(0.5, this.baseCooldown - (nextLevel - 1) * 0.15);
-        const currentCooldown = Math.max(0.5, this.baseCooldown - (originalLevel - 1) * 0.15);
-         if (nextCooldown < currentCooldown) {
-             descParts.push(`冷却: ${currentCooldown.toFixed(2)}s → ${nextCooldown.toFixed(2)}s`);
-        }
-
-        this.level = originalLevel;
-        this.calculateStats();
-
-        if (descParts.length === 0) {
-            return `Lv${nextLevel}: 属性小幅提升。`;
-        }
-        return `Lv${nextLevel}: ${descParts.join(', ')}。`;
+        return desc + ` (冷却: ${Math.max(0.5, this.baseCooldown - this.level * 0.15).toFixed(2)}s)`;
     }
 
     /**

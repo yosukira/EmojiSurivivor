@@ -29,7 +29,6 @@ let xpGems = [];
 let worldObjects = [];
 let visualEffects = [];
 let damageNumbers = [];
-let ghostAllies = []; // For Relic Soul passive
 
 // 对象池
 let inactiveProjectiles = [];
@@ -274,7 +273,6 @@ function init() {
     xpGems = [];
     worldObjects = [];
     visualEffects = [];
-    ghostAllies = []; // 清空幽灵盟友列表
 
     // 重置状态
     isGameOver = false;
@@ -455,14 +453,6 @@ function update(dt) {
         }
     }
 
-    // 更新幽灵盟友
-    for (let i = ghostAllies.length - 1; i >= 0; i--) {
-        ghostAllies[i].update(dt, enemies); // Pass enemies for targeting
-        if (ghostAllies[i].isGarbage) {
-            ghostAllies.splice(i, 1);
-        }
-    }
-
     // 对象池回收
     // 倒序遍历以安全地使用 splice
     for (let i = projectiles.length - 1; i >= 0; i--) {
@@ -571,13 +561,6 @@ function draw() {
         for (let i = 0; i < damageNumbers.length; i++) {
             if (!damageNumbers[i].isGarbage && damageNumbers[i].isActive) {
                 damageNumbers[i].draw(offscreenCtx);
-            }
-        }
-
-        // 绘制幽灵盟友
-        for (const ally of ghostAllies) {
-            if (ally.isActive) {
-                ally.draw(offscreenCtx);
             }
         }
 

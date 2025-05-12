@@ -30,10 +30,7 @@ class Spinach extends PassiveItem {
         if (this.level >= this.maxLevel) {
             return "已达最大等级。";
         }
-        const nextLevel = this.level + 1;
-        const nextBonus = nextLevel * this.baseDamageBonus * 100;
-        const currentBonus = this.level * this.baseDamageBonus * 100;
-        return `Lv${nextLevel}: 伤害 +${currentBonus.toFixed(0)}% → +${nextBonus.toFixed(0)}%。`;
+        return `再提升 ${this.baseDamageBonus * 100}% 伤害 (Lv${this.level + 1} 总计: +${((this.level + 1) * this.baseDamageBonus * 100).toFixed(0)}%)。`;
     }
 }
 
@@ -66,10 +63,7 @@ class Armor extends PassiveItem {
         if (this.level >= this.maxLevel) {
             return "已达最大等级。";
         }
-        const nextLevel = this.level + 1;
-        const nextBonus = nextLevel * this.baseArmorBonus;
-        const currentBonus = this.level * this.baseArmorBonus;
-        return `Lv${nextLevel}: 盔甲 +${currentBonus} → +${nextBonus}。`;
+        return `再提供 ${this.baseArmorBonus} 点盔甲 (Lv${this.level + 1} 总计: ${ (this.level + 1) * this.baseArmorBonus})。`;
     }
 }
 
@@ -102,10 +96,7 @@ class Wings extends PassiveItem {
         if (this.level >= this.maxLevel) {
             return "已达最大等级。";
         }
-        const nextLevel = this.level + 1;
-        const nextBonus = nextLevel * this.baseSpeedBonus * 100;
-        const currentBonus = this.level * this.baseSpeedBonus * 100;
-        return `Lv${nextLevel}: 移速 +${currentBonus.toFixed(0)}% → +${nextBonus.toFixed(0)}%。`;
+        return `再提升 ${this.baseSpeedBonus * 100}% 移动速度 (Lv${this.level + 1} 总计: +${((this.level + 1) * this.baseSpeedBonus * 100).toFixed(0)}%)。`;
     }
 }
 
@@ -145,10 +136,8 @@ class EmptyTome extends PassiveItem {
         if (this.level >= this.maxLevel) {
             return "已达最大等级。";
         }
-        const nextLevel = this.level + 1;
-        const nextReduction = nextLevel * this.baseCooldownReduction * 100;
-        const currentReduction = this.level * this.baseCooldownReduction * 100;
-        return `Lv${nextLevel}: 冷却 -${currentReduction.toFixed(0)}% → -${nextReduction.toFixed(0)}%。`;
+        const totalReduction = (this.level + 1) * this.baseCooldownReduction * 100;
+        return `再减少 ${this.baseCooldownReduction * 100}% 武器冷却 (Lv${this.level + 1} 总计: -${totalReduction.toFixed(0)}%)。`;
     }
 }
 
@@ -181,10 +170,7 @@ class Candelabrador extends PassiveItem {
         if (this.level >= this.maxLevel) {
             return "已达最大等级。";
         }
-        const nextLevel = this.level + 1;
-        const nextBonus = nextLevel * this.baseAreaBonus * 100;
-        const currentBonus = this.level * this.baseAreaBonus * 100;
-        return `Lv${nextLevel}: 范围 +${currentBonus.toFixed(0)}% → +${nextBonus.toFixed(0)}%。`;
+        return `再提升 ${this.baseAreaBonus * 100}% 范围 (Lv${this.level + 1} 总计: +${((this.level + 1) * this.baseAreaBonus * 100).toFixed(0)}%)。`;
     }
 }
 
@@ -217,10 +203,7 @@ class Bracer extends PassiveItem {
         if (this.level >= this.maxLevel) {
             return "已达最大等级。";
         }
-        const nextLevel = this.level + 1;
-        const nextBonus = nextLevel * this.baseProjectileSpeedBonus * 100;
-        const currentBonus = this.level * this.baseProjectileSpeedBonus * 100;
-        return `Lv${nextLevel}: 射弹速度 +${currentBonus.toFixed(0)}% → +${nextBonus.toFixed(0)}%。`;
+        return `再提升 ${this.baseProjectileSpeedBonus * 100}% 投射物速度 (Lv${this.level + 1} 总计: +${((this.level + 1) * this.baseProjectileSpeedBonus * 100).toFixed(0)}%)。`;
     }
 }
 
@@ -260,10 +243,7 @@ class HollowHeart extends PassiveItem {
         if (this.level >= this.maxLevel) {
             return "已达最大等级。";
         }
-        const nextLevel = this.level + 1;
-        const nextBonus = nextLevel * this.baseHealthBonus * 100;
-        const currentBonus = this.level * this.baseHealthBonus * 100;
-        return `Lv${nextLevel}: 最大生命 +${currentBonus.toFixed(0)}% → +${nextBonus.toFixed(0)}%。`;
+        return `再提升 ${this.baseHealthBonus * 100}% 最大生命值 (Lv${this.level + 1} 总计: +${((this.level + 1) * this.baseHealthBonus * 100).toFixed(0)}%)。`;
     }
 }
 
@@ -296,16 +276,13 @@ class Pummarola extends PassiveItem {
         if (this.level >= this.maxLevel) {
             return "已达最大等级。";
         }
-        const nextLevel = this.level + 1;
-        const nextBonus = nextLevel * this.baseRegenBonus;
-        const currentBonus = this.level * this.baseRegenBonus;
-        return `Lv${nextLevel}: 生命恢复 +${currentBonus.toFixed(1)}/s → +${nextBonus.toFixed(1)}/s。`;
+        return `每秒恢复量增加 ${this.baseRegenBonus.toFixed(1)} (Lv${this.level + 1} 总计: ${((this.level + 1) * this.baseRegenBonus).toFixed(1)})。`;
     }
 }
 
 /**
  * 吸铁石类
- * 增加拾取范围
+ * 增加拾取范围和吸铁石效果
  */
 class Magnet extends PassiveItem {
     static Name = "吸铁石";
@@ -313,84 +290,81 @@ class Magnet extends PassiveItem {
     static MaxLevel = 5;
 
     constructor() {
-        super(Magnet.Name, Magnet.Emoji, "扩大经验和物品的拾取范围。", Magnet.MaxLevel);
-        this.baseRadiusBonus = 0.20; // +20% pickup radius per level (of base player pickup radius)
-        this.calculateBonuses();
+        super(Magnet.Name, Magnet.Emoji, `增加拾取范围并周期性吸取经验。`, Magnet.MaxLevel);
+        this.basePickupRadiusBonus = 0.20; // +20% pickup radius per level
+        // Magnet-specific properties
+        this.triggerInterval = 15.0; // 15秒吸一次
+        this.triggerTimer = 0;
+        this.calculateBonuses(); // Also calculates magnetizeInterval
     }
 
     calculateBonuses() {
-        // We will make this increase the player's 'pickupRadius' stat by a percentage
-        // Player's getStat('pickupRadius') will be base * (1 + sum of these mult bonuses)
         this.bonuses = {
-            pickupRadius: { mult: this.level * this.baseRadiusBonus }
+            pickupRadius: { mult: this.level * this.basePickupRadiusBonus } // Add to multiplier in getStat
         };
+    }
+    
+    update(dt, owner) {
+        this.triggerTimer += dt;
+        if (this.triggerTimer >= this.triggerInterval) {
+            this.triggerMagnetEffect(owner);
+            this.triggerTimer = 0;
+        }
+    }
+
+    triggerMagnetEffect(owner) {
+        console.log("磁铁效果触发!");
+        // 遍历所有活动经验宝石，将它们标记为被吸引
+        xpGems.forEach(gem => {
+            if (gem && gem.isActive && !gem.isGarbage && !gem.isAttracted) {
+                gem.isAttracted = true;
+                gem.attractionSpeed = gem.baseAttractionSpeed * 2.5; // 磁铁吸引速度可以更快
+                // 清除初始的随机速度，使其直接飞向玩家
+                gem.vx = 0;
+                gem.vy = 0;
+            }
+        });
+
+        // 创建一个视觉效果，表明磁铁被触发了
+        const effect = {
+            x: owner.x,
+            y: owner.y,
+            radius: 0,
+            maxRadius: Math.max(GAME_WIDTH, GAME_HEIGHT) * 0.8, // 大范围效果
+            lifetime: 0.7,
+            timer: 0,
+            isGarbage: false,
+            color: 'rgba(100, 150, 255, 0.5)',
+            update: function(dt) {
+                this.timer += dt;
+                if (this.timer >= this.lifetime) {
+                    this.isGarbage = true;
+                    return;
+                }
+                this.radius = (this.timer / this.lifetime) * this.maxRadius;
+            },
+            draw: function(ctx) {
+                if (this.isGarbage) return;
+                const screenPos = cameraManager.worldToScreen(this.x, this.y);
+                const alpha = 0.5 - (this.timer / this.lifetime) * 0.5;
+                ctx.fillStyle = this.color.replace(/\b[0-9\.]+\)$/, `${alpha})`); //动态alpha
+                ctx.beginPath();
+                ctx.arc(screenPos.x, screenPos.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        };
+        visualEffects.push(effect);
     }
 
     getInitialDescription() {
-        return `扩大 ${this.baseRadiusBonus * 100}% 拾取范围。 (当前 Lv1)`;
+        return `提升 ${this.basePickupRadiusBonus*100}% 拾取范围。每隔 ${this.triggerInterval.toFixed(1)} 秒自动吸取所有经验。 (当前 Lv1)`;
     }
 
     getUpgradeDescription() {
         if (this.level >= this.maxLevel) {
             return "已达最大等级。";
         }
-        const nextLevel = this.level + 1;
-        const nextBonus = nextLevel * this.baseRadiusBonus * 100;
-        const currentBonus = this.level * this.baseRadiusBonus * 100;
-        return `Lv${nextLevel}: 拾取范围 +${currentBonus.toFixed(0)}% → +${nextBonus.toFixed(0)}%。`;
-    }
-}
-
-/**
- * 舍利子回魂
- * 击杀敌人后召唤幽灵盟友
- */
-class RelicSoulPassive extends PassiveItem {
-    static Name = "舍利子回魂";
-    static Emoji = "👻"; // Or find a better emoji like ☯️ or ☸️ ? Using ghost for now.
-    static MaxLevel = 5;
-
-    constructor() {
-        super(RelicSoulPassive.Name, RelicSoulPassive.Emoji, `击杀敌人时召唤幽灵盟友为你作战。`, RelicSoulPassive.MaxLevel);
-        this.calculateBonuses();
-    }
-
-    calculateBonuses() {
-        // These are not direct player stat bonuses, but control the summoned ghosts.
-        this.ghostDamage = 3 + (this.level - 1) * 2;
-        this.ghostDuration = 3 + (this.level - 1) * 1;
-        this.maxGhosts = 1 + Math.floor((this.level - 1) / 2); // Lv1:1, Lv2:1, Lv3:2, Lv4:2, Lv5:3
-        this.canConvertBoss = this.level >= this.maxLevel; // Only at max level
-        // Store these on the item instance for Enemy.onDeath to access
-        this.bonuses = {
-            // No direct stat changes for the player
-        };
-    }
-
-    getInitialDescription() {
-        this.calculateBonuses(); // Ensure stats are calculated for description
-        return `击杀敌人时召唤幽灵盟友 (持续${this.ghostDuration}s, 伤害${this.ghostDamage}, 最多${this.maxGhosts}个)。 (当前 Lv1)`;
-    }
-
-    getUpgradeDescription() {
-        if (this.level >= this.maxLevel) {
-            return "已达最大等级 (可以转化Boss!)。";
-        }
-        const nextLevel = this.level + 1;
-        
-        // Calculate next level stats
-        const nextDamage = 3 + nextLevel * 2;
-        const nextDuration = 3 + nextLevel * 1;
-        const nextMaxGhosts = 1 + Math.floor(nextLevel / 2);
-        const nextCanConvertBoss = nextLevel >= this.maxLevel;
-        
-        const descParts = [];
-        if (nextDamage > this.ghostDamage) descParts.push(`伤害:${this.ghostDamage}→${nextDamage}`);
-        if (nextDuration > this.ghostDuration) descParts.push(`持续:${this.ghostDuration}s→${nextDuration}s`);
-        if (nextMaxGhosts > this.maxGhosts) descParts.push(`数量:${this.maxGhosts}→${nextMaxGhosts}`);
-        if (nextCanConvertBoss && !this.canConvertBoss) descParts.push(`可转化Boss`);
-
-        return `Lv${nextLevel}: ${descParts.join(', ')}。`;
+        return `再提升 ${this.basePickupRadiusBonus*100}% 拾取范围。吸取间隔减少至 ${this.triggerInterval.toFixed(1)}秒 (Lv${this.level + 1} 总计范围: +${((this.level + 1) * this.basePickupRadiusBonus * 100).toFixed(0)}%)。`;
     }
 }
 
@@ -409,6 +383,5 @@ if (typeof Bracer === 'function') BASE_PASSIVES.push(Bracer);
 if (typeof HollowHeart === 'function') BASE_PASSIVES.push(HollowHeart);
 if (typeof Pummarola === 'function') BASE_PASSIVES.push(Pummarola);
 if (typeof Magnet === 'function') BASE_PASSIVES.push(Magnet);
-if (typeof RelicSoulPassive === 'function') BASE_PASSIVES.push(RelicSoulPassive);
 
 console.log('BASE_PASSIVES initialized in passiveItems.js:', BASE_PASSIVES.map(p => p.name));
