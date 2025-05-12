@@ -14,13 +14,12 @@ class GameObject {
         // 位置
         this.x = x;
         this.y = y;
+
         // 表情符号
         this.emoji = emoji;
+
         // 大小
         this.size = size;
-        this.width = size;
-        this.height = size;
-
         // 状态
         this.isActive = true;
         this.isGarbage = false;
@@ -41,20 +40,20 @@ class GameObject {
     draw(ctx) {
         // 如果游戏对象不活动或已标记为垃圾，不绘制
         if (!this.isActive || this.isGarbage) return;
+
         try {
             // 获取屏幕坐标
             const screenPos = cameraManager.worldToScreen(this.x, this.y);
-
             // 设置字体
             ctx.font = `${this.size}px 'Segoe UI Emoji', Arial`;
-
             // 设置对齐方式
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
+
             // 绘制表情符号
             ctx.fillText(this.emoji, screenPos.x, screenPos.y);
-        } catch (e) {
-            console.error("绘制游戏对象时出错:", e);
+        } catch (error) {
+            console.error("绘制游戏对象时出错:", error);
         }
     }
 
@@ -64,16 +63,13 @@ class GameObject {
      * @returns {boolean} 是否碰撞
      */
     checkCollision(other) {
-        // 计算距离
+        // 计算两个对象之间的距离
         const dx = this.x - other.x;
         const dy = this.y - other.y;
-        const distSq = dx * dx + dy * dy;
+        const distance = Math.sqrt(dx * dx + dy * dy);
 
-        // 计算碰撞半径
-        const radiusSum = (this.size + other.size) / 2;
-
-        // 检查是否碰撞
-        return distSq <= radiusSum * radiusSum;
+        // 如果距离小于两个对象大小的一半之和，则碰撞
+        return distance < (this.size + other.size) / 2;
     }
 
     /**
@@ -83,5 +79,13 @@ class GameObject {
         // 重置状态
         this.isActive = true;
         this.isGarbage = false;
+    }
+
+    /**
+     * 标记为垃圾
+     */
+    markAsGarbage() {
+        this.isGarbage = true;
+        this.isActive = false;
     }
 }

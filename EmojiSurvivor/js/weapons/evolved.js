@@ -837,3 +837,307 @@ function createExplosionEffect(x, y, radius, color = 'rgba(255, 100, 0, 0.7)') {
     // 添加到特效列表
     visualEffects.push(explosion);
 }
+
+/**
+ * 忍者大师武器类
+ * "太痛苦了"的进化武器，发射强力忍者梗弹幕
+ */
+class NinjaMasterWeapon extends PainfulNinjaWeapon {
+    /**
+     * 静态属性
+     */
+    static Name = "忍者大师";
+    static Emoji = "🥷";
+    static MaxLevel = 8;
+
+    /**
+     * 构造函数
+     * @param {PainfulNinjaWeapon} baseWeapon - 基础武器
+     */
+    constructor(baseWeapon) {
+        super();
+        this.name = NinjaMasterWeapon.Name;
+        this.emoji = NinjaMasterWeapon.Emoji;
+        this.level = baseWeapon.level;
+        this.maxLevel = NinjaMasterWeapon.MaxLevel;
+        this.isEvolved = true;
+        this.baseCooldown = 0.8;
+        
+        // 扩展弹幕文本
+        this.phrases = [
+            "太痛苦了", "忍术", "啊这", "无语", "裂开", "绝绝子", "8太行",
+            "忍法·影分身", "忍法·螺旋丸", "忍法·千鸟", "忍法·豪火球",
+            "忍法·雷切", "忍法·通灵术", "忍法·水遁", "忍法·土遁"
+        ];
+        
+        this.calculateStats();
+    }
+
+    /**
+     * 计算武器属性
+     */
+    calculateStats() {
+        this.stats = {
+            damage: 30 + (this.level - 1) * 8,
+            projectileSpeed: 350 + (this.level - 1) * 25,
+            cooldown: Math.max(0.2, this.baseCooldown - (this.level - 1) * 0.08),
+            count: 3 + Math.floor(this.level / 2),
+            pierce: 3 + Math.floor(this.level / 2),
+            duration: 2.5 + (this.level - 1) * 0.3,
+            area: 80 + (this.level - 1) * 15,
+            shadowClones: 1 + Math.floor(this.level / 3) // 影分身数量
+        };
+    }
+
+    /**
+     * 初始化升级效果描述
+     */
+    initLevelUpEffects() {
+        this.levelUpEffects = {
+            1: "忍者大师，发射强力忍者梗弹幕并召唤影分身。\n伤害: 30, 范围: 80, 影分身: 1",
+            2: "提升伤害和范围。\n伤害: 38 (+8), 范围: 95 (+15), 冷却: 0.72s",
+            3: "增加弹幕数量。\n数量: 4 (+1), 持续: 3.1s (+0.3), 冷却: 0.64s",
+            4: "增加影分身数量。\n影分身: 2 (+1), 穿透: 5 (+1), 冷却: 0.56s",
+            5: "提升伤害和范围。\n伤害: 62 (+8), 范围: 140 (+15), 冷却: 0.48s",
+            6: "增加弹幕数量。\n数量: 6 (+1), 持续: 4.0s (+0.3), 冷却: 0.40s",
+            7: "增加影分身数量。\n影分身: 3 (+1), 穿透: 6 (+1), 冷却: 0.32s",
+            8: "全面提升所有属性。\n伤害: 86 (+8), 范围: 185 (+15), 数量: 7 (+1), 冷却: 0.24s"
+        };
+    }
+
+    /**
+     * 发射武器
+     * @param {Player} owner - 拥有者
+     */
+    fire(owner) {
+        // 获取拥有者属性
+        const ownerStats = this.getOwnerStats(owner);
+
+        // 计算投射物数量
+        const count = this.stats.count + (ownerStats.projectileCountBonus || 0);
+
+        // 计算投射物速度
+        const speed = Math.max(100, this.stats.projectileSpeed * (ownerStats.projectileSpeedMultiplier || 1));
+
+        // 获取伤害和穿透
+        const damage = this.stats.damage * (ownerStats.damageMultiplier || 1);
+        const pierce = this.stats.pierce;
+
+        // 计算持续时间
+        const duration = Math.max(0.5, this.stats.duration * (ownerStats.durationMultiplier || 1));
+
+        // 计算范围
+        const area = this.stats.area * (ownerStats.areaMultiplier || 1);
+
+        // 影分身数量
+        const shadowClones = this.stats.shadowClones;
+
+        // 主角发射弹幕
+        this.fireProjectiles(owner, owner.x, owner.y, count, speed, damage, pierce, duration, area);
+
+        // 召唤影分身发射弹幕
+        for (let i = 0; i < shadowClones; i++) {
+            // 计算影分身位置（围绕玩家）
+            const angle = (Math.PI * 2 / shadowClones) * i;
+            const distance = 60;
+            const cloneX = owner.x + Math.cos(angle) * distance;
+            const cloneY = owner.y + Math.sin(angle) * distance;
+            
+            // 创建影分身视觉效果
+            const effect = VisualEffect.createEmojiEffect(
+                cloneX, 
+                cloneY, 
+                "🥷", 
+                owner.size * 0.8, 
+                0.8
+            );
+            visualEffects.push(effect);
+            
+            // 影分身发射弹幕（伤害减半）
+            this.fireProjectiles(owner, cloneX, cloneY, Math.ceil(count / 2), speed, damage * 0.5, pierce, duration, area * 0.8);
+        }
+    }
+    
+    /**
+     * 发射弹幕
+     * @param {Player} owner - 拥有者
+     * @param {number} x - 发射X坐标
+     * @param {number} y - 发射Y坐标
+     * @param {number} count - 弹幕数量
+     * @param {number} speed - 弹幕速度
+     * @param {number} damage - 弹幕伤害
+     * @param {number} pierce - 弹幕穿透
+     * @param {number} duration - 弹幕持续时间
+     * @param {number} area - 弹幕范围
+     */
+    fireProjectiles(owner, x, y, count, speed, damage, pierce, duration, area) {
+        // 寻找目标 - 只寻找屏幕内的敌人
+        let target = owner.findNearestEnemy(GAME_WIDTH * 0.8) || {
+            x: owner.x + owner.lastMoveDirection.x * 100,
+            y: owner.y + owner.lastMoveDirection.y * 100
+        };
+
+        // 计算方向
+        const dx = target.x - x;
+        const dy = target.y - y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        // 确保有方向，防止投射物停留原地
+        let dirX = dist > 0 ? dx / dist : owner.lastMoveDirection.x;
+        let dirY = dist > 0 ? dy / dist : owner.lastMoveDirection.y;
+        
+        // 如果方向向量为零（极少发生），使用默认向右方向
+        if (dirX === 0 && dirY === 0) {
+            dirX = 1;
+            dirY = 0;
+        }
+
+        // 计算角度
+        const angleStep = count > 1 ? (Math.PI / 4) : 0;
+        const startAngle = Math.atan2(dirY, dirX) - (angleStep * (count - 1) / 2);
+
+        // 发射投射物
+        for (let i = 0; i < count; i++) {
+            // 更新当前短语索引
+            this.currentPhraseIndex = (this.currentPhraseIndex + 1) % this.phrases.length;
+            const phrase = this.phrases[this.currentPhraseIndex];
+            
+            const angle = startAngle + i * angleStep;
+            const vx = Math.cos(angle) * speed;
+            const vy = Math.sin(angle) * speed;
+
+            // 确保投射物有速度
+            if (Math.abs(vx) < 0.1 && Math.abs(vy) < 0.1) {
+                continue; // 跳过无速度的投射物
+            }
+
+            // 创建特殊投射物
+            const projectile = new NinjaTextProjectile(
+                x, 
+                y, 
+                phrase, 
+                area / 3, // 文本大小
+                vx, 
+                vy, 
+                damage, 
+                pierce, 
+                duration,
+                this.getOwnerStats(owner),
+                area // 爆炸范围
+            );
+            
+            // 添加到投射物列表
+            projectiles.push(projectile);
+        }
+    }
+
+    /**
+     * 获取升级描述
+     * @returns {string} 升级描述
+     */
+    getUpgradeDescription() {
+        // 如果已经初始化了详细的升级效果描述，直接使用
+        if (this.levelUpEffects[this.level + 1]) {
+            return this.levelUpEffects[this.level + 1];
+        }
+        
+        return `Lv${this.level + 1}: 提升忍者大师的威力。`;
+    }
+}
+
+/**
+ * 忍者文本投射物类
+ * 用于"忍者大师"武器
+ */
+class NinjaTextProjectile extends TextProjectile {
+    /**
+     * 构造函数
+     * @param {number} x - X坐标
+     * @param {number} y - Y坐标
+     * @param {string} text - 文本
+     * @param {number} size - 大小
+     * @param {number} vx - X速度
+     * @param {number} vy - Y速度
+     * @param {number} damage - 伤害
+     * @param {number} pierce - 穿透次数
+     * @param {number} duration - 持续时间
+     * @param {Object} ownerStats - 拥有者属性
+     * @param {number} aoeRadius - 范围伤害半径
+     */
+    constructor(x, y, text, size, vx, vy, damage, pierce, duration, ownerStats, aoeRadius) {
+        super(x, y, text, size, vx, vy, damage, pierce, duration, ownerStats, aoeRadius);
+        
+        // 添加拖尾特效
+        this.trailTimer = 0;
+        this.trailInterval = 0.05;
+    }
+    
+    /**
+     * 更新投射物状态
+     * @param {number} dt - 时间增量
+     */
+    update(dt) {
+        // 更新拖尾计时器
+        this.trailTimer -= dt;
+        
+        // 如果拖尾计时器结束，创建拖尾特效
+        if (this.trailTimer <= 0) {
+            // 创建拖尾特效
+            const trail = VisualEffect.createEmojiEffect(
+                this.x, 
+                this.y, 
+                "✨", 
+                this.size * 0.5, 
+                0.3
+            );
+            visualEffects.push(trail);
+            
+            // 重置拖尾计时器
+            this.trailTimer = this.trailInterval;
+        }
+        
+        // 调用父类更新方法
+        super.update(dt);
+    }
+    
+    /**
+     * 销毁处理
+     */
+    onDestroy() {
+        // 创建爆炸效果
+        if (this.aoeRadius > 0) {
+            // 使用新的 VisualEffect 类创建爆炸效果
+            const effect = VisualEffect.createExplosion(
+                this.x, 
+                this.y, 
+                this.aoeRadius, 
+                'rgba(0, 100, 255, 0.5)', 
+                0.5
+            );
+            visualEffects.push(effect);
+            
+            // 创建文本效果
+            const textEffect = VisualEffect.createEmojiEffect(
+                this.x, 
+                this.y, 
+                this.text, 
+                this.size * 2, 
+                0.8
+            );
+            visualEffects.push(textEffect);
+            
+            // 创建额外的忍者特效
+            const ninjaEffect = VisualEffect.createEmojiEffect(
+                this.x, 
+                this.y, 
+                "🥷", 
+                this.size * 1.5, 
+                0.5
+            );
+            visualEffects.push(ninjaEffect);
+        }
+        
+        // 调用父类销毁方法
+        super.onDestroy();
+    }
+}

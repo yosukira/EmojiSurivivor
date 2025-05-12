@@ -99,9 +99,27 @@ class Player extends Character {
             // 获取当前速度
             const currentSpeed = this.getCurrentSpeed();
 
+            // 计算新位置
+            let newX = this.x + dx * currentSpeed * dt;
+            let newY = this.y + dy * currentSpeed * dt;
+            
+            // 限制玩家不能移动到屏幕外
+            const margin = this.size / 2;
+            
+            // 获取相机视口边界
+            const viewportMinX = cameraManager.x - GAME_WIDTH / 2;
+            const viewportMaxX = cameraManager.x + GAME_WIDTH / 2;
+            const viewportMinY = cameraManager.y - GAME_HEIGHT / 2;
+            const viewportMaxY = cameraManager.y + GAME_HEIGHT / 2;
+            
+            // 限制X坐标
+            newX = Math.max(viewportMinX + margin, Math.min(viewportMaxX - margin, newX));
+            // 限制Y坐标
+            newY = Math.max(viewportMinY + margin, Math.min(viewportMaxY - margin, newY));
+
             // 更新位置
-            this.x += dx * currentSpeed * dt;
-            this.y += dy * currentSpeed * dt;
+            this.x = newX;
+            this.y = newY;
         }
     }
 
@@ -325,27 +343,38 @@ class Player extends Character {
     findNearestEnemy(maxDistance = Infinity) {
         // 如果没有敌人，返回null
         if (enemies.length === 0) return null;
-        // 最近的敌人
-        let nearest = null;
 
-        // 最近距离
-        let minDistSq = maxDistance * maxDistance;
+        let bestTarget = null;
+        let bestScore = Infinity;
+        const maxDistSq = maxDistance * maxDistance;
+
         // 遍历所有敌人
         enemies.forEach(enemy => {
             // 跳过不活动或已标记为垃圾的敌人
             if (enemy.isGarbage || !enemy.isActive) return;
 
-            // 计算距离
+            // 计算距离的平方
             const dx = enemy.x - this.x;
             const dy = enemy.y - this.y;
-            const distSq = dx * dx + dy;            // 如果距离更近，更新最近的敌人
-            if (distSq < minDistSq) {
-                minDistSq = distSq;
-                nearest = enemy;
+            const distSq = dx * dx + dy * dy;
+
+            // 如果超出最大距离，则跳过
+            if (distSq > maxDistSq) return;
+
+            // 计算分数：距离越近，血量越少，分数越低
+            // 距离权重为1，血量权重可以调整，例如 0.5
+            // 为了避免除以零，如果 enemy.maxHealth 为0或未定义，则将 healthFactor 设为较大值
+            const healthFactor = (enemy.maxHealth && enemy.maxHealth > 0) ? (enemy.health / enemy.maxHealth) : 1;
+            // 综合考虑距离和血量，距离的平方根更符合直观感受
+            const score = Math.sqrt(distSq) + healthFactor * 50; // 血量权重为50，可以根据需要调整
+
+            if (score < bestScore) {
+                bestScore = score;
+                bestTarget = enemy;
             }
         });
 
-        return nearest;
+        return bestTarget;
     }
 
     /**
@@ -426,11 +455,11 @@ class Player extends Character {
         // 计算半径
         const radius = this.pickupRadius * cameraManager.zoom;
 
-        // 绘制拾取范围
-        ctx.strokeStyle = 'rgba(100, 200, 255, 0.2)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.arc(screenPos.x, screenPos.y, radius, 0, Math.PI * 2);
-        ctx.stroke();
+        // 绘制拾取范围 (已注释掉)
+        // ctx.strokeStyle = 'rgba(100, 200, 255, 0.2)';
+        // ctx.lineWidth = 1;
+        // ctx.beginPath();
+        // ctx.arc(screenPos.x, screenPos.y, radius, 0, Math.PI * 2);
+        // ctx.stroke();
     }
 }

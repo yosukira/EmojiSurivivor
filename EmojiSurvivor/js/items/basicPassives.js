@@ -2,30 +2,44 @@
  * 菠菜被动物品类
  * 增加伤害
  */
-class SpinachPassive extends PassiveItem {
-    /**
-     * 静态属性
-     */
-    static Name = "菠菜";
-    static Emoji = "🥬";
-    static MaxLevel = 5;
-
+class Spinach extends PassiveItem {
     /**
      * 构造函数
      */
     constructor() {
-        super(SpinachPassive.Name, SpinachPassive.Emoji, SpinachPassive.MaxLevel);
+        super("菠菜", "🥬", "增加伤害。", 5);
     }
 
     /**
-     * 计算属性加成
+     * 计算加成
      */
     calculateBonuses() {
         this.bonuses = {
             damageMultiplier: {
+                add: 0,
                 mult: 0.1 * this.level
             }
         };
+    }
+
+    /**
+     * 获取升级选项
+     * @param {Player} player - 玩家
+     * @returns {Array} 升级选项
+     */
+    getCurrentUpgradeOptions(player) {
+        if (this.isMaxLevel()) return [];
+        return [{
+            item: this,
+            type: 'upgrade_passive',
+            text: `升级 ${this.name}`,
+            description: this.getUpgradeDescription(),
+            icon: this.emoji,
+            level: this.level + 1,
+            action: () => {
+                this.upgrade();
+            }
+        }];
     }
 
     /**
@@ -33,15 +47,7 @@ class SpinachPassive extends PassiveItem {
      * @returns {string} 升级描述
      */
     getUpgradeDescription() {
-        return `Lv${this.level + 1}: +10% 伤害 (总计 ${(this.level + 1) * 10}%)`;
-    }
-
-    /**
-     * 获取初始描述
-     * @returns {string} 初始描述
-     */
-    getInitialDescription() {
-        return "增加伤害。";
+        return `Lv${this.level + 1}: +${10 * (this.level + 1)}% 伤害`;
     }
 }
 
@@ -49,30 +55,44 @@ class SpinachPassive extends PassiveItem {
  * 护甲被动物品类
  * 减少受到的伤害
  */
-class ArmorPassive extends PassiveItem {
-    /**
-     * 静态属性
-     */
-    static Name = "护甲";
-    static Emoji = "🛡️";
-    static MaxLevel = 5;
-
+class Armor extends PassiveItem {
     /**
      * 构造函数
      */
     constructor() {
-        super(ArmorPassive.Name, ArmorPassive.Emoji, ArmorPassive.MaxLevel);
+        super("护甲", "🛡️", "减少受到的伤害。", 5);
     }
 
     /**
-     * 计算属性加成
+     * 计算加成
      */
     calculateBonuses() {
         this.bonuses = {
             armor: {
-                add: this.level
+                add: this.level,
+                mult: 0
             }
         };
+    }
+
+    /**
+     * 获取升级选项
+     * @param {Player} player - 玩家
+     * @returns {Array} 升级选项
+     */
+    getCurrentUpgradeOptions(player) {
+        if (this.isMaxLevel()) return [];
+        return [{
+            item: this,
+            type: 'upgrade_passive',
+            text: `升级 ${this.name}`,
+            description: this.getUpgradeDescription(),
+            icon: this.emoji,
+            level: this.level + 1,
+            action: () => {
+                this.upgrade();
+            }
+        }];
     }
 
     /**
@@ -80,15 +100,7 @@ class ArmorPassive extends PassiveItem {
      * @returns {string} 升级描述
      */
     getUpgradeDescription() {
-        return `Lv${this.level + 1}: +1 护甲 (总计 ${this.level + 1})`;
-    }
-
-    /**
-     * 获取初始描述
-     * @returns {string} 初始描述
-     */
-    getInitialDescription() {
-        return "减少受到的伤害。";
+        return `Lv${this.level + 1}: +${this.level + 1} 护甲`;
     }
 }
 
@@ -96,30 +108,44 @@ class ArmorPassive extends PassiveItem {
  * 翅膀被动物品类
  * 增加移动速度
  */
-class WingsPassive extends PassiveItem {
-    /**
-     * 静态属性
-     */
-    static Name = "翅膀";
-    static Emoji = "🕊️";
-    static MaxLevel = 5;
-
+class Wings extends PassiveItem {
     /**
      * 构造函数
      */
     constructor() {
-        super(WingsPassive.Name, WingsPassive.Emoji, WingsPassive.MaxLevel);
+        super("翅膀", "🕊️", "增加移动速度。", 5);
     }
 
     /**
-     * 计算属性加成
+     * 计算加成
      */
     calculateBonuses() {
         this.bonuses = {
             speed: {
+                add: 0,
                 mult: 0.1 * this.level
             }
         };
+    }
+
+    /**
+     * 获取升级选项
+     * @param {Player} player - 玩家
+     * @returns {Array} 升级选项
+     */
+    getCurrentUpgradeOptions(player) {
+        if (this.isMaxLevel()) return [];
+        return [{
+            item: this,
+            type: 'upgrade_passive',
+            text: `升级 ${this.name}`,
+            description: this.getUpgradeDescription(),
+            icon: this.emoji,
+            level: this.level + 1,
+            action: () => {
+                this.upgrade();
+            }
+        }];
     }
 
     /**
@@ -127,93 +153,105 @@ class WingsPassive extends PassiveItem {
      * @returns {string} 升级描述
      */
     getUpgradeDescription() {
-        return `Lv${this.level + 1}: +10% 移动速度 (总计 ${(this.level + 1) * 10}%)`;
-    }
-
-    /**
-     * 获取初始描述
-     * @returns {string} 初始描述
-     */
-    getInitialDescription() {
-        return "增加移动速度。";
+        return `Lv${this.level + 1}: +${10 * (this.level + 1)}% 移动速度`;
     }
 }
 
 /**
- * 魔法书被动物品类
+ * 空白之书被动物品类
  * 减少武器冷却时间
  */
-class TomePassive extends PassiveItem {
-    /**
-     * 静态属性
-     */
-    static Name = "魔法书";
-    static Emoji = "📖";
-    static MaxLevel = 5;
-
+class EmptyTome extends PassiveItem {
     /**
      * 构造函数
      */
     constructor() {
-        super(TomePassive.Name, TomePassive.Emoji, TomePassive.MaxLevel);
+        super("空白之书", "📖", "减少武器冷却时间。", 5);
     }
 
     /**
-     * 计算属性加成
+     * 计算加成
      */
     calculateBonuses() {
         this.bonuses = {
             cooldownMultiplier: {
+                add: 0,
                 mult: -0.08 * this.level
             }
         };
     }
 
     /**
+     * 获取升级选项
+     * @param {Player} player - 玩家
+     * @returns {Array} 升级选项
+     */
+    getCurrentUpgradeOptions(player) {
+        if (this.isMaxLevel()) return [];
+        return [{
+            item: this,
+            type: 'upgrade_passive',
+            text: `升级 ${this.name}`,
+            description: this.getUpgradeDescription(),
+            icon: this.emoji,
+            level: this.level + 1,
+            action: () => {
+                this.upgrade();
+            }
+        }];
+    }
+
+    /**
      * 获取升级描述
      * @returns {string} 升级描述
      */
     getUpgradeDescription() {
-        return `Lv${this.level + 1}: -8% 冷却时间 (总计 -${(this.level + 1) * 8}%)`;
-    }
-
-    /**
-     * 获取初始描述
-     * @returns {string} 初始描述
-     */
-    getInitialDescription() {
-        return "减少武器冷却时间。";
+        return `Lv${this.level + 1}: -${8 * (this.level + 1)}% 武器冷却`;
     }
 }
 
 /**
  * 烛台被动物品类
- * 增加武器范围
+ * 增加效果范围
  */
 class CandelabradorPassive extends PassiveItem {
-    /**
-     * 静态属性
-     */
-    static Name = "烛台";
-    static Emoji = "🕯️";
-    static MaxLevel = 5;
-
     /**
      * 构造函数
      */
     constructor() {
-        super(CandelabradorPassive.Name, CandelabradorPassive.Emoji, CandelabradorPassive.MaxLevel);
+        super("烛台", "🕯️", "增加效果范围。", 5);
     }
 
     /**
-     * 计算属性加成
+     * 计算加成
      */
     calculateBonuses() {
         this.bonuses = {
             areaMultiplier: {
+                add: 0,
                 mult: 0.1 * this.level
             }
         };
+    }
+
+    /**
+     * 获取升级选项
+     * @param {Player} player - 玩家
+     * @returns {Array} 升级选项
+     */
+    getCurrentUpgradeOptions(player) {
+        if (this.isMaxLevel()) return [];
+        return [{
+            item: this,
+            type: 'upgrade_passive',
+            text: `升级 ${this.name}`,
+            description: this.getUpgradeDescription(),
+            icon: this.emoji,
+            level: this.level + 1,
+            action: () => {
+                this.upgrade();
+            }
+        }];
     }
 
     /**
@@ -221,109 +259,113 @@ class CandelabradorPassive extends PassiveItem {
      * @returns {string} 升级描述
      */
     getUpgradeDescription() {
-        return `Lv${this.level + 1}: +10% 武器范围 (总计 ${(this.level + 1) * 10}%)`;
-    }
-
-    /**
-     * 获取初始描述
-     * @returns {string} 初始描述
-     */
-    getInitialDescription() {
-        return "增加武器范围。";
+        return `Lv${this.level + 1}: +${10 * (this.level + 1)}% 效果范围`;
     }
 }
 
 /**
- * 拳套被动物品类
+ * 护腕被动物品类
  * 增加投射物速度
  */
 class BracerPassive extends PassiveItem {
     /**
-     * 静态属性
-     */
-    static Name = "拳套";
-    static Emoji = "🥊";
-    static MaxLevel = 5;
-
-    /**
      * 构造函数
      */
     constructor() {
-        super(BracerPassive.Name, BracerPassive.Emoji, BracerPassive.MaxLevel);
+        super("护腕", "🥊", "增加投射物速度。", 5);
     }
 
     /**
-     * 计算属性加成
+     * 计算加成
      */
     calculateBonuses() {
         this.bonuses = {
             projectileSpeedMultiplier: {
+                add: 0,
                 mult: 0.1 * this.level
             }
         };
     }
 
     /**
+     * 获取升级选项
+     * @param {Player} player - 玩家
+     * @returns {Array} 升级选项
+     */
+    getCurrentUpgradeOptions(player) {
+        if (this.isMaxLevel()) return [];
+        return [{
+            item: this,
+            type: 'upgrade_passive',
+            text: `升级 ${this.name}`,
+            description: this.getUpgradeDescription(),
+            icon: this.emoji,
+            level: this.level + 1,
+            action: () => {
+                this.upgrade();
+            }
+        }];
+    }
+
+    /**
      * 获取升级描述
      * @returns {string} 升级描述
      */
     getUpgradeDescription() {
-        return `Lv${this.level + 1}: +10% 投射物速度 (总计 ${(this.level + 1) * 10}%)`;
-    }
-
-    /**
-     * 获取初始描述
-     * @returns {string} 初始描述
-     */
-    getInitialDescription() {
-        return "增加投射物速度。";
+        return `Lv${this.level + 1}: +${10 * (this.level + 1)}% 投射物速度`;
     }
 }
 
 /**
- * 空心之心被动物品类
+ * 空虚之心被动物品类
  * 增加最大生命值
  */
 class HollowHeartPassive extends PassiveItem {
     /**
-     * 静态属性
-     */
-    static Name = "空心之心";
-    static Emoji = "❤️‍🔥";
-    static MaxLevel = 5;
-
-    /**
      * 构造函数
      */
     constructor() {
-        super(HollowHeartPassive.Name, HollowHeartPassive.Emoji, HollowHeartPassive.MaxLevel);
+        super("空虚之心", "❤️‍🔥", "增加最大生命值。", 5);
     }
 
     /**
-     * 计算属性加成
+     * 计算加成
      */
     calculateBonuses() {
         this.bonuses = {
             health: {
-                mult: 0.2 * this.level
+                add: 0,
+                mult: 0.1 * this.level
             }
         };
     }
 
     /**
+     * 获取升级选项
+     * @param {Player} player - 玩家
+     * @returns {Array} 升级选项
+     */
+    getCurrentUpgradeOptions(player) {
+        if (this.isMaxLevel()) return [];
+        return [{
+            item: this,
+            type: 'upgrade_passive',
+            text: `升级 ${this.name}`,
+            description: this.getUpgradeDescription(),
+            icon: this.emoji,
+            level: this.level + 1,
+            action: () => {
+                this.upgrade();
+            }
+        }];
+    }
+
+    /**
      * 获取升级描述
      * @returns {string} 升级描述
      */
     getUpgradeDescription() {
-        return `Lv${this.level + 1}: +20% 最大生命值 (总计 ${(this.level + 1) * 20}%)`;
-    }
-
-    /**
-     * 获取初始描述
-     * @returns {string} 初始描述
-     */
-    getInitialDescription() {
-        return "增加最大生命值。";
+        return `Lv${this.level + 1}: +${10 * (this.level + 1)}% 最大生命值`;
     }
 }
 
@@ -333,28 +375,42 @@ class HollowHeartPassive extends PassiveItem {
  */
 class PummarolaPassive extends PassiveItem {
     /**
-     * 静态属性
-     */
-    static Name = "番茄";
-    static Emoji = "🍅";
-    static MaxLevel = 5;
-
-    /**
      * 构造函数
      */
     constructor() {
-        super(PummarolaPassive.Name, PummarolaPassive.Emoji, PummarolaPassive.MaxLevel);
+        super("番茄", "🍅", "增加生命恢复。", 5);
     }
 
     /**
-     * 计算属性加成
+     * 计算加成
      */
     calculateBonuses() {
         this.bonuses = {
             regen: {
-                add: this.level
+                add: 0.2 * this.level,
+                mult: 0
             }
         };
+    }
+
+    /**
+     * 获取升级选项
+     * @param {Player} player - 玩家
+     * @returns {Array} 升级选项
+     */
+    getCurrentUpgradeOptions(player) {
+        if (this.isMaxLevel()) return [];
+        return [{
+            item: this,
+            type: 'upgrade_passive',
+            text: `升级 ${this.name}`,
+            description: this.getUpgradeDescription(),
+            icon: this.emoji,
+            level: this.level + 1,
+            action: () => {
+                this.upgrade();
+            }
+        }];
     }
 
     /**
@@ -362,14 +418,6 @@ class PummarolaPassive extends PassiveItem {
      * @returns {string} 升级描述
      */
     getUpgradeDescription() {
-        return `Lv${this.level + 1}: +1 生命恢复/秒 (总计 ${this.level + 1}/秒)`;
-    }
-
-    /**
-     * 获取初始描述
-     * @returns {string} 初始描述
-     */
-    getInitialDescription() {
-        return "增加生命恢复。";
+        return `Lv${this.level + 1}: +${0.2 * (this.level + 1)} 每秒生命恢复`;
     }
 }

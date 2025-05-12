@@ -1,72 +1,179 @@
 /**
  * 敌人类
- * 普通敌人
+ * 游戏中的敌人角色
  */
 class Enemy extends Character {
     /**
      * 构造函数
      * @param {number} x - X坐标
      * @param {number} y - Y坐标
-     * @param {Object} typeData - 类型数据
-     * @param {number} difficultyMultiplier - 难度乘数
+     * @param {Object} type - 敌人类型
      */
-    constructor(x, y, typeData, difficultyMultiplier) {
-        // 计算属性
-        const timeHealthBonus = gameTime * 0.06;
-        const timeSpeedBonus = gameTime * 0.03;
-        const timeDamageBonus = gameTime * 0.04;
-        // 创建属性对象
-        const stats = {
-            health: Math.ceil((ENEMY_BASE_STATS.health + timeHealthBonus) * typeData.healthMult * difficultyMultiplier),
-            speed: (ENEMY_BASE_STATS.speed + timeSpeedBonus) * typeData.speedMult,
-            damage: Math.ceil((ENEMY_BASE_STATS.damage + timeDamageBonus) * typeData.damageMult),
-            xp: Math.ceil(ENEMY_BASE_STATS.xp * typeData.xpMult),
-            armor: 0
-        };
+    constructor(x, y, type) {
         // 调用父类构造函数
-        super(x, y, typeData.emoji, GAME_FONT_SIZE, stats);
-
-        // 基础速度
-        this.baseSpeed = stats.speed;
-        // 伤害冷却
-        this.damageCooldown = 0.5;
-        this.damageTimer = 0;
-
-        // 掉落几率
-        this.dropChance = {
-            magnet: 0.02, // 2%几率掉落吸铁石
-            heart: 0.05   // 5%几率掉落心
-        };
+        super(
+            x, y,
+            type.emoji || EMOJI.ENEMY_NORMAL,
+            GAME_FONT_SIZE,
+            {
+                health: ENEMY_BASE_STATS.health * (type.healthMult || 1),
+                speed: ENEMY_BASE_STATS.speed * (type.speedMult || 1),
+                damage: ENEMY_BASE_STATS.damage * (type.damageMult || 1),
+                xp: ENEMY_BASE_STATS.xp * (type.xpMult || 1)
+            }
+        );
+        // 敌人类型
+        this.type = type;
+        // 目标
+        this.target = null;
+        // 收益
+        this.reward = type.xpMult || 1;
+        // 攻击冷却
+        this.attackCooldown = 0;
+        // 是否是远程敌人
+        this.isRanged = type.isRanged || false;
+        // 远程攻击范围
+        this.attackRange = type.attackRange || 150;
+        // 远程攻击冷却
+        this.attackCooldownTime = type.attackCooldownTime || 1.5;
+        // 远程投射物速度
+        this.projectileSpeed = type.projectileSpeed || 120;
     }
 
     /**
      * 更新敌人状态
      * @param {number} dt - 时间增量
-     * @param {Player} target - 目标玩家
      */
-    update(dt, target) {
+    update(dt) {
         // 如果敌人不活动或已标记为垃圾，不更新
-        if (this.isGarbage || !this.isActive) return;
+        if (!this.isActive || this.isGarbage) return;
         // 调用父类更新方法
         super.update(dt);
-        // 如果被眩晕，不移动
-        if (this.isStunned()) return;
-        // 计算到目标的方向
-        const dx = target.x - this.x;
-        const dy = target.y - this.y;
+        // 更新攻击冷却
+        if (this.attackCooldown > 0) {
+            this.attackCooldown -= dt;
+        }
+        // 更新移动
+        this.updateMovement(dt);
+        
+        // 如果是远程敌人，尝试进行远程攻击
+        if (this.isRanged && this.target && this.attackCooldown <= 0) {
+            const distSq = this.getDistanceSquared(this.target);
+            if (distSq <= this.attackRange * this.attackRange && distSq >= 100 * 100) {
+                this.performRangedAttack();
+                this.attackCooldown = this.attackCooldownTime;
+            }
+        }
+    }
+    
+    /**
+     * 计算与目标的距离平方
+     * @param {GameObject} target - 目标
+     * @returns {number} 距离平方
+     */
+    getDistanceSquared(target) {
+        const dx = this.x - target.x;
+        const dy = this.y - target.y;
+        return dx * dx + dy * dy;
+    }
+    
+    /**
+     * 执行远程攻击
+     */
+    performRangedAttack() {
+        if (!this.target || !this.isActive) return;
+        
+        // 计算方向
+        const dx = this.target.x - this.x;
+        const dy = this.target.y - this.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        // 如果距离足够远，移动向目标
-        if (dist > target.size / 4) {
-            this.x += (dx / dist) * this.speed * dt;
-            this.y += (dy / dist) * this.speed * dt;
+        const dirX = dx / dist;
+        const dirY = dy / dist;
+        
+        // 创建投射物
+        const projectile = new EnemyProjectile(
+            this.x, 
+            this.y, 
+            dirX * this.projectileSpeed, 
+            dirY * this.projectileSpeed, 
+            this.damage, 
+            this
+        );
+        
+        // 添加到投射物列表
+        enemyProjectiles.push(projectile);
+    }
+
+    /**
+     * 更新移动
+     * @param {number} dt - 时间增量
+     */
+    updateMovement(dt) {
+        // 如果没有目标或被眩晕，不移动
+        if (!this.target || this.isStunned()) return;
+        
+        // 计算方向
+        const dx = this.target.x - this.x;
+        const dy = this.target.y - this.y;
+        const distSq = dx * dx + dy * dy;
+        
+        // 检查玩家是否在屏幕内或附近 - 只有在范围内才追击和攻击
+        if (distSq > ENEMY_ATTACK_RANGE * ENEMY_ATTACK_RANGE) {
+            return;
         }
-        // 更新伤害计时器
-        this.damageTimer -= dt;
-        // 如果伤害计时器结束且与目标碰撞，造成伤害
-        if (this.damageTimer <= 0 && this.checkCollision(target)) {
-            target.takeDamage(this.damage, this);
-            this.damageTimer = this.damageCooldown;
+        
+        // 如果是远程敌人且在攻击范围内，保持距离
+        if (this.isRanged && distSq <= this.attackRange * this.attackRange) {
+            // 远程敌人会试图保持在一定距离外
+            const idealDistance = this.attackRange * 0.7;
+            if (distSq < idealDistance * idealDistance) {
+                // 远离玩家
+                const dist = Math.sqrt(distSq);
+                const dirX = -dx / dist;
+                const dirY = -dy / dist;
+                
+                // 获取当前速度
+                const currentSpeed = this.getCurrentSpeed() * 0.5;
+                
+                // 更新位置
+                this.x += dirX * currentSpeed * dt;
+                this.y += dirY * currentSpeed * dt;
+                return;
+            }
         }
+        
+        // 常规移动逻辑
+        const dist = Math.sqrt(distSq);
+        // 如果距离为0，不移动
+        if (dist === 0) return;
+        // 计算方向
+        const dirX = dx / dist;
+        const dirY = dy / dist;
+
+        // 获取当前速度
+        const currentSpeed = this.getCurrentSpeed();
+
+        // 更新位置
+        this.x += dirX * currentSpeed * dt;
+        this.y += dirY * currentSpeed * dt;
+        // 检查与目标的碰撞
+        if (this.checkCollision(this.target)) {
+            // 攻击目标
+            this.attack(this.target);
+        }
+    }
+
+    /**
+     * 攻击目标
+     * @param {Character} target - 目标
+     */
+    attack(target) {
+        // 如果攻击冷却未结束，不攻击
+        if (this.attackCooldown > 0) return;
+        // 造成伤害
+        target.takeDamage(this.damage, this);
+        // 重置攻击冷却
+        this.attackCooldown = this.attackInterval;
     }
 
     /**
@@ -76,37 +183,158 @@ class Enemy extends Character {
     onDeath(killer) {
         // 调用父类死亡处理
         super.onDeath(killer);
-
-        // 如果击杀者是玩家，掉落物品
-        if (killer instanceof Player) {
-            // 掉落经验宝石
-            xpGems.push(new ExperienceGem(this.x, this.y, this.xpValue));
-
-            // 增加击杀计数
+        
+        // 如果是爆炸敌人，创建爆炸效果
+        if (this.type && this.type.explodeOnDeath) {
+            this.createExplosion(this.type.explodeRadius || 120, this.type.explodeDamage || 15);
+        }
+        
+        // 如果击杀者是玩家，增加击杀数
+        if (killer === player) {
+            // 增加击杀数
             killCount++;
-
+            // 生成经验宝石
+            this.dropXP();
             // 随机掉落物品
-            this.dropItems(killer);
+            if (Math.random() < 0.05) { // 5%几率掉落物品
+                this.dropItem();
+            }
         }
     }
 
     /**
-     * 掉落物品
-     * @param {Player} killer - 击杀者
+     * 创建爆炸效果
+     * @param {number} radius - 爆炸半径
+     * @param {number} damage - 爆炸伤害
      */
-    dropItems(killer) {
-        // 获取玩家幸运值
-        const luck = killer.getStat('luck');
-
-        // 随机掉落心
-        if (Math.random() < this.dropChance.heart * luck) {
-            worldObjects.push(new Pickup(this.x, this.y, EMOJI.HEART, 'heal', 20));
+    createExplosion(radius, damage) {
+        // 创建爆炸视觉效果
+        const explosion = {
+            x: this.x,
+            y: this.y,
+            radius: 0,
+            maxRadius: radius,
+            lifetime: 0.5,
+            timer: 0,
+            isGarbage: false,
+            
+            update: function(dt) {
+                this.timer += dt;
+                if (this.timer >= this.lifetime) {
+                    this.isGarbage = true;
+                    return;
+                }
+                
+                this.radius = (this.timer / this.lifetime) * this.maxRadius;
+            },
+            
+            draw: function(ctx) {
+                if (this.isGarbage) return;
+                
+                const screenPos = cameraManager.worldToScreen(this.x, this.y);
+                const alpha = 0.7 - (this.timer / this.lifetime) * 0.7;
+                
+                // 绘制爆炸效果
+                const gradient = ctx.createRadialGradient(
+                    screenPos.x, screenPos.y, 0,
+                    screenPos.x, screenPos.y, this.radius
+                );
+                
+                gradient.addColorStop(0, `rgba(255, 200, 50, ${alpha})`);
+                gradient.addColorStop(0.7, `rgba(255, 100, 50, ${alpha * 0.7})`);
+                gradient.addColorStop(1, `rgba(255, 50, 50, 0)`);
+                
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(screenPos.x, screenPos.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        };
+        
+        visualEffects.push(explosion);
+        
+        // 对范围内的玩家造成伤害
+        if (player && !player.isGarbage && player.isActive) {
+            const dx = player.x - this.x;
+            const dy = player.y - this.y;
+            const distSq = dx * dx + dy * dy;
+            
+            if (distSq <= radius * radius) {
+                // 计算伤害衰减
+                const dist = Math.sqrt(distSq);
+                const damageFactor = 1 - (dist / radius);
+                const actualDamage = damage * damageFactor;
+                
+                // 造成伤害
+                player.takeDamage(actualDamage, this);
+            }
         }
+    }
 
-        // 随机掉落吸铁石
-        if (Math.random() < this.dropChance.magnet * luck) {
-            worldObjects.push(new Pickup(this.x, this.y, EMOJI.MAGNET, 'magnet', 0));
+    /**
+     * 生成经验宝石
+     */
+    dropXP() {
+        // 计算经验值
+        const xpValue = Math.ceil(this.xpValue);
+
+        // 创建经验宝石
+        const gem = new ExperienceGem(this.x, this.y, xpValue);
+
+        // 添加到经验宝石列表
+        xpGems.push(gem);
+    }
+    /**
+     * 掉落物品
+     */
+    dropItem() {
+        // 随机选择掉落物品类型
+        const rand = Math.random();
+        if (rand < 0.7) { // 70%几率掉落治疗物品
+            // 创建治疗物品
+            const pickup = new Pickup(this.x, this.y, EMOJI.HEART, 'heal', 20);
+            worldObjects.push(pickup);
+        } else { // 30%几率掉落磁铁
+            // 创建磁铁物品
+            const pickup = new Pickup(this.x, this.y, EMOJI.MAGNET, 'magnet', 0);
+            worldObjects.push(pickup);
         }
+    }
+
+    /**
+     * 绘制敌人
+     * @param {CanvasRenderingContext2D} ctx - 画布上下文
+     */
+    draw(ctx) {
+        // 如果敌人不活动或已标记为垃圾，不绘制
+        if (!this.isActive || this.isGarbage) return;
+
+        // 调用父类绘制方法
+        super.draw(ctx);
+        // 如果是Boss，绘制生命条
+        if (this.isBoss) {
+            this.drawHealthBar(ctx);
+        }
+    }
+
+    /**
+     * 绘制生命条
+     * @param {CanvasRenderingContext2D} ctx - 画布上下文
+     */
+    drawHealthBar(ctx) {
+        // 获取屏幕坐标
+        const screenPos = cameraManager.worldToScreen(this.x, this.y);
+        // 计算生命条宽度
+        const barWidth = this.size * 1.5;
+        const barHeight = 5;
+        const healthPercent = this.health / this.maxHealth;
+        // 绘制背景
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        ctx.fillRect(screenPos.x - barWidth / 2, screenPos.y + this.size / 2 + 5, barWidth, barHeight);
+
+        // 绘制生命条
+        ctx.fillStyle = `rgb(${255 * (1 - healthPercent)}, ${255 * healthPercent}, 0)`;
+        ctx.fillRect(screenPos.x - barWidth / 2, screenPos.y + this.size / 2 + 5, barWidth * healthPercent, barHeight);
     }
 }
 
@@ -133,29 +361,31 @@ class BossEnemy extends Enemy {
             damageMult: bossType.damageMult * (BOSS_BASE_DAMAGE_MULTIPLIER + bossCount * 0.6),
             xpMult: bossType.xpMult * (BOSS_BASE_HEALTH_MULTIPLIER + bossCount * 15)
         };
+        
         // 调用父类构造函数
-        super(x, y, typeData, 1);
-
+        super(x, y, typeData);
+        
         // 设置Boss属性
         this.size = GAME_FONT_SIZE * 3.5;
         this.isBoss = true;
         this.name = bossType.name;
         this.attackPattern = bossType.attackPattern;
+        this.bossType = bossType;
 
         // 确保Boss生命值足够高
         this.stats.health = Math.max(150, this.stats.health);
         this.health = this.stats.health;
-
+        
         // 攻击相关属性
         this.attackTimer = 0;
         this.attackCooldown = 3.0;
         this.attackPhase = 0;
         this.projectileCount = bossType.projectileCount || 8;
-
+        
         // 特殊能力
         this.specialAbilityTimer = 0;
         this.specialAbilityCooldown = 10.0;
-
+        
         // 掉落几率
         this.dropChance = {
             magnet: 0.5, // 50%几率掉落吸铁石
@@ -1009,12 +1239,12 @@ class BossEnemy extends Enemy {
             for (let i = 0; i < 15; i++) {
                 const gemX = this.x + (Math.random() - 0.5) * 60;
                 const gemY = this.y + (Math.random() - 0.5) * 60;
-                xpGems.push(new ExperienceGem(gemX, gemY, Math.ceil(this.xpValue / 15)));
+                xpGems.push(new XPGem(gemX, gemY, Math.ceil(this.xpValue / 15)));
             }
         }
 
         // 重置当前Boss
-        currentBoss = null;
+        bossManager.currentBoss = null;
 
         console.log("Boss 被击败!");
     }

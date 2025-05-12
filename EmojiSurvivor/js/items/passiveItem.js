@@ -7,33 +7,33 @@ class PassiveItem {
      * 构造函数
      * @param {string} name - 物品名称
      * @param {string} emoji - 表情符号
+     * @param {string} description - 描述
      * @param {number} maxLevel - 最大等级
      */
-    constructor(name, emoji, maxLevel) {
+    constructor(name, emoji, description, maxLevel) {
         // 物品名称
         this.name = name;
-        
         // 表情符号
         this.emoji = emoji;
-        
+
+        // 描述
+        this.description = description;
         // 等级
         this.level = 1;
-        
         // 最大等级
         this.maxLevel = maxLevel || 5;
-        
         // 拥有者
         this.owner = null;
-        
-        // 属性加成
+
+        // 加成
         this.bonuses = {};
-        
-        // 计算属性加成
+
+        // 计算加成
         this.calculateBonuses();
     }
 
     /**
-     * 计算属性加成
+     * 计算加成
      */
     calculateBonuses() {
         // 基类不做任何计算
@@ -49,13 +49,11 @@ class PassiveItem {
         if (this.level >= this.maxLevel) {
             return false;
         }
-        
         // 增加等级
         this.level++;
-        
-        // 重新计算属性加成
+
+        // 重新计算加成
         this.calculateBonuses();
-        
         return true;
     }
 
@@ -74,58 +72,29 @@ class PassiveItem {
      */
     getInitialDescription() {
         // 基类返回通用描述
-        return "一个基础被动物品。";
+        return this.description;
+    }
+
+    /**
+     * 检查是否达到最大等级
+     * @returns {boolean} 是否达到最大等级
+     */
+    isMaxLevel() {
+        return this.level >= this.maxLevel;
     }
 }
 
-// --- 可用被动物品列表 ---
-const BASE_PASSIVES = [
-    {
-        name: "菠菜",
-        emoji: "🥬",
-        description: "增加伤害。",
-        constructor: SpinachPassive
-    },
-    {
-        name: "护甲",
-        emoji: "🛡️",
-        description: "减少受到的伤害。",
-        constructor: ArmorPassive
-    },
-    {
-        name: "翅膀",
-        emoji: "🕊️",
-        description: "增加移动速度。",
-        constructor: WingsPassive
-    },
-    {
-        name: "魔法书",
-        emoji: "📖",
-        description: "减少武器冷却时间。",
-        constructor: TomePassive
-    },
-    {
-        name: "烛台",
-        emoji: "🕯️",
-        description: "增加武器范围。",
-        constructor: CandelabradorPassive
-    },
-    {
-        name: "拳套",
-        emoji: "🥊",
-        description: "增加投射物速度。",
-        constructor: BracerPassive
-    },
-    {
-        name: "空心之心",
-        emoji: "❤️‍🔥",
-        description: "增加最大生命值。",
-        constructor: HollowHeartPassive
-    },
-    {
-        name: "番茄",
-        emoji: "🍅",
-        description: "增加生命恢复。",
-        constructor: PummarolaPassive
-    }
-];
+// 定义可用被动物品类型 (此部分将被移至 passiveItems.js)
+// const BASE_PASSIVES = [];
+//
+// // 检查并添加已定义的被动物品类
+// // 确保这里的类名与 passiveItems.js 中定义的类名一致
+// if (typeof Spinach !== 'undefined') BASE_PASSIVES.push(Spinach);
+// if (typeof Armor !== 'undefined') BASE_PASSIVES.push(Armor);
+// if (typeof Wings !== 'undefined') BASE_PASSIVES.push(Wings);
+// if (typeof EmptyTome !== 'undefined') BASE_PASSIVES.push(EmptyTome);
+// if (typeof Candelabrador !== 'undefined') BASE_PASSIVES.push(Candelabrador);
+// if (typeof Bracer !== 'undefined') BASE_PASSIVES.push(Bracer);
+// if (typeof HollowHeart !== 'undefined') BASE_PASSIVES.push(HollowHeart);
+// if (typeof Pummarola !== 'undefined') BASE_PASSIVES.push(Pummarola);
+// if (typeof Magnet !== 'undefined') BASE_PASSIVES.push(Magnet);

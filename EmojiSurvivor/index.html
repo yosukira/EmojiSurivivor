@@ -224,25 +224,25 @@
 
     <!-- 升级屏幕 -->
     <div id="levelUpScreen" class="overlayScreen hidden">
-        <h1>升级!</h1> 
-        <p>选择一个强化:</p> 
-        <div id="upgradeOptions"></div> 
+        <h1>升级!</h1>
+        <p>选择一个强化:</p>
+        <div id="upgradeOptions"></div>
     </div>
 
     <!-- 暂停屏幕 -->
     <div id="pauseScreen" class="overlayScreen hidden">
-        <h1>已暂停</h1> 
-        <p>按 P 继续</p> 
-        <button id="resumeButton"><span class="upgradeIcon">▶️</span> 继续</button> 
+        <h1>已暂停</h1>
+        <p>按 P 继续</p>
+        <button id="resumeButton"><span class="upgradeIcon">▶️</span> 继续</button>
     </div>
 
     <!-- 游戏结束屏幕 -->
     <div id="gameOverScreen" class="overlayScreen hidden">
-        <h1>游戏结束!</h1> 
-        <p>你存活了: <span id="finalTime">0:00</span></p> 
-        <p>最终等级: <span id="finalLevel">1</span></p> 
-        <p>击杀数: <span id="finalKills">0</span></p> 
-        <button id="restartButton"><span class="upgradeIcon">🔄</span> 再玩一次</button> 
+        <h1>游戏结束!</h1>
+        <p>你存活了: <span id="finalTime">0:00</span></p>
+        <p>最终等级: <span id="finalLevel">1</span></p>
+        <p>击杀数: <span id="finalKills">0</span></p>
+        <button id="restartButton"><span class="upgradeIcon">🔄</span> 再玩一次</button>
     </div>
 
     <!-- Boss警告 -->
@@ -251,6 +251,7 @@
     <!-- 游戏脚本 -->
     <!-- 核心脚本 -->
     <script src="js/core/config.js"></script>
+    <script src="js/constants.js"></script>
     <script src="js/core/cameraManager.js"></script>
 
     <!-- 实体脚本 -->
@@ -258,7 +259,6 @@
     <script src="js/entities/character.js"></script>
     <script src="js/entities/player.js"></script>
     <script src="js/entities/enemy.js"></script>
-    <script src="js/entities/bosses.js"></script>
     <script src="js/entities/pickups.js"></script>
     <script src="js/entities/damageNumber.js"></script>
 
@@ -270,7 +270,7 @@
 
     <!-- 被动物品脚本 -->
     <script src="js/items/passiveItem.js"></script>
-    <script src="js/items/basicPassives.js"></script>
+    <script src="js/items/passiveItems.js"></script>
 
     <!-- 游戏主脚本 -->
     <script src="js/game.js"></script>

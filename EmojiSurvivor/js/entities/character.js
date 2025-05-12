@@ -14,25 +14,24 @@ class Character extends GameObject {
     constructor(x, y, emoji, size, stats) {
         // 调用父类构造函数
         super(x, y, emoji, size);
-
         // 属性
-        this.stats = { ...stats };
-
+        this.stats = stats || {};
         // 生命值
-        this.health = stats.health;
+        this.health = stats.health || 100;
         // 速度
-        this.speed = stats.speed;
+        this.speed = stats.speed || 100;
         // 伤害
-        this.damage = stats.damage || 0;
+        this.damage = stats.damage || 10;
         // 经验值
         this.xpValue = stats.xp || 0;
+
         // 状态效果
         this.statusEffects = {
-            burn: null,
+            stun: null,
             slow: null,
-            stun: null
+            burn: null,
+            poison: null
         };
-
         // 无敌时间
         this.invincibleTime = 0;
     }
@@ -44,11 +43,11 @@ class Character extends GameObject {
     update(dt) {
         // 如果角色不活动或已标记为垃圾，不更新
         if (!this.isActive || this.isGarbage) return;
-
         // 更新无敌时间
         if (this.invincibleTime > 0) {
             this.invincibleTime -= dt;
         }
+
         // 更新状态效果
         this.updateStatusEffects(dt);
     }
@@ -58,46 +57,54 @@ class Character extends GameObject {
      * @param {number} dt - 时间增量
      */
     updateStatusEffects(dt) {
-        // 更新燃烧效果
-        if (this.statusEffects.burn) {
-            // 减少持续时间
-            this.statusEffects.burn.duration -= dt;
-
-            // 更新计时器
-            this.statusEffects.burn.timer -= dt;
-
-            // 如果计时器结束，造成伤害
-            if (this.statusEffects.burn.timer <= 0) {
-                // 造成伤害
-                this.takeDamage(this.statusEffects.burn.damage, this.statusEffects.burn.source);
-                // 重置计时器
-                this.statusEffects.burn.timer = 0.5;
-            }
-
-            // 如果持续时间结束，清除效果
-            if (this.statusEffects.burn.duration <= 0) {
-                this.statusEffects.burn = null;
+        // 更新眩晕效果
+        if (this.statusEffects.stun) {
+            this.statusEffects.stun.duration -= dt;
+            if (this.statusEffects.stun.duration <= 0) {
+                this.statusEffects.stun = null;
             }
         }
+
         // 更新减速效果
         if (this.statusEffects.slow) {
-            // 减少持续时间
             this.statusEffects.slow.duration -= dt;
-
-            // 如果持续时间结束，清除效果
             if (this.statusEffects.slow.duration <= 0) {
                 this.statusEffects.slow = null;
             }
         }
 
-        // 更新眩晕效果
-        if (this.statusEffects.stun) {
-            // 减少持续时间
-            this.statusEffects.stun.duration -= dt;
+        // 更新燃烧效果
+        if (this.statusEffects.burn) {
+            this.statusEffects.burn.duration -= dt;
+            this.statusEffects.burn.tickTimer -= dt;
 
-            // 如果持续时间结束，清除效果
-            if (this.statusEffects.stun.duration <= 0) {
-                this.statusEffects.stun = null;
+            if (this.statusEffects.burn.tickTimer <= 0) {
+                // 造成伤害
+                this.takeDamage(this.statusEffects.burn.damage, this.statusEffects.burn.source);
+
+                // 重置计时器
+                this.statusEffects.burn.tickTimer = this.statusEffects.burn.tickInterval;
+            }
+            if (this.statusEffects.burn.duration <= 0) {
+                this.statusEffects.burn = null;
+            }
+        }
+
+        // 更新中毒效果
+        if (this.statusEffects.poison) {
+            this.statusEffects.poison.duration -= dt;
+            this.statusEffects.poison.tickTimer -= dt;
+
+            if (this.statusEffects.poison.tickTimer <= 0) {
+                // 造成伤害
+                this.takeDamage(this.statusEffects.poison.damage, this.statusEffects.poison.source);
+
+                // 重置计时器
+                this.statusEffects.poison.tickTimer = this.statusEffects.poison.tickInterval;
+            }
+
+            if (this.statusEffects.poison.duration <= 0) {
+                this.statusEffects.poison = null;
             }
         }
     }
@@ -111,19 +118,36 @@ class Character extends GameObject {
     takeDamage(amount, source) {
         // 如果无敌，不受伤害
         if (this.invincibleTime > 0) return false;
+
         // 计算实际伤害
-        const actualDamage = Math.max(1, Math.floor(amount - (this.stats.armor || 0)));
+        const actualDamage = Math.max(1, amount - this.getStat('armor'));
         // 减少生命值
         this.health -= actualDamage;
-        // 创建伤害数字
-        spawnDamageNumber(this.x, this.y - this.size / 2, actualDamage.toString());
 
+        // 创建伤害数字
+        spawnDamageNumber(this.x, this.y - this.size / 2, actualDamage.toString(), GAME_FONT_SIZE, 'red');
+
+        // 设置无敌时间
+        this.invincibleTime = 0.1;
         // 如果生命值小于等于0，死亡
         if (this.health <= 0) {
             this.onDeath(source);
             return true;
         }
+
         return false;
+    }
+
+    /**
+     * 治疗
+     * @param {number} amount - 治疗量
+     */
+    heal(amount) {
+        // 增加生命值
+        this.health = Math.min(this.health + amount, this.getStat('health'));
+
+        // 创建治疗数字
+        spawnDamageNumber(this.x, this.y - this.size / 2, `+${Math.ceil(amount)}`, GAME_FONT_SIZE, 'green');
     }
 
     /**
@@ -131,9 +155,18 @@ class Character extends GameObject {
      * @param {GameObject} killer - 击杀者
      */
     onDeath(killer) {
-        // 标记为垃圾和非活动
+        // 标记为垃圾
         this.isGarbage = true;
         this.isActive = false;
+    }
+
+    /**
+     * 获取属性
+     * @param {string} statName - 属性名称
+     * @returns {number} 属性值
+     */
+    getStat(statName) {
+        return this.stats[statName] || 0;
     }
 
     /**
@@ -141,18 +174,19 @@ class Character extends GameObject {
      * @returns {number} 当前速度
      */
     getCurrentSpeed() {
-        // 如果被眩晕，速度为0
-        if (this.isStunned()) {
-            return 0;
-        }
-
+        // 获取基础速度
+        let speed = this.speed;
         // 如果被减速，应用减速效果
         if (this.statusEffects.slow) {
-            return this.speed * this.statusEffects.slow.factor;
+            speed *= this.statusEffects.slow.factor;
         }
 
-        // 否则返回正常速度
-        return this.speed;
+        // 如果被眩晕，速度为0
+        if (this.isStunned()) {
+            speed = 0;
+        }
+
+        return speed;
     }
 
     /**
@@ -171,14 +205,34 @@ class Character extends GameObject {
         // 如果角色不活动或已标记为垃圾，不绘制
         if (!this.isActive || this.isGarbage) return;
 
-        // 如果无敌，闪烁效果
-        if (this.invincibleTime > 0 && Math.floor(this.invincibleTime * 10) % 2 === 0) {
-            return;
+        // 保存当前context状态
+        ctx.save();
+        
+        // 获取屏幕坐标
+        const screenPos = cameraManager.worldToScreen(this.x, this.y);
+        
+        // 确保角色的绘制不透明
+        ctx.globalAlpha = 1.0;
+        
+        // 如果有无敌时间，使其闪烁
+        if (this.invincibleTime > 0) {
+            const blinkRate = 10;
+            if (Math.sin(this.invincibleTime * blinkRate) > 0) {
+                ctx.globalAlpha = 0.7;
+            }
         }
+        
+        // 绘制表情
+        ctx.font = `${this.size}px 'Segoe UI Emoji', Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(this.emoji, screenPos.x, screenPos.y);
+        
+        // 恢复context状态
+        ctx.restore();
+
         // 绘制状态效果
         this.drawStatusEffects(ctx);
-        // 调用父类绘制方法
-        super.draw(ctx);
     }
 
     /**
@@ -189,31 +243,44 @@ class Character extends GameObject {
         // 获取屏幕坐标
         const screenPos = cameraManager.worldToScreen(this.x, this.y);
 
-        // 如果被眩晕，绘制眩晕效果
+        // 状态效果图标
+        const icons = [];
+
+        // 添加眩晕效果图标
         if (this.statusEffects.stun) {
-            // 绘制眩晕效果
-            ctx.fillStyle = 'rgba(255, 255, 0, 0.3)';
-            ctx.beginPath();
-            ctx.arc(screenPos.x, screenPos.y, this.size / 1.5, 0, Math.PI * 2);
-            ctx.fill();
+            icons.push('💫');
         }
 
-        // 如果被燃烧，绘制燃烧效果
-        if (this.statusEffects.burn) {
-            // 绘制燃烧效果
-            ctx.fillStyle = 'rgba(255, 100, 0, 0.3)';
-            ctx.beginPath();
-            ctx.arc(screenPos.x, screenPos.y, this.size / 1.5, 0, Math.PI * 2);
-            ctx.fill();
-        }
-
-        // 如果被减速，绘制减速效果
+        // 添加减速效果图标
         if (this.statusEffects.slow) {
-            // 绘制减速效果
-            ctx.fillStyle = 'rgba(0, 100, 255, 0.3)';
-            ctx.beginPath();
-            ctx.arc(screenPos.x, screenPos.y, this.size / 1.5, 0, Math.PI * 2);
-            ctx.fill();
+            icons.push('🐌');
+        }
+
+        // 添加燃烧效果图标
+        if (this.statusEffects.burn) {
+            icons.push('🔥');
+        }
+
+        // 添加中毒效果图标
+        if (this.statusEffects.poison) {
+            icons.push('☠️');
+        }
+
+        // 如果有状态效果，绘制图标
+        if (icons.length > 0) {
+            // 设置字体
+            ctx.font = `${this.size * 0.5}px 'Segoe UI Emoji', Arial`;
+
+            // 设置对齐方式
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            // 绘制图标
+            for (let i = 0; i < icons.length; i++) {
+                const x = screenPos.x + (i - (icons.length - 1) / 2) * this.size * 0.6;
+                const y = screenPos.y - this.size * 0.8;
+                ctx.fillText(icons[i], x, y);
+            }
         }
     }
 }

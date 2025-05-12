@@ -12,6 +12,9 @@ const EMOJI = {
     ENEMY_NORMAL: '💀',
     ENEMY_FAST: '👻',
     ENEMY_TANK: '🧟',
+    ENEMY_RANGED: '🧙',
+    ENEMY_ELITE: '👹',
+    ENEMY_BOMBER: '💣',
     
     // Boss
     BOSS: '👹',
@@ -19,6 +22,8 @@ const EMOJI = {
     BOSS_GHOST: '👻',
     BOSS_ZOMBIE: '🧟',
     BOSS_DEMON: '👿',
+    BOSS_DRAGON: '🐉',
+    BOSS_ALIEN: '👾',
     
     // 投射物
     PROJECTILE_DAGGER: '🔪',
@@ -49,6 +54,8 @@ const EMOJI = {
     WEAPON_LIGHTNING: '⚡',
     WEAPON_HANDSHAKE: '🤝',
     WEAPON_HIGH_FIVE: '✋',
+    WEAPON_DEATH_GRIP: '👊',
+    WEAPON_THUNDER_SWORD: '🗡️',
     
     // 被动物品
     PASSIVE_SPINACH: '🥬',
@@ -89,6 +96,40 @@ const ENEMY_TYPES = [
         xpMult: 1.5,
         weight: 3,
         minTime: 150
+    },
+    {
+        emoji: EMOJI.ENEMY_RANGED,
+        healthMult: 0.8,
+        speedMult: 0.7,
+        damageMult: 1.0,
+        xpMult: 1.3,
+        weight: 4,
+        minTime: 120,
+        isRanged: true,
+        attackRange: 200,
+        attackCooldownTime: 2.0,
+        projectileSpeed: 150
+    },
+    {
+        emoji: EMOJI.ENEMY_ELITE,
+        healthMult: 3.0,
+        speedMult: 0.8,
+        damageMult: 1.5,
+        xpMult: 2.0,
+        weight: 2,
+        minTime: 300
+    },
+    {
+        emoji: EMOJI.ENEMY_BOMBER,
+        healthMult: 1.2,
+        speedMult: 1.2,
+        damageMult: 2.0,
+        xpMult: 1.8,
+        weight: 2,
+        minTime: 240,
+        explodeOnDeath: true,
+        explodeRadius: 120,
+        explodeDamage: 15
     }
 ];
 
@@ -134,28 +175,31 @@ const BOSS_TYPES = [
         xpMult: 2.0,
         attackPattern: "summon",
         minTime: BOSS_INTERVAL * 3
+    },
+    {
+        name: "远古巨龙",
+        emoji: EMOJI.BOSS_DRAGON,
+        healthMult: 2.0,
+        speedMult: 0.7,
+        damageMult: 1.5,
+        xpMult: 2.5,
+        attackPattern: "laser",
+        minTime: BOSS_INTERVAL * 4,
+        projectileSpeed: 200,
+        laserWidth: 40,
+        laserDamage: 20
+    },
+    {
+        name: "异形统领",
+        emoji: EMOJI.BOSS_ALIEN,
+        healthMult: 1.8,
+        speedMult: 1.1,
+        damageMult: 1.3,
+        xpMult: 3.0,
+        attackPattern: "dash",
+        minTime: BOSS_INTERVAL * 5,
+        dashSpeed: 500,
+        dashDamage: 25,
+        dashCooldown: 3.0
     }
-];
-
-// 武器定义
-const BASE_WEAPONS = [
-    DaggerWeapon,
-    GarlicWeapon,
-    WhipWeapon,
-    FireDaggerWeapon,
-    StormBladeWeapon,
-    HandshakeWeapon
-];
-
-// 被动物品定义
-const BASE_PASSIVES = [
-    Spinach,
-    Armor,
-    Wings,
-    EmptyTome,
-    Candelabrador,
-    Bracer,
-    HollowHeart,
-    Pummarola,
-    Magnet
 ];

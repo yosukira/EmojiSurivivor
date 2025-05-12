@@ -3,92 +3,276 @@
  * 包含游戏初始化、更新和绘制逻辑
  */
 
-// --- 获取DOM元素 ---
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
+let canvas, ctx;
 
-const ui = document.getElementById('ui');
-const healthValueUI = document.getElementById('healthValue');
-const maxHealthValueUI = document.getElementById('maxHealthValue');
-const healthBarUI = document.getElementById('healthBar');
-const levelValueUI = document.getElementById('levelValue');
-const xpValueUI = document.getElementById('xpValue');
-const xpNextLevelValueUI = document.getElementById('xpNextLevelValue');
-const xpBarUI = document.getElementById('xpBar');
-const timerValueUI = document.getElementById('timerValue');
-const weaponIconsUI = document.getElementById('weaponIcons');
-const passiveIconsUI = document.getElementById('passiveIcons');
-const killCountValueUI = document.getElementById('killCountValue');
+// 添加离屏画布
+let offscreenCanvas, offscreenCtx;
 
-const startScreen = document.getElementById('startScreen');
-const levelUpScreen = document.getElementById('levelUpScreen');
-const pauseScreen = document.getElementById('pauseScreen');
-const gameOverScreen = document.getElementById('gameOverScreen');
-const upgradeOptionsContainer = document.getElementById('upgradeOptions');
-const finalTimeUI = document.getElementById('finalTime');
-const finalLevelUI = document.getElementById('finalLevel');
-const finalKillsUI = document.getElementById('finalKills');
-const startButton = document.getElementById('startButton');
-const restartButton = document.getElementById('restartButton');
-const resumeButton = document.getElementById('resumeButton');
-const bossWarningUI = document.getElementById('bossWarning');
+// 游戏状态
+let isGameRunning = false;
+let isGameOver = false;
+let isPaused = false;
+let isLevelUp = false; // 这里必须是let，不能是const
+let gameTime = 0;
+let lastTime = 0;
+let deltaTime = 0;
+let killCount = 0;
+let animationFrameId = null;
 
-// --- 设置画布尺寸 ---
-canvas.width = GAME_WIDTH;
-canvas.height = GAME_HEIGHT;
+// 游戏对象
+let player;
+let enemies = [];
+let projectiles = [];
+let enemyProjectiles = []; // 敌人投射物
+let xpGems = [];
+let worldObjects = [];
+let visualEffects = [];
+let damageNumbers = [];
 
-// --- 创建离屏画布 ---
-const offscreenCanvas = document.createElement('canvas');
-const offscreenCtx = offscreenCanvas.getContext('2d', { alpha: false });
-offscreenCanvas.width = GAME_WIDTH;
-offscreenCanvas.height = GAME_HEIGHT;
+// 对象池
+let inactiveProjectiles = [];
+let inactiveDamageNumbers = [];
+
+// 按键状态
+let keys = {};
+
+// 敌人管理器
+const enemyManager = {
+    spawnTimer: 0,
+    currentSpawnInterval: 2.0, // 初始生成间隔
+    BASE_SPAWN_INTERVAL: 2.0,
+    difficultyTimer: 0,
+
+    update(dt, gameTime, player) {
+        // 更新生成计时器
+        this.spawnTimer += dt;
+
+        // 更新难度计时器
+        this.difficultyTimer += dt;
+
+        // 每30秒增加难度
+        if (this.difficultyTimer >= 30) {
+            this.currentSpawnInterval = Math.max(0.5, this.currentSpawnInterval * 0.9);
+            this.difficultyTimer = 0;
+        }
+
+        // 如果计时器超过生成间隔，生成敌人
+        if (this.spawnTimer >= this.currentSpawnInterval) {
+            // 生成敌人
+            this.spawnEnemies(gameTime, player);
+
+            // 重置计时器
+            this.spawnTimer = 0;
+        }
+    },
+
+    spawnEnemies(gameTime, player) {
+        // 获取玩家位置
+        const playerX = player.x;
+        const playerY = player.y;
+        
+        // 根据游戏时间获取可用敌人类型
+        const availableEnemies = ENEMY_TYPES.filter(enemy => !enemy.minTime || gameTime >= enemy.minTime);
+        
+        // 计算总权重
+        const totalWeight = availableEnemies.reduce((sum, enemy) => sum + enemy.weight, 0);
+        
+        // 根据游戏时间计算生成数量，初始较少，随时间增加
+        const initialSpawnCount = 3; // 游戏开始时生成的敌人数量
+        const maxSpawnCount = 10;    // 最大生成数量
+        const timeToMaxSpawn = 300;  // 多少秒后达到最大生成数量
+        
+        // 计算当前应该生成的敌人数量
+        const spawnCount = Math.min(
+            initialSpawnCount + Math.floor((gameTime / timeToMaxSpawn) * (maxSpawnCount - initialSpawnCount)),
+            maxSpawnCount
+        );
+        
+        // 生成敌人
+        for (let i = 0; i < spawnCount; i++) {
+            // 生成位置（屏幕外一定距离）
+            const angle = Math.random() * Math.PI * 2;
+            const distance = SPAWN_PADDING + Math.random() * 50; // 确保从屏幕外生成
+            
+            const x = playerX + Math.cos(angle) * distance;
+            const y = playerY + Math.sin(angle) * distance;
+            
+            // 根据权重随机选择敌人类型
+            const rand = Math.random() * totalWeight;
+            let weightSum = 0;
+            let selectedType = availableEnemies[0];
+            
+            for (const enemyType of availableEnemies) {
+                weightSum += enemyType.weight;
+                if (rand <= weightSum) {
+                    selectedType = enemyType;
+                    break;
+                }
+            }
+            
+            // 创建敌人
+            const enemy = new Enemy(x, y, selectedType);
+            enemies.push(enemy);
+        }
+    },
+
+    cleanup() {
+        // 清理已标记为垃圾的敌人
+        enemies = enemies.filter(enemy => !enemy.isGarbage);
+    }
+};
+
+// Boss管理器
+const bossManager = {
+    nextBossTime: BOSS_INTERVAL,
+    currentBoss: null,
+    bossWarningTimer: 0,
+    showingWarning: false,
+
+    update(dt, gameTime, player) {
+        // 如果当前有Boss，更新Boss
+        if (this.currentBoss && !this.currentBoss.isGarbage) {
+            return;
+        }
+
+        // 重置当前Boss
+        this.currentBoss = null;
+
+        // 如果正在显示警告，更新警告计时器
+        if (this.showingWarning) {
+            this.bossWarningTimer += dt;
+
+            // 如果警告计时器超过3秒，生成Boss
+            if (this.bossWarningTimer >= 3) {
+                this.spawnBoss(gameTime, player);
+                this.showingWarning = false;
+                this.bossWarningTimer = 0;
+            }
+
+            return;
+        }
+
+        // 如果游戏时间超过下一次Boss生成时间，显示警告
+        if (gameTime >= this.nextBossTime) {
+            this.showBossWarning(gameTime);
+            this.showingWarning = true;
+            this.nextBossTime = gameTime + BOSS_INTERVAL;
+        }
+    },
+
+    showBossWarning(gameTime) {
+        // 获取可用Boss类型
+        const availableBosses = BOSS_TYPES.filter(boss => gameTime >= (boss.minTime || 0));
+
+        // 如果没有可用Boss，使用第一个
+        const bossType = availableBosses.length > 0 ? availableBosses[availableBosses.length - 1] : BOSS_TYPES[0];
+
+        // 显示Boss警告
+        const bossWarningElement = document.getElementById('bossWarning');
+        bossWarningElement.textContent = `👹 BOSS ${bossType.name} 来袭! 👹`;
+        bossWarningElement.style.display = 'block';
+        bossWarningElement.classList.add('animate');
+
+        // 3秒后隐藏警告
+        setTimeout(() => {
+            bossWarningElement.style.display = 'none';
+            bossWarningElement.classList.remove('animate');
+        }, 3000);
+    },
+
+    spawnBoss(gameTime, player) {
+        // 获取可用Boss类型
+        const availableBosses = BOSS_TYPES.filter(boss => gameTime >= (boss.minTime || 0));
+
+        // 如果没有可用Boss，使用第一个
+        const bossType = availableBosses.length > 0 ? availableBosses[availableBosses.length - 1] : BOSS_TYPES[0];
+
+        // 计算生成位置
+        const angle = Math.random() * Math.PI * 2;
+        const distance = 300;
+        const x = player.x + Math.cos(angle) * distance;
+        const y = player.y + Math.sin(angle) * distance;
+
+        // 创建Boss
+        const boss = new Enemy(x, y, bossType, true);
+
+        // 添加到敌人列表
+        enemies.push(boss);
+
+        // 设置当前Boss
+        this.currentBoss = boss;
+    },
+
+    cleanup() {
+        // 如果当前Boss已标记为垃圾，重置当前Boss
+        if (this.currentBoss && this.currentBoss.isGarbage) {
+            this.currentBoss = null;
+        }
+    }
+};
 
 /**
  * 初始化游戏
  */
 function init() {
+    console.log("初始化游戏...");
+
+    // 获取画布和上下文
+    canvas = document.getElementById('gameCanvas');
+    ctx = canvas.getContext('2d');
+
+    // 设置画布尺寸
+    canvas.width = GAME_WIDTH;
+    canvas.height = GAME_HEIGHT;
+
+    // 创建离屏画布
+    offscreenCanvas = document.createElement('canvas');
+    offscreenCanvas.width = GAME_WIDTH;
+    offscreenCanvas.height = GAME_HEIGHT;
+    offscreenCtx = offscreenCanvas.getContext('2d');
+
     // 清空对象池和活动列表
     inactiveProjectiles = [];
     inactiveDamageNumbers = [];
     projectiles = [];
+    enemyProjectiles = []; // 清空敌人投射物
     damageNumbers = [];
     enemies = [];
     xpGems = [];
     worldObjects = [];
     visualEffects = [];
+
     // 重置状态
     isGameOver = false;
     isPaused = false;
     isLevelUp = false;
     gameTime = 0;
     killCount = 0;
+
     // 创建玩家
-    player = new Player(0, 0); // 在世界中心创建玩家
+    player = new Player(GAME_WIDTH / 2, GAME_HEIGHT / 2);
+
+    // 添加初始武器
     player.addWeapon(new DaggerWeapon());
-    // 重置可用武器和被动道具
-    availableWeapons = [DaggerWeapon, GarlicWeapon, WhipWeapon, FireDaggerWeapon, StormBladeWeapon, HandshakeWeapon];
-    availablePassives = [Spinach, Armor, Wings, EmptyTome, Candelabrador, Bracer, HollowHeart, Pummarola, Magnet];
-    // 重置UI
-    gameOverScreen.classList.add('hidden');
-    levelUpScreen.classList.add('hidden');
-    pauseScreen.classList.add('hidden');
-    startScreen.classList.add('hidden');
-    // 重置双缓冲画布尺寸
-    offscreenCanvas.width = GAME_WIDTH;
-    offscreenCanvas.height = GAME_HEIGHT;
-    // 重置相机位置
-    cameraManager.x = 0;
-    cameraManager.y = 0;
-    cameraManager.targetX = 0;
-    cameraManager.targetY = 0;
+
     // 重置敌人和Boss管理器
     enemyManager.spawnTimer = 0;
-    enemyManager.currentSpawnInterval = BASE_SPAWN_INTERVAL;
+    enemyManager.currentSpawnInterval = enemyManager.BASE_SPAWN_INTERVAL;
     enemyManager.difficultyTimer = 0;
     bossManager.nextBossTime = BOSS_INTERVAL;
     bossManager.currentBoss = null;
     bossManager.bossWarningTimer = 0;
     bossManager.showingWarning = false;
+
+    // 重置UI
+    document.getElementById('gameOverScreen').classList.add('hidden');
+    document.getElementById('levelUpScreen').classList.add('hidden');
+    document.getElementById('pauseScreen').classList.add('hidden');
+    document.getElementById('startScreen').classList.add('hidden');
+
+    // 重置相机位置
+    cameraManager.setPosition(player.x, player.y);
+
     // 开始游戏循环
     lastTime = performance.now();
     if (animationFrameId) {
@@ -96,9 +280,16 @@ function init() {
         animationFrameId = null;
     }
     animationFrameId = requestAnimationFrame(gameLoop);
+
     // 更新UI
     updateUI();
+
+    // 标记游戏为运行状态
+    isGameRunning = true;
+
+    console.log("Emoji 幸存者 - 重构版 已初始化。");
 }
+
 
 /**
  * 生成投射物（对象池）
@@ -162,52 +353,72 @@ function update(dt) {
     }
     // 更新游戏时间
     gameTime += dt;
+
     // 更新相机
-    cameraManager.update(player, dt);
+    cameraManager.setTarget(player.x, player.y);
+    cameraManager.update(dt);
     // 更新敌人管理器
     enemyManager.update(dt, gameTime, player);
+
     // 更新Boss管理器
     bossManager.update(dt, gameTime, player);
+
     // 更新玩家
     if (player) {
         player.update(dt, keys);
     }
+
     // 更新敌人
     for (let i = 0; i < enemies.length; i++) {
         if (!enemies[i].isGarbage && enemies[i].isActive) {
-            enemies[i].update(dt, player);
+            // 设置目标为玩家
+            enemies[i].target = player;
+            enemies[i].update(dt);
         }
     }
+
     // 更新投射物
     for (let i = 0; i < projectiles.length; i++) {
         if (!projectiles[i].isGarbage && projectiles[i].isActive) {
             projectiles[i].update(dt);
         }
     }
+    
+    // 更新敌人投射物
+    for (let i = 0; i < enemyProjectiles.length; i++) {
+        if (!enemyProjectiles[i].isGarbage && enemyProjectiles[i].isActive) {
+            enemyProjectiles[i].update(dt);
+        }
+    }
+
     // 更新经验宝石
     for (let i = 0; i < xpGems.length; i++) {
         if (!xpGems[i].isGarbage && xpGems[i].isActive) {
             xpGems[i].update(dt, player);
         }
     }
+
     // 更新世界物体
     for (let i = 0; i < worldObjects.length; i++) {
         if (!worldObjects[i].isGarbage && worldObjects[i].isActive) {
             worldObjects[i].update(dt, player);
         }
     }
+
     // 更新伤害数字
     for (let i = 0; i < damageNumbers.length; i++) {
         if (!damageNumbers[i].isGarbage && damageNumbers[i].isActive) {
             damageNumbers[i].update(dt);
         }
     }
+
     // 更新视觉特效
     for (let i = 0; i < visualEffects.length; i++) {
         if (!visualEffects[i].isGarbage) {
             visualEffects[i].update(dt);
         }
     }
+
     // 对象池回收
     // 倒序遍历以安全地使用 splice
     for (let i = projectiles.length - 1; i >= 0; i--) {
@@ -217,6 +428,10 @@ function update(dt) {
             inactiveProjectiles.push(proj);
         }
     }
+    
+    // 回收敌人投射物
+    enemyProjectiles = enemyProjectiles.filter(p => !p.isGarbage);
+
     for (let i = damageNumbers.length - 1; i >= 0; i--) {
         if (damageNumbers[i].isGarbage) {
             const dn = damageNumbers.splice(i, 1)[0];
@@ -224,19 +439,23 @@ function update(dt) {
             inactiveDamageNumbers.push(dn);
         }
     }
+
     // 清理其他对象
     enemies = enemies.filter(e => !e.isGarbage);
     xpGems = xpGems.filter(g => !g.isGarbage);
     worldObjects = worldObjects.filter(o => !o.isGarbage);
     visualEffects = visualEffects.filter(e => !e.isGarbage);
+
     // 清理管理器
     enemyManager.cleanup();
     bossManager.cleanup();
+
     // 处理升级
     if (isLevelUp) {
         presentLevelUpOptions();
         isLevelUp = false;
     }
+
     // 更新UI
     updateUI();
 }
@@ -249,34 +468,41 @@ function draw() {
         // 使用离屏画布进行绘制
         offscreenCtx.fillStyle = '#2d2d3a';
         offscreenCtx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-        // 绘制背景
-        cameraManager.drawBackground(offscreenCtx);
-        // 应用相机变换
-        cameraManager.applyTransform(offscreenCtx);
         // 绘制经验宝石
         for (let i = 0; i < xpGems.length; i++) {
-            if (!xpGems[i].isGarbage && xpGems[i].isActive && cameraManager.isVisible(xpGems[i])) {
+            if (!xpGems[i].isGarbage && xpGems[i].isActive) {
                 xpGems[i].draw(offscreenCtx);
             }
         }
+
         // 绘制世界物体
         for (let i = 0; i < worldObjects.length; i++) {
-            if (!worldObjects[i].isGarbage && worldObjects[i].isActive && cameraManager.isVisible(worldObjects[i])) {
+            if (!worldObjects[i].isGarbage && worldObjects[i].isActive) {
                 worldObjects[i].draw(offscreenCtx);
             }
         }
+
         // 绘制敌人
         for (let i = 0; i < enemies.length; i++) {
-            if (!enemies[i].isGarbage && enemies[i].isActive && cameraManager.isVisible(enemies[i])) {
+            if (!enemies[i].isGarbage && enemies[i].isActive) {
                 enemies[i].draw(offscreenCtx);
             }
         }
+
         // 绘制投射物
         for (let i = 0; i < projectiles.length; i++) {
-            if (!projectiles[i].isGarbage && projectiles[i].isActive && cameraManager.isVisible(projectiles[i])) {
+            if (!projectiles[i].isGarbage && projectiles[i].isActive) {
                 projectiles[i].draw(offscreenCtx);
             }
         }
+        
+        // 绘制敌人投射物
+        for (let i = 0; i < enemyProjectiles.length; i++) {
+            if (!enemyProjectiles[i].isGarbage && enemyProjectiles[i].isActive) {
+                enemyProjectiles[i].draw(offscreenCtx);
+            }
+        }
+
         // 绘制玩家和武器效果
         if (player && !player.isGarbage && player.isActive) {
             // 绘制武器效果
@@ -284,43 +510,33 @@ function draw() {
                 const weapon = player.weapons[i];
                 if (weapon.drawAura) weapon.drawAura(offscreenCtx, player);
                 if (weapon.drawHitboxes) weapon.drawHitboxes(offscreenCtx);
-                if (weapon.drawEffects) weapon.drawEffects(offscreenCtx);
             }
+
             // 绘制玩家
             player.draw(offscreenCtx);
         }
+
         // 绘制视觉特效
         for (let i = 0; i < visualEffects.length; i++) {
             if (!visualEffects[i].isGarbage) {
                 visualEffects[i].draw(offscreenCtx);
             }
         }
-        // 恢复相机变换
-        cameraManager.restoreTransform(offscreenCtx);
-        // 绘制伤害数字（在屏幕空间）
+
+        // 绘制伤害数字
         for (let i = 0; i < damageNumbers.length; i++) {
             if (!damageNumbers[i].isGarbage && damageNumbers[i].isActive) {
-                // 将世界坐标转换为屏幕坐标
-                const screenPos = cameraManager.worldToScreen(damageNumbers[i].x, damageNumbers[i].y);
-                // 保存原始位置
-                const originalX = damageNumbers[i].x;
-                const originalY = damageNumbers[i].y;
-                // 临时设置屏幕位置
-                damageNumbers[i].x = screenPos.x;
-                damageNumbers[i].y = screenPos.y;
-                // 绘制
                 damageNumbers[i].draw(offscreenCtx);
-                // 恢复原始位置
-                damageNumbers[i].x = originalX;
-                damageNumbers[i].y = originalY;
             }
         }
-        // 一次性将离屏画布内容复制到显示画布
+
+        // 将离屏画布内容复制到显示画布
         ctx.drawImage(offscreenCanvas, 0, 0);
     } catch (error) {
         console.error("绘制过程中发生错误:", error);
     }
 }
+
 
 /**
  * 游戏循环
@@ -360,34 +576,57 @@ function formatTime(seconds) {
  */
 function updateUI() {
     if (!player) return;
-    // 更新生命值
-    healthValueUI.textContent = Math.ceil(player.health);
-    maxHealthValueUI.textContent = player.getStat('health');
-    healthBarUI.style.width = `${Math.max(0, (player.health / player.getStat('health'))) * 100}%`;
-    // 更新等级和经验
-    levelValueUI.textContent = player.level;
-    if (player.level < MAX_LEVEL) {
-        xpValueUI.textContent = player.xp;
-        xpNextLevelValueUI.textContent = player.xpToNextLevel;
-        xpBarUI.style.width = `${(player.xp / player.xpToNextLevel) * 100}%`;
-        xpBarUI.style.backgroundColor = '#3498db';
-    } else {
-        xpValueUI.textContent = "MAX";
-        xpNextLevelValueUI.textContent = "";
-        xpBarUI.style.width = `100%`;
-        xpBarUI.style.backgroundColor = '#f1c40f';
-    }
-    // 更新时间和击杀数
-    timerValueUI.textContent = formatTime(gameTime);
-    killCountValueUI.textContent = killCount;
-    // 更新武器和被动道具图标
-    weaponIconsUI.innerHTML = player.weapons.map(w =>
-        `<span class="uiIcon" title="${w.name}">${w.emoji}<span class="uiItemLevel">${w.isEvolved ? 'MAX' : 'Lv' + w.level}</span></span>`
-    ).join(' ');
 
-    passiveIconsUI.innerHTML = player.passiveItems.map(p =>
-        `<span class="uiIcon" title="${p.name}">${p.emoji}<span class="uiItemLevel">Lv${p.level}</span></span>`
-    ).join(' ');
+    try {
+        // 获取UI元素
+        const healthValueUI = document.getElementById('healthValue');
+        const maxHealthValueUI = document.getElementById('maxHealthValue');
+        const healthBarUI = document.getElementById('healthBar');
+        const levelValueUI = document.getElementById('levelValue');
+        const xpValueUI = document.getElementById('xpValue');
+        const xpNextLevelValueUI = document.getElementById('xpNextLevelValue');
+        const xpBarUI = document.getElementById('xpBar');
+        const timerValueUI = document.getElementById('timerValue');
+        const killCountValueUI = document.getElementById('killCountValue');
+        const weaponIconsUI = document.getElementById('weaponIcons');
+        const passiveIconsUI = document.getElementById('passiveIcons');
+
+        // 更新生命值
+        if (healthValueUI) healthValueUI.textContent = Math.ceil(player.health);
+        if (maxHealthValueUI) maxHealthValueUI.textContent = Math.ceil(player.getStat('health'));
+        if (healthBarUI) healthBarUI.style.width = `${Math.max(0, (player.health / player.getStat('health'))) * 100}%`;
+
+        // 更新等级和经验
+        if (levelValueUI) levelValueUI.textContent = player.level;
+        if (player.level < MAX_LEVEL) {
+            if (xpValueUI) xpValueUI.textContent = player.xp;
+            if (xpNextLevelValueUI) xpNextLevelValueUI.textContent = player.xpToNextLevel;
+            if (xpBarUI) xpBarUI.style.width = `${(player.xp / player.xpToNextLevel) * 100}%`;
+        } else {
+            if (xpValueUI) xpValueUI.textContent = "MAX";
+            if (xpNextLevelValueUI) xpNextLevelValueUI.textContent = "";
+            if (xpBarUI) xpBarUI.style.width = `100%`;
+        }
+
+        // 更新时间和击杀数
+        if (timerValueUI) timerValueUI.textContent = formatTime(gameTime);
+        if (killCountValueUI) killCountValueUI.textContent = killCount;
+
+        // 更新武器和被动物品图标
+        if (weaponIconsUI) {
+            weaponIconsUI.innerHTML = player.weapons.map(w =>
+                `<span class="uiIcon" title="${w.name}">${w.emoji}<span class="uiItemLevel">Lv${w.level}</span></span>`
+            ).join(' ');
+        }
+
+        if (passiveIconsUI) {
+            passiveIconsUI.innerHTML = player.passiveItems.map(p =>
+                `<span class="uiIcon" title="${p.name}">${p.emoji}<span class="uiItemLevel">Lv${p.level}</span></span>`
+            ).join(' ');
+        }
+    } catch (error) {
+        console.error("更新UI时出错:", error);
+    }
 }
 
 /**
@@ -441,95 +680,308 @@ function resumeGame() {
  */
 function getAvailableUpgrades(player) {
     let options = [];
+    let hasWeaponOption = false;
+
     // 添加武器升级选项
     player.weapons.forEach(weapon => {
-        if (!weapon.isEvolved) {
-            options.push(...weapon.getCurrentUpgradeOptions(player));
+        if (weapon) { // 确保 weapon 对象存在
+            let weaponUpgrades = null;
+            if (typeof weapon.getCurrentUpgradeOptions === 'function') {
+                weaponUpgrades = weapon.getCurrentUpgradeOptions(player);
+            } else if (!weapon.isMaxLevel() && typeof weapon.getUpgradeDescription === 'function') {
+                // 如果 getCurrentUpgradeOptions 不可用，但武器可以升级，则提供一个基于 getUpgradeDescription 的默认升级
+                weaponUpgrades = [{
+                    item: weapon,
+                    type: 'upgrade_weapon',
+                    text: `升级 ${weapon.name} (Lv ${weapon.level + 1})`,
+                    description: weapon.getUpgradeDescription(),
+                    icon: weapon.emoji,
+                    level: weapon.level + 1,
+                    action: () => {
+                        weapon.upgrade(); // 或者 weapon.levelUp()，确保与武器类中的方法一致
+                        if(player) player.recalculateStats(); // 确保玩家对象存在
+                        checkEvolution(player, weapon); // 升级后检查进化
+                    }
+                }];
+            }
+
+            if (weaponUpgrades && weaponUpgrades.length > 0) {
+                options = options.concat(weaponUpgrades);
+                hasWeaponOption = true;
+            }
         }
     });
-    // 添加被动道具升级选项
+    // 添加被动物品升级选项
     player.passiveItems.forEach(passive => {
-        options.push(...passive.getCurrentUpgradeOptions(player));
+        if (passive) { // 确保 passive 对象存在
+            let passiveUpgrades = null;
+            if (typeof passive.getCurrentUpgradeOptions === 'function') {
+                passiveUpgrades = passive.getCurrentUpgradeOptions(player);
+            } else if (!passive.isMaxLevel && typeof passive.getUpgradeDescription === 'function') { // 确保 isMaxLevel 是方法
+                 passiveUpgrades = [{
+                    item: passive,
+                    type: 'upgrade_passive',
+                    text: `升级 ${passive.name} (Lv ${passive.level + 1})`,
+                    description: passive.getUpgradeDescription(),
+                    icon: passive.emoji,
+                    level: passive.level + 1,
+                    action: () => {
+                        passive.upgrade(); // 或者 passive.levelUp()
+                        if(player) player.recalculateStats();
+                        // checkEvolutionForPassive(player, passive); // 如果被动有进化
+                    }
+                }];
+            }
+             if (passiveUpgrades && passiveUpgrades.length > 0) {
+                options = options.concat(passiveUpgrades);
+            }
+        }
     });
+
     // 添加新武器选项
     if (player.weapons.length < player.maxWeapons) {
-        availableWeapons.forEach(WeaponClass => {
-            if (!player.weapons.some(w =>
-                w instanceof WeaponClass ||
-                (w.constructor.Evolution && w.constructor.Evolution.evolvesTo === WeaponClass.Name)
-            )) {
-                options.push(...(new WeaponClass()).getBaseUpgradeOptions(player));
+        BASE_WEAPONS.forEach(WeaponClass => {
+            if (WeaponClass && !player.weapons.some(w => w instanceof WeaponClass)) {
+                if (typeof WeaponClass === 'function' && WeaponClass.prototype) {
+                    try {
+                const weapon = new WeaponClass();
+                options.push({
+                    item: weapon,
+                            classRef: WeaponClass,
+                    type: 'new_weapon',
+                            text: `获得 ${weapon.name || WeaponClass.name || '未知武器'}`,
+                            description: weapon.getInitialDescription ? weapon.getInitialDescription() : (WeaponClass.Description || '选择一个新武器。'),
+                            icon: weapon.emoji || WeaponClass.Emoji || '❓',
+                    action: () => {
+                                player.addWeapon(new WeaponClass());
+                            }
+                        });
+                        hasWeaponOption = true; // A new weapon is a weapon option
+                    } catch (e) {
+                        console.error(`Error instantiating weapon ${WeaponClass.name}:`, e);
+                    }
+                } else {
+                    console.warn('Encountered non-constructable item in BASE_WEAPONS:', WeaponClass);
+                }
             }
         });
     }
-    // 添加新被动道具选项
+
+    // 添加新被动物品选项
     if (player.passiveItems.length < player.maxPassives) {
-        availablePassives.forEach(PassiveClass => {
-            if (!player.passiveItems.some(p => p instanceof PassiveClass)) {
-                options.push(...(new PassiveClass()).getBaseUpgradeOptions(player));
+        BASE_PASSIVES.forEach(PassiveClass => {
+            if (PassiveClass && !player.passiveItems.some(p => p instanceof PassiveClass)) {
+                if (typeof PassiveClass === 'function' && PassiveClass.prototype) {
+                    try {
+                const passive = new PassiveClass();
+                options.push({
+                    item: passive,
+                            classRef: PassiveClass,
+                    type: 'new_passive',
+                            text: `获得 ${passive.name || PassiveClass.name || '未知被动'}`,
+                            description: passive.getInitialDescription ? passive.getInitialDescription() : (PassiveClass.Description || '选择一个新被动道具。'),
+                            icon: passive.emoji || PassiveClass.Emoji || '❓',
+                    action: () => {
+                                player.addPassive(new PassiveClass());
+                            }
+                        });
+                    } catch (e) {
+                        console.error(`Error instantiating passive ${PassiveClass.name}:`, e);
+                    }
+                } else {
+                     console.warn('Encountered non-constructable item in BASE_PASSIVES:', PassiveClass);
+                }
             }
         });
     }
-    // 如果选项不足，添加实用选项
-    if (options.length < 4) {
+
+    // 如果到目前为止还没有武器选项，并且可以有武器选项，尝试添加一个
+    if (!hasWeaponOption) {
+        let potentialWeaponOptions = [];
+        // 优先升级现有未满级武器
+        const upgradableWeapons = player.weapons.filter(w => w && !w.isMaxLevel()); // 确保 w 存在
+        if (upgradableWeapons.length > 0) {
+            upgradableWeapons.sort((a, b) => a.level - b.level); // 升级等级最低的
+            const weaponToUpgrade = upgradableWeapons[0];
+            
+            let currentWeaponUpgradeOptions = null;
+            if (weaponToUpgrade && typeof weaponToUpgrade.getCurrentUpgradeOptions === 'function') {
+                currentWeaponUpgradeOptions = weaponToUpgrade.getCurrentUpgradeOptions(player);
+            } else if (weaponToUpgrade && !weaponToUpgrade.isMaxLevel() && typeof weaponToUpgrade.getUpgradeDescription === 'function') {
+                 currentWeaponUpgradeOptions = [{
+                    item: weaponToUpgrade,
+                    type: 'upgrade_weapon',
+                    text: `升级 ${weaponToUpgrade.name} (Lv ${weaponToUpgrade.level + 1})`,
+                    description: weaponToUpgrade.getUpgradeDescription(),
+                    icon: weaponToUpgrade.emoji,
+                    level: weaponToUpgrade.level + 1,
+            action: () => {
+                        weaponToUpgrade.upgrade();
+                        if(player) player.recalculateStats();
+                        checkEvolution(player, weaponToUpgrade);
+                    }
+                }];
+            }
+
+            if (currentWeaponUpgradeOptions && currentWeaponUpgradeOptions.length > 0) {
+                 potentialWeaponOptions = potentialWeaponOptions.concat(currentWeaponUpgradeOptions);
+            }
+        }
+
+        // 如果没有可升级的现有武器，但可以添加新武器
+        if (potentialWeaponOptions.length === 0 && player.weapons.length < player.maxWeapons) {
+            const availableNewWeapons = BASE_WEAPONS.filter(WC => WC && !player.weapons.some(w => w instanceof WC));
+            if (availableNewWeapons.length > 0) {
+                const WeaponClass = availableNewWeapons[Math.floor(Math.random() * availableNewWeapons.length)]; // 随机选一个
+                 if (typeof WeaponClass === 'function' && WeaponClass.prototype) {
+                    try {
+                        const weapon = new WeaponClass();
+                        potentialWeaponOptions.push({
+                            item: weapon,
+                            classRef: WeaponClass,
+                            type: 'new_weapon',
+                            text: `获得 ${weapon.name || WeaponClass.name || '未知武器'}`,
+                            description: weapon.getInitialDescription ? weapon.getInitialDescription() : (WeaponClass.Description || '选择一个新武器。'),
+                            icon: weapon.emoji || WeaponClass.Emoji || '❓',
+                            action: () => {
+                                player.addWeapon(new WeaponClass());
+                            }
+                        });
+                    } catch (e) {
+                        console.error(`Error instantiating forced weapon ${WeaponClass.name}:`, e);
+                    }
+                }
+            }
+        }
+        // 如果找到了强制的武器选项，将其添加到主选项列表 (如果主列表还不包含它)
+        // 为了简单，直接添加，后续的去重和数量限制会处理
+        if (potentialWeaponOptions.length > 0) {
+            options = options.concat(potentialWeaponOptions);
+            // hasWeaponOption = true; // Not strictly needed to set here as we are at the end of option gathering for weapons
+        }
+    }
+
+    // 去重：基于 text 和 type (简单去重，可能需要更复杂的逻辑)
+    const uniqueOptions = [];
+    const seenOptions = new Set();
+    for (const opt of options) {
+        const key = `${opt.type}_${opt.text}`;
+        if (!seenOptions.has(key)) {
+            uniqueOptions.push(opt);
+            seenOptions.add(key);
+        }
+    }
+    options = uniqueOptions;
+
+    // 如果选项仍然很少 (例如少于1个)，并且玩家生命值不满，则添加恢复生命选项作为保底
+    if (options.length < 1 && player && player.health < player.getStat('health')) { // 使用 getStat('health')
         options.push({
             type: 'utility',
             text: '恢复 30% 生命',
-            description: '一点慰藉。',
+            description: '回复部分生命值。',
             icon: '🍗',
             action: () => {
-                player.heal(player.getStat('health') * 0.3);
-            }
-        });
-        options.push({
-            type: 'utility',
-            text: '获得 25 金币',
-            description: '积少成多。',
-            icon: '🪙',
-            action: () => {
-                console.log("获得金币 (功能待实现)");
+                if(player) player.heal(player.getStat('health') * 0.3);
             }
         });
     }
-    // 随机打乱选项
+
+    // 随机打乱选项顺序
     shuffleArray(options);
-    // 返回前4个选项
-    return options.slice(0, 4);
+    // 返回前N个选项 (通常是3或4，如果选项少于N，则返回所有可用选项)
+    return options.slice(0, Math.min(options.length, 4));
 }
 
 /**
  * 显示升级选项
  */
 function presentLevelUpOptions() {
-    pauseGame(true);
-    isLevelUp = true;
-    const options = getAvailableUpgrades(player);
-    upgradeOptionsContainer.innerHTML = '';
-    options.forEach(option => {
-        const button = document.createElement('button');
-        const iconSpan = document.createElement('span');
-        iconSpan.className = 'upgradeIcon';
-        iconSpan.textContent = option.icon || '❓';
-        const textSpan = document.createElement('span');
-        textSpan.className = 'upgradeText';
-        textSpan.textContent = option.text;
-        if (option.level) {
-            const levelSpan = document.createElement('span');
-            levelSpan.className = 'upgradeLevel';
-            levelSpan.textContent = `Lv ${option.level}`;
-            textSpan.appendChild(levelSpan);
+    // 暂停游戏
+    isPaused = true; // 确保 isPaused 在 try 外部设置，以便 finally 中可以正确处理
+    // isLevelUp = true; // 这个状态应该在 Player.levelUp 成功后设置，这里是显示选项
+    
+    const levelUpScreenElement = document.getElementById('levelUpScreen');
+    const upgradeOptionsContainer = document.getElementById('upgradeOptions');
+
+    try {
+        // 获取升级选项
+        const options = getAvailableUpgrades(player);
+        
+        // 清空容器
+        upgradeOptionsContainer.innerHTML = '';
+        
+        // 添加选项
+        if (options && options.length > 0) {
+        options.forEach(option => {
+            // 创建按钮
+            const button = document.createElement('button');
+            // 创建图标
+            const iconSpan = document.createElement('span');
+            iconSpan.className = 'upgradeIcon';
+            iconSpan.textContent = option.icon || '❓';
+            // 创建文本
+            const textSpan = document.createElement('span');
+            textSpan.className = 'upgradeText';
+            textSpan.textContent = option.text;
+            // 如果有等级，添加等级
+            if (option.level) {
+                const levelSpan = document.createElement('span');
+                levelSpan.className = 'upgradeLevel';
+                    levelSpan.textContent = (typeof option.level === 'number' && option.level > 0) ? `Lv ${option.level}` : (option.item && option.item.level ? `Lv ${option.item.level}` : '新');
+                textSpan.appendChild(levelSpan);
+            }
+            // 创建描述
+            const descP = document.createElement('p');
+            descP.textContent = option.description || '';
+            // 添加到按钮
+            button.appendChild(iconSpan);
+            button.appendChild(textSpan);
+            button.appendChild(descP);
+            // 添加点击事件
+            button.onclick = () => {
+                try {
+                    // 执行选项操作
+                        if (typeof option.action === 'function') {
+                    option.action();
+                        }
+                         // 恢复游戏状态在 option.action 内部或 Player.levelUp 之后处理
+                        // resumeGame(); // 不应在这里直接调用，会中断升级流程
+                        levelUpScreenElement.classList.add('hidden');
+                    isPaused = false;
+                        // isLevelUp = false; // 这个状态应该在升级选择完成后，游戏逻辑继续时重置
+
+                } catch (error) {
+                    console.error("升级选项执行错误:", error);
+                        levelUpScreenElement.classList.add('hidden');
+                    isPaused = false;
+                        // isLevelUp = false;
+                }
+            };
+            // 添加到容器
+            upgradeOptionsContainer.appendChild(button);
+        });
+        } else {
+            // 如果没有有效选项，提供一个默认的关闭方式或提示
+            const noOptionText = document.createElement('p');
+            noOptionText.textContent = "没有可用的升级选项了！点击屏幕继续。";
+            upgradeOptionsContainer.appendChild(noOptionText);
+            // 允许点击屏幕关闭
+            levelUpScreenElement.onclick = () => {
+                levelUpScreenElement.classList.add('hidden');
+                isPaused = false;
+                // isLevelUp = false; 
+                levelUpScreenElement.onclick = null; // 移除事件监听器
+            };
         }
-        const descP = document.createElement('p');
-        descP.style.cssText = 'font-size:0.8em;margin:6px 0 0 0;color:#e0e0e0;';
-        descP.textContent = option.description || '';
-        button.append(iconSpan, textSpan, descP);
-        button.onclick = () => {
-            option.action();
-            resumeGame();
-        };
-        upgradeOptionsContainer.appendChild(button);
-    });
-    levelUpScreen.classList.remove('hidden');
+        // 显示升级界面
+        levelUpScreenElement.classList.remove('hidden');
+    } catch (error) {
+        console.error("显示升级选项时出错:", error);
+        // 确保游戏不会卡住
+        levelUpScreenElement.classList.add('hidden');
+        isPaused = false;
+        // isLevelUp = false;
+    }
 }
 
 /**
@@ -540,43 +992,50 @@ function presentLevelUpOptions() {
 function checkEvolution(player, item) {
     console.log("检查进化可能性...");
     let evolutionOccurred = false;
+
     // 检查武器进化
     for (let i = 0; i < player.weapons.length; i++) {
         const weapon = player.weapons[i];
+
         // 跳过已进化或没有进化信息的武器
-        if (weapon.isEvolved || !weapon.constructor.Evolution) continue;
+        if (!weapon || weapon.isEvolved || !weapon.constructor || !weapon.constructor.Evolution) {
+            continue;
+        }
+
         const evolutionInfo = weapon.constructor.Evolution;
         const requiredPassiveName = evolutionInfo.requires;
-        const evolvedClassName = evolutionInfo.evolvesTo;
-        // 检查是否满足进化条件
-        if (weapon.isMaxLevel() && player.passiveItems.some(passive => passive.name === requiredPassiveName)) {
-            console.log(`满足进化条件: ${weapon.name} -> ${evolvedClassName}!`);
-            // 查找进化后的类
-            let EvolvedClass = null;
-            if (evolvedClassName === "ThousandKnives") EvolvedClass = ThousandKnives;
-            else if (evolvedClassName === "SoulEater") EvolvedClass = SoulEater;
-            else if (evolvedClassName === "BloodyTear") EvolvedClass = BloodyTear;
-            else if (evolvedClassName === "Inferno") EvolvedClass = Inferno;
-            else if (evolvedClassName === "Lightning") EvolvedClass = Lightning;
-            else if (evolvedClassName === "HighFive") EvolvedClass = HighFive;
-            if (EvolvedClass) {
-                // 创建进化武器
-                const evolvedWeapon = new EvolvedClass(weapon);
-                evolvedWeapon.owner = player;
-                // 替换原武器
-                player.weapons[i] = evolvedWeapon;
-                console.log(`${weapon.name} 进化为 ${evolvedWeapon.name}!`);
+        const evolvedClassName = evolutionInfo.evolvesTo; // e.g., "ThunderSword", "DeathGrip"
+
+        // 检查是否满足进化条件 (武器满级，且拥有特定被动物品)
+        const hasRequiredPassive = player.passiveItems.some(passive => passive.name === requiredPassiveName);
+
+        if (weapon.isMaxLevel() && hasRequiredPassive) {
+            console.log(`武器 ${weapon.name} 满足进化条件 (需求: ${requiredPassiveName}), 尝试进化为 ${evolvedClassName}`);
+
+            // 尝试从全局作用域获取进化后的类定义
+            const EvolvedClass = window[evolvedClassName];
+
+            if (typeof EvolvedClass === 'function') {
+                try {
+                    const evolvedWeapon = new EvolvedClass(weapon); // 传递旧武器实例，供进化武器构造函数使用
+                    evolvedWeapon.owner = player; // 确保设置拥有者
+                    player.weapons[i] = evolvedWeapon; // 替换原武器
                 evolutionOccurred = true;
-                // 创建进化特效
+                    console.log(`${weapon.name} 成功进化为 ${evolvedWeapon.name}!`);
                 createEvolutionEffect(player.x, player.y);
+                    // 一次只进化一个武器，避免潜在的数组修改问题
                 break;
+                } catch (e) {
+                    console.error(`进化 ${weapon.name} 到 ${evolvedClassName} 时出错: ${e}. 确保 ${evolvedClassName} 类已定义并正确加载。`, e);
+                }
             } else {
-                console.error(`找不到进化后的类: ${evolvedClassName}`);
+                console.warn(`进化失败: 找不到类 ${evolvedClassName}。确保它已在加载的脚本中定义 (例如 advancedWeapons.js)。`);
             }
         }
     }
+
     if (evolutionOccurred) {
-        updateUI();
+        updateUI(); // 更新UI以显示进化后的武器
     }
 }
 
@@ -652,3 +1111,178 @@ window.addEventListener('resize', () => {
 });
 
 console.log("Emoji 幸存者 - 重构版 已初始化。");
+
+/**
+ * 敌人投射物类
+ */
+class EnemyProjectile {
+    /**
+     * 构造函数
+     * @param {number} x - X坐标
+     * @param {number} y - Y坐标
+     * @param {number} vx - X速度
+     * @param {number} vy - Y速度
+     * @param {number} damage - 伤害
+     * @param {Enemy} owner - 拥有者
+     */
+    constructor(x, y, vx, vy, damage, owner) {
+        this.x = x;
+        this.y = y;
+        this.vx = vx;
+        this.vy = vy;
+        this.damage = damage;
+        this.owner = owner;
+        
+        // 大小
+        this.size = GAME_FONT_SIZE * 0.6;
+        this.width = this.size;
+        this.height = this.size;
+        
+        // 生命周期
+        this.lifetime = 0;
+        this.duration = 3.0;
+        
+        // 活动状态
+        this.isActive = true;
+        this.isGarbage = false;
+        
+        // 已击中的目标
+        this.hasHit = false;
+    }
+    
+    /**
+     * 更新投射物状态
+     * @param {number} dt - 时间增量
+     */
+    update(dt) {
+        // 如果投射物不活动或已标记为垃圾，不更新
+        if (!this.isGarbage && this.isActive) {
+            // 更新位置
+            this.x += this.vx * dt;
+            this.y += this.vy * dt;
+            
+            // 更新生命周期
+            this.lifetime += dt;
+            
+            // 检查生命周期
+            if (this.lifetime >= this.duration) {
+                this.isGarbage = true;
+                this.isActive = false;
+                return;
+            }
+            
+            // 检查是否超出屏幕边界
+            if (this.x < cameraManager.x - GAME_WIDTH * 0.6 || 
+                this.x > cameraManager.x + GAME_WIDTH * 0.6 || 
+                this.y < cameraManager.y - GAME_HEIGHT * 0.6 || 
+                this.y > cameraManager.y + GAME_HEIGHT * 0.6) {
+                this.isGarbage = true;
+                this.isActive = false;
+                return;
+            }
+            
+            // 检查与玩家的碰撞
+            if (!this.hasHit && player && !player.isGarbage && player.isActive) {
+                const dx = this.x - player.x;
+                const dy = this.y - player.y;
+                const distSq = dx * dx + dy * dy;
+                const collisionRadiusSq = (this.size / 2 + player.size / 2) * (this.size / 2 + player.size / 2);
+                
+                if (distSq <= collisionRadiusSq) {
+                    // 对玩家造成伤害
+                    player.takeDamage(this.damage, this.owner);
+                    
+                    // 标记为已击中
+                    this.hasHit = true;
+                    this.isGarbage = true;
+                    this.isActive = false;
+                    
+                    // 创建命中特效
+                    this.createHitEffect();
+                }
+            }
+        }
+    }
+    
+    /**
+     * 创建命中特效
+     */
+    createHitEffect() {
+        // 创建爆炸效果
+        const effect = {
+            x: this.x,
+            y: this.y,
+            radius: 0,
+            maxRadius: this.size * 2,
+            lifetime: 0.3,
+            timer: 0,
+            isGarbage: false,
+            
+            update: function(dt) {
+                this.timer += dt;
+                if (this.timer >= this.lifetime) {
+                    this.isGarbage = true;
+                    return;
+                }
+                
+                this.radius = (this.timer / this.lifetime) * this.maxRadius;
+            },
+            
+            draw: function(ctx) {
+                if (this.isGarbage) return;
+                
+                const alpha = 0.5 - (this.timer / this.lifetime) * 0.5;
+                const screenPos = cameraManager.worldToScreen(this.x, this.y);
+                
+                ctx.fillStyle = `rgba(255, 50, 50, ${alpha})`;
+                ctx.beginPath();
+                ctx.arc(screenPos.x, screenPos.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        };
+        
+        visualEffects.push(effect);
+    }
+    
+    /**
+     * 绘制投射物
+     * @param {CanvasRenderingContext2D} ctx - 画布上下文
+     */
+    draw(ctx) {
+        // 如果投射物不活动或已标记为垃圾，不绘制
+        if (this.isGarbage || !this.isActive) return;
+        
+        // 获取屏幕坐标
+        const screenPos = cameraManager.worldToScreen(this.x, this.y);
+        
+        // 绘制投射物
+        ctx.fillStyle = 'red';
+        ctx.beginPath();
+        ctx.arc(screenPos.x, screenPos.y, this.size / 2, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // 绘制轨迹
+        ctx.strokeStyle = 'rgba(255, 50, 50, 0.3)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(screenPos.x, screenPos.y);
+        ctx.lineTo(
+            screenPos.x - this.vx / 10,
+            screenPos.y - this.vy / 10
+        );
+        ctx.stroke();
+    }
+}
+
+// 基础武器列表
+BASE_WEAPONS.length = 0; // 清空现有数组
+if (typeof DaggerWeapon !== 'undefined') BASE_WEAPONS.push(DaggerWeapon);
+if (typeof WhipWeapon !== 'undefined') BASE_WEAPONS.push(WhipWeapon);
+if (typeof GarlicWeapon !== 'undefined') BASE_WEAPONS.push(GarlicWeapon);
+if (typeof LaserSwordWeapon !== 'undefined') BASE_WEAPONS.push(LaserSwordWeapon);
+
+// 基础被动道具列表
+BASE_PASSIVES.length = 0; // 清空现有数组
+if (typeof MagnetPassive !== 'undefined') BASE_PASSIVES.push(MagnetPassive);
+if (typeof HeartPassive !== 'undefined') BASE_PASSIVES.push(HeartPassive);
+if (typeof TomatoPassive !== 'undefined') BASE_PASSIVES.push(TomatoPassive);

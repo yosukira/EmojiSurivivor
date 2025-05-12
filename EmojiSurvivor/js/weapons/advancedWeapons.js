@@ -1,6 +1,6 @@
 /**
- * 燃烧刀武器类
- * 发射燃烧刀攻击敌人，造成燃烧效果
+ * 火焰匕首武器类
+ * 发射火焰匕首攻击敌人，造成燃烧效果
  */
 class FireBladeWeapon extends Weapon {
     /**
@@ -9,10 +9,6 @@ class FireBladeWeapon extends Weapon {
     static Name = "燃烧刀";
     static Emoji = "🔥";
     static MaxLevel = 8;
-    static Evolution = {
-        requires: "Candelabrador",
-        evolvesTo: "InfernoSword"
-    };
 
     /**
      * 构造函数
@@ -26,14 +22,14 @@ class FireBladeWeapon extends Weapon {
      */
     calculateStats() {
         this.stats = {
-            damage: 15 + (this.level - 1) * 4,
-            projectileSpeed: 300 + (this.level - 1) * 20,
-            cooldown: Math.max(0.2, this.baseCooldown - (this.level - 1) * 0.1),
+            damage: 4 + (this.level - 1) * 2,
+            projectileSpeed: 300 + (this.level - 1) * 15,
+            cooldown: Math.max(0.4, this.baseCooldown - (this.level - 1) * 0.08),
             count: 1 + Math.floor((this.level - 1) / 3),
-            pierce: 1 + Math.floor(this.level / 3),
-            duration: 1.8,
-            burnDamage: 3 + (this.level - 1) * 1.5,
-            burnDuration: 2 + (this.level - 1) * 0.5
+            pierce: Math.floor(this.level / 4),
+            duration: 1.2,
+            burnDamage: 2 + Math.floor(this.level / 2),
+            burnDuration: 2 + Math.floor(this.level / 3)
         };
     }
 
@@ -44,51 +40,69 @@ class FireBladeWeapon extends Weapon {
     fire(owner) {
         // 获取拥有者属性
         const ownerStats = this.getOwnerStats(owner);
+
         // 计算实际投射物数量（基础数量 + 加成）
         const count = this.stats.count + (ownerStats.projectileCountBonus || 0);
         const speed = this.stats.projectileSpeed * (ownerStats.projectileSpeedMultiplier || 1);
-        const damage = this.stats.damage;
+        const damage = this.stats.damage * (ownerStats.damageMultiplier || 1);
         const pierce = this.stats.pierce;
         const duration = this.stats.duration * (ownerStats.durationMultiplier || 1);
         const size = GAME_FONT_SIZE * (ownerStats.areaMultiplier || 1);
-        const burnDamage = this.stats.burnDamage;
+        const burnDamage = this.stats.burnDamage * (ownerStats.damageMultiplier || 1);
         const burnDuration = this.stats.burnDuration * (ownerStats.durationMultiplier || 1);
+
         // 获取目标敌人
         let target = owner.findNearestEnemy(GAME_WIDTH * 1.5) || {
             x: owner.x + owner.lastMoveDirection.x * 100,
             y: owner.y + owner.lastMoveDirection.y * 100
         };
+
         // 计算方向
         const dx = target.x - owner.x;
         const dy = target.y - owner.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
         const dirX = dist > 0 ? dx / dist : owner.lastMoveDirection.x;
         const dirY = dist > 0 ? dy / dist : owner.lastMoveDirection.y;
+
         // 计算角度间隔
-        const angleStep = count > 1 ? (Math.PI / 12) : 0;
+        const angleStep = count > 1 ? (Math.PI / 6) : 0;
         const startAngle = Math.atan2(dirY, dirX) - (angleStep * (count - 1) / 2);
+
         // 发射多个投射物
         for (let i = 0; i < count; i++) {
             // 计算角度
             const angle = startAngle + i * angleStep;
             const vx = Math.cos(angle) * speed;
             const vy = Math.sin(angle) * speed;
-            // 创建燃烧刀投射物
-            const projectile = new FireBladeProjectile(
+
+            // 创建投射物
+            const proj = spawnProjectile(
                 owner.x,
                 owner.y,
+                this.emoji,
                 size,
                 vx,
                 vy,
                 damage,
                 pierce,
                 duration,
-                ownerStats,
-                burnDamage,
-                burnDuration
+                ownerStats
             );
-            // 添加到投射物列表
-            projectiles.push(projectile);
+
+            // 设置拥有者
+            proj.owner = owner;
+
+            // 设置燃烧效果
+            proj.onHit = function(enemy) {
+                // 添加燃烧效果
+                enemy.statusEffects.burn = {
+                    damage: burnDamage / 2,
+                    duration: burnDuration,
+                    tickInterval: 0.5,
+                    tickTimer: 0.5,
+                    source: owner
+                };
+            };
         }
     }
 
@@ -98,14 +112,16 @@ class FireBladeWeapon extends Weapon {
      */
     getUpgradeDescription() {
         let desc = `Lv${this.level + 1}: `;
+
         if (this.level % 3 === 0) {
             desc += "+1 投射物。";
-        } else if (this.level % 3 === 2) {
-            desc += "+1 穿透。";
+        } else if (this.level % 2 === 0) {
+            desc += "+燃烧伤害/持续时间。";
         } else {
-            desc += "+伤害/燃烧效果。";
+            desc += "+伤害/速度。";
         }
-        return desc + ` (冷却: ${Math.max(0.2, this.baseCooldown - this.level * 0.1).toFixed(2)}s)`;
+
+        return desc;
     }
 
     /**
@@ -999,3 +1015,21 @@ class HandshakeProjectile extends Projectile {
         }
     }
 }
+
+// 全局基础武器列表 (This is the one that should exist at the END)
+// 此列表在所有基础和高级武器类定义之后创建
+const BASE_WEAPONS = [];
+
+// 从 basicWeapons.js 添加武器 (假设这些类已通过 <script> 加载并在全局作用域中)
+if (typeof DaggerWeapon === 'function') BASE_WEAPONS.push(DaggerWeapon);
+if (typeof GarlicWeapon === 'function') BASE_WEAPONS.push(GarlicWeapon);
+if (typeof WhipWeapon === 'function') BASE_WEAPONS.push(WhipWeapon);
+
+// 从 advancedWeapons.js 添加此文件中定义的非进化基础武器
+// (确保只添加玩家可以直接选择获取的初始形态武器，而非进化形态)
+if (typeof FireBladeWeapon === 'function' && FireBladeWeapon.isEvolution === undefined) BASE_WEAPONS.push(FireBladeWeapon); // 示例：火刀如果是基础可选
+if (typeof StormBladeWeapon === 'function' && StormBladeWeapon.isEvolution === undefined) BASE_WEAPONS.push(StormBladeWeapon); // 示例：风暴刃如果是基础可选
+if (typeof HandshakeWeapon === 'function' && HandshakeWeapon.isEvolution === undefined) BASE_WEAPONS.push(HandshakeWeapon); // 示例：握手如果是基础可选
+// ... 为 advancedWeapons.js 中其他基础可选武器添加类似的行 ...
+
+console.log('BASE_WEAPONS initialized in advancedWeapons.js:', BASE_WEAPONS.map(w => w.name));

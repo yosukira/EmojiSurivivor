@@ -1,6 +1,6 @@
 /**
  * 经验宝石类
- * 玩家可以拾取获得经验值
+ * 玩家可以收集的经验宝石
  */
 class ExperienceGem extends GameObject {
     /**
@@ -10,36 +10,23 @@ class ExperienceGem extends GameObject {
      * @param {number} value - 经验值
      */
     constructor(x, y, value) {
-        // 调用父类构造函数
-        super(x, y, EMOJI.XP_GEM, GAME_FONT_SIZE * 0.8);
+        super(x, y, "✨", GAME_FONT_SIZE * 0.7);
         // 经验值
         this.value = value;
 
-        // 移动速度
-        this.speed = 0;
+        // 吸引速度
+        this.attractionSpeed = 450;
 
-        // 最大速度
-        this.maxSpeed = 400;
+        // 初始速度
+        this.vx = (Math.random() - 0.5) * 50;
+        this.vy = (Math.random() - 0.5) * 50;
 
-        // 加速度
-        this.acceleration = 1000;
+        // 初始加速度
+        this.ax = 0;
+        this.ay = 0;
 
-        // 是否被磁铁吸引
-        this.isAttracted = false;
-
-        // 吸引计时器
-        this.attractTimer = 0;
-
-        // 吸引延迟
-        this.attractDelay = 0.5 + Math.random() * 0.5;
-
-        // 初始位置偏移
-        this.offsetX = (Math.random() - 0.5) * 20;
-        this.offsetY = (Math.random() - 0.5) * 20;
-
-        // 应用初始位置偏移
-        this.x += this.offsetX;
-        this.y += this.offsetY;
+        // 摩擦系数
+        this.friction = 0.95;
     }
 
     /**
@@ -50,43 +37,48 @@ class ExperienceGem extends GameObject {
     update(dt, player) {
         // 如果经验宝石不活动或已标记为垃圾，不更新
         if (!this.isActive || this.isGarbage) return;
-
-        // 更新吸引计时器
-        this.attractTimer += dt;
-
         // 计算到玩家的距离
         const dx = player.x - this.x;
         const dy = player.y - this.y;
         const distSq = dx * dx + dy * dy;
 
-        // 检查是否在拾取范围内
-        if (distSq <= player.pickupRadiusSq) {
-            // 标记为被吸引
-            this.isAttracted = true;
+        // 如果在吸引范围内，向玩家移动
+        if (distSq < player.pickupRadiusSq) {
+            // 计算吸引力
+            const dist = Math.sqrt(distSq);
+            const attractionFactor = 1 + (player.pickupRadiusSq - distSq) / player.pickupRadiusSq * 2.5;
+
+            // 计算加速度
+            if (dist > 0) {
+                this.ax = (dx / dist) * this.attractionSpeed * attractionFactor;
+                this.ay = (dy / dist) * this.attractionSpeed * attractionFactor;
+            }
+        } else {
+            // 不在吸引范围内，减少速度
+            this.ax = 0;
+            this.ay = 0;
         }
 
-        // 如果被吸引且吸引计时器超过延迟，移动向玩家
-        if (this.isAttracted && this.attractTimer >= this.attractDelay) {
-            // 计算方向
-            const dist = Math.sqrt(distSq);
-            const dirX = dist > 0 ? dx / dist : 0;
-            const dirY = dist > 0 ? dy / dist : 0;
+        // 更新速度
+        this.vx += this.ax * dt;
+        this.vy += this.ay * dt;
 
-            // 增加速度
-            this.speed = Math.min(this.maxSpeed, this.speed + this.acceleration * dt);
-            // 更新位置
-            this.x += dirX * this.speed * dt;
-            this.y += dirY * this.speed * dt;
+        // 应用摩擦力
+        this.vx *= this.friction;
+        this.vy *= this.friction;
 
-            // 检查是否与玩家碰撞
-            if (distSq <= player.size * player.size / 4) {
-                // 玩家获得经验值
-                player.gainXP(this.value);
+        // 更新位置
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
 
-                // 标记为垃圾
-                this.isGarbage = true;
-                this.isActive = false;
-            }
+        // 检查与玩家的碰撞
+        if (this.checkCollision(player)) {
+            // 玩家获得经验
+            player.gainXP(this.value);
+
+            // 标记为垃圾
+            this.isGarbage = true;
+            this.isActive = false;
         }
     }
 
@@ -97,31 +89,8 @@ class ExperienceGem extends GameObject {
     draw(ctx) {
         // 如果经验宝石不活动或已标记为垃圾，不绘制
         if (!this.isActive || this.isGarbage) return;
-
-        try {
-            // 获取屏幕坐标
-            const screenPos = cameraManager.worldToScreen(this.x, this.y);
-
-            // 绘制发光效果
-            const glowSize = this.size * 1.5;
-
-            ctx.fillStyle = 'rgba(100, 200, 255, 0.2)';
-            ctx.beginPath();
-            ctx.arc(screenPos.x, screenPos.y, glowSize / 2, 0, Math.PI * 2);
-            ctx.fill();
-
-            // 设置字体
-            ctx.font = `${this.size}px 'Segoe UI Emoji', Arial`;
-
-            // 设置对齐方式
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-
-            // 绘制表情符号
-            ctx.fillText(this.emoji, screenPos.x, screenPos.y);
-        } catch (e) {
-            console.error("绘制经验宝石时出错:", e);
-        }
+        // 调用父类绘制方法
+        super.draw(ctx);
     }
 }
 
@@ -352,29 +321,29 @@ class Pickup extends GameObject {
             // 获取屏幕坐标
             const screenPos = cameraManager.worldToScreen(this.x, this.y);
 
-            // 绘制发光效果
-            let glowColor;
-            switch (this.type) {
-                case 'heal':
-                    glowColor = 'rgba(0, 255, 0, 0.3)';
-                    break;
-
-                case 'magnet':
-                    glowColor = 'rgba(0, 100, 255, 0.3)';
-                    break;
-
-                default:
-                    glowColor = 'rgba(255, 255, 255, 0.3)';
-                    break;
-            }
-
-            // 闪烁效果
-            const glowSize = this.size * (1.3 + 0.3 * Math.sin(this.glowTimer));
-
-            ctx.fillStyle = glowColor;
-            ctx.beginPath();
-            ctx.arc(screenPos.x, screenPos.y, glowSize, 0, Math.PI * 2);
-            ctx.fill();
+            // 绘制发光效果 (已移除磁铁和心的闪烁)
+            // let glowColor;
+            // switch (this.type) {
+            //     case 'heal':
+            //         glowColor = 'rgba(0, 255, 0, 0.3)';
+            //         break;
+            //
+            //     case 'magnet':
+            //         glowColor = 'rgba(0, 100, 255, 0.3)';
+            //         break;
+            //
+            //     default:
+            //         glowColor = 'rgba(255, 255, 255, 0.3)';
+            //         break;
+            // }
+            //
+            // // 闪烁效果
+            // const glowSize = this.size * (1.3 + 0.3 * Math.sin(this.glowTimer));
+            //
+            // ctx.fillStyle = glowColor;
+            // ctx.beginPath();
+            // ctx.arc(screenPos.x, screenPos.y, glowSize, 0, Math.PI * 2);
+            // ctx.fill();
 
             // 设置字体
             ctx.font = `${this.size}px 'Segoe UI Emoji', Arial`;
@@ -386,18 +355,18 @@ class Pickup extends GameObject {
             // 绘制表情符号
             ctx.fillText(this.emoji, screenPos.x, screenPos.y);
 
-            // 如果生命周期少于3秒，绘制闪烁警告
-            if (this.lifetime < 3) {
-                // 计算闪烁透明度
-                const blinkAlpha = Math.sin(this.lifetime * 10) * 0.5 + 0.5;
-
-                // 绘制闪烁警告
-                ctx.strokeStyle = `rgba(255, 0, 0, ${blinkAlpha})`;
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                ctx.arc(screenPos.x, screenPos.y, this.size * 0.8, 0, Math.PI * 2);
-                ctx.stroke();
-            }
+            // 如果生命周期少于3秒，绘制闪烁警告 (已移除)
+            // if (this.lifetime < 3) {
+            //     // 计算闪烁透明度
+            //     const blinkAlpha = Math.sin(this.lifetime * 10) * 0.5 + 0.5;
+            //
+            //     // 绘制闪烁警告
+            //     ctx.strokeStyle = `rgba(255, 0, 0, ${blinkAlpha})`;
+            //     ctx.lineWidth = 2;
+            //     ctx.beginPath();
+            //     ctx.arc(screenPos.x, screenPos.y, this.size * 0.8, 0, Math.PI * 2);
+            //     ctx.stroke();
+            // }
         } catch (e) {
             console.error("绘制拾取物时出错:", e);
         }
