@@ -153,7 +153,7 @@ const BOSS_TYPES = [
         damageMult: 0.9,
         xpMult: 1.2,
         attackPattern: "ranged",
-        projectileCount: 5,
+        projectileCount: 3,
         minTime: BOSS_INTERVAL
     },
     {

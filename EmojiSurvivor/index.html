@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Emoji 幸存者 - 忍者版</title>
+    <title>Emoji 幸存者</title>
     <style>
         /* 全局样式 */
         body {
@@ -45,10 +45,41 @@
             font-size: 17px;
             color: white;
             max-width: 280px;
+            position: absolute;
+            top: 10px;
         }
 
         #topRightUI {
             text-align: right;
+            right: 10px;
+            left: auto;
+        }
+
+        /* 新增：左下角UI */
+        #bottomLeftUI {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.65);
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 15px;
+            color: white;
+            max-width: 200px;
+            pointer-events: none;
+            z-index: 5;
+        }
+        #bottomLeftUI div {
+            margin-bottom: 4px;
+        }
+        #bottomLeftUI .statName {
+            color: #aaa;
+            display: inline-block;
+            width: 80px; /* 调整宽度以对齐 */
+        }
+        #bottomLeftUI .statValue {
+            color: #eee;
+            font-weight: bold;
         }
 
         /* 生命条和经验条 */
@@ -208,14 +239,27 @@
             <div style="margin-top: 10px;">被动:</div>
             <div id="passiveIcons"></div>
         </div>
+        <!-- 新增：左下角UI -->
+        <div id="bottomLeftUI">
+            <div><span class="statName">伤害</span>: <span id="statDamage" class="statValue">1.0</span></div>
+            <div><span class="statName">射弹速度</span>: <span id="statProjSpeed" class="statValue">1.0</span></div>
+            <div><span class="statName">冷却</span>: <span id="statCooldown" class="statValue">1.0</span></div>
+            <div><span class="statName">范围</span>: <span id="statArea" class="statValue">1.0</span></div>
+            <div><span class="statName">持续时间</span>: <span id="statDuration" class="statValue">1.0</span></div>
+            <div><span class="statName">射弹数量</span>: <span id="statAmount" class="statValue">0</span></div>
+            <div><span class="statName">护甲</span>: <span id="statArmor" class="statValue">0</span></div>
+            <div><span class="statName">生命恢复</span>: <span id="statRegen" class="statValue">0.0</span>/s</div>
+            <div><span class="statName">移动速度</span>: <span id="statMoveSpeed" class="statValue">100</span></div>
+            <div><span class="statName">拾取范围</span>: <span id="statPickup" class="statValue">100</span></div>
+        </div>
     </div>
     <!-- 游戏画布 -->
     <canvas id="gameCanvas"></canvas>
 
     <!-- 开始屏幕 -->
     <div id="startScreen" class="overlayScreen">
-        <h1>Emoji 幸存者 - 忍者版</h1>
-        <p>🥷 使用 WASD 移动。</p>
+        <h1>Emoji 幸存者 </h1>
+        <p><img src="assets/ninja.png" alt="忍者图标" style="width: 1em; height: 1em; vertical-align: middle; margin-right: 0.2em;"> 使用 WASD 移动。</p>
         <p>💀 在怪物群中活下来！</p>
         <p>✨ 收集宝石升级。</p>
         <p>🅿️ 按 P 暂停/取消暂停。</p>

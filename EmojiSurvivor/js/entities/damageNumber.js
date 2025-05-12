@@ -93,42 +93,32 @@ class DamageNumber {
      * @param {CanvasRenderingContext2D} ctx - 画布上下文
      */
     draw(ctx) {
-        // 如果伤害数字不活动或已标记为垃圾，不绘制
-        if (!this.isActive || this.isGarbage) return;
-        
-        // 计算透明度
-        const alpha = 1 - (this.lifetime / this.duration);
-        
-        // 设置字体
-        ctx.font = `bold ${this.size}px Arial`;
-        
-        // 设置对齐方式
+        if (this.isGarbage) return;
+
+        // 使用 lifetime 计算 Y 偏移和透明度
+        const progress = this.lifetime / this.duration;
+        const yOffset = progress * 40; // 伤害数字上升的高度
+        const alpha = 1 - progress; // 透明度逐渐减小
+
+        // 获取屏幕坐标，并应用 Y 偏移
+        const screenPos = cameraManager.worldToScreen(this.x, this.y - yOffset);
+
+        ctx.font = `${this.size}px Arial`; // 使用更通用的 Arial 字体
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        
-        // 绘制描边增强可读性
-        ctx.strokeStyle = 'rgba(0, 0, 0, ' + alpha + ')';
-        ctx.lineWidth = 3;
-        ctx.strokeText(this.text, this.x, this.y);
-        
-        // 设置颜色并绘制文本
-        if (this.color === 'white') {
-            ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
-        } else if (this.color === 'red') {
-            ctx.fillStyle = `rgba(255, 100, 100, ${alpha})`;
-        } else if (this.color === 'green') {
-            ctx.fillStyle = `rgba(100, 255, 100, ${alpha})`;
-        } else if (this.color === 'yellow') {
-            ctx.fillStyle = `rgba(255, 255, 100, ${alpha})`;
-        } else if (typeof this.color === 'string' && this.color.startsWith('rgb')) {
-            // 只有当color是字符串且以rgb开头时才尝试replace
-            ctx.fillStyle = `${this.color.replace(')', `, ${alpha})`).replace('rgb', 'rgba')}`;
-        } else {
-            // 默认颜色处理
-            ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
-        }
-        
-        ctx.fillText(this.text, this.x, this.y);
+
+        // 红色描边
+        ctx.strokeStyle = 'rgb(255, 80, 80)';
+        ctx.lineWidth = Math.max(1, this.size / 10);
+        ctx.globalAlpha = alpha;
+        ctx.strokeText(this.text, screenPos.x, screenPos.y);
+
+        // 白色填充
+        ctx.fillStyle = 'white';
+        ctx.globalAlpha = alpha;
+        ctx.fillText(this.text, screenPos.x, screenPos.y);
+
+        ctx.globalAlpha = 1.0; // 重置透明度
     }
 
     /**

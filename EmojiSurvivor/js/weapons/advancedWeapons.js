@@ -22,7 +22,7 @@ class FireBladeWeapon extends Weapon {
      */
     calculateStats() {
         this.stats = {
-            damage: 4 + (this.level - 1) * 2,
+            damage: 6 + (this.level - 1) * 2,
             projectileSpeed: 300 + (this.level - 1) * 15,
             cooldown: Math.max(0.4, this.baseCooldown - (this.level - 1) * 0.08),
             count: 1 + Math.floor((this.level - 1) / 3),
@@ -111,17 +111,43 @@ class FireBladeWeapon extends Weapon {
      * @returns {string} 升级描述
      */
     getUpgradeDescription() {
-        let desc = `Lv${this.level + 1}: `;
+        const nextLevel = this.level + 1;
+        if (nextLevel > this.maxLevel) return "已达最高等级";
 
-        if (this.level % 3 === 0) {
-            desc += "+1 投射物。";
-        } else if (this.level % 2 === 0) {
-            desc += "+燃烧伤害/持续时间。";
-        } else {
-            desc += "+伤害/速度。";
+        const tempStats = JSON.parse(JSON.stringify(this.stats));
+        const originalLevel = this.level;
+        this.level = nextLevel;
+        const nextLevelStats = this.calculateStats();
+        const descParts = [];
+
+        if (nextLevelStats.damage > tempStats.damage) {
+            descParts.push(`伤害: ${tempStats.damage.toFixed(0)} → ${nextLevelStats.damage.toFixed(0)}`);
+        }
+        if (nextLevelStats.projectileSpeed > tempStats.projectileSpeed) {
+            descParts.push(`速度: ${tempStats.projectileSpeed.toFixed(0)} → ${nextLevelStats.projectileSpeed.toFixed(0)}`);
+        }
+        if (nextLevelStats.count > tempStats.count) {
+            descParts.push(`投射物: ${tempStats.count} → ${nextLevelStats.count}`);
+        }
+        if (nextLevelStats.pierce > tempStats.pierce) {
+            descParts.push(`穿透: ${tempStats.pierce} → ${nextLevelStats.pierce}`);
+        }
+        if (nextLevelStats.burnDamage > tempStats.burnDamage || nextLevelStats.burnDuration > tempStats.burnDuration) {
+             descParts.push(`燃烧效果提升`); // 简化描述
+        }
+        const nextCooldown = Math.max(0.4, this.baseCooldown - (nextLevel - 1) * 0.08);
+        const currentCooldown = Math.max(0.4, this.baseCooldown - (originalLevel - 1) * 0.08);
+        if (nextCooldown < currentCooldown) {
+             descParts.push(`冷却: ${currentCooldown.toFixed(2)}s → ${nextCooldown.toFixed(2)}s`);
         }
 
-        return desc;
+        this.level = originalLevel;
+        this.calculateStats();
+
+        if (descParts.length === 0) {
+            return `Lv${nextLevel}: 属性小幅提升。`;
+        }
+        return `Lv${nextLevel}: ${descParts.join(', ')}。`;
     }
 
     /**
@@ -200,7 +226,7 @@ class FireBladeProjectile extends Projectile {
                 // 造成伤害
                 enemy.takeDamage(this.damage, player);
                 // 添加燃烧效果
-                this.applyBurnEffect(enemy);
+                this.applyBurnEffect(enemy, player);
                 // 添加到已命中列表
                 this.hitTargets.add(enemy);
                 // 减少穿透次数
@@ -226,25 +252,26 @@ class FireBladeProjectile extends Projectile {
      * 应用燃烧效果
      * @param {Enemy} enemy - 敌人
      */
-    applyBurnEffect(enemy) {
-        // 如果敌人已有燃烧效果，更新持续时间
+    applyBurnEffect(enemy, source) {
+        // 使用武器类中计算好的燃烧伤害和持续时间
+        const burnDamagePerTick = this.burnDamage / 4; // 假设燃烧分4次伤害
+        const burnDuration = this.burnDuration;
+        const tickInterval = burnDuration / 4; // 配合4次伤害
+
+        // 如果敌人已有燃烧效果，叠加持续时间或取最大值，取最高伤害
         if (enemy.statusEffects.burn) {
-            enemy.statusEffects.burn.duration = Math.max(
-                enemy.statusEffects.burn.duration,
-                this.burnDuration
-            );
-            enemy.statusEffects.burn.damage = Math.max(
-                enemy.statusEffects.burn.damage,
-                this.burnDamage
-            );
+            enemy.statusEffects.burn.duration = Math.max(enemy.statusEffects.burn.duration, burnDuration);
+            enemy.statusEffects.burn.damage = Math.max(enemy.statusEffects.burn.damage, burnDamagePerTick);
+            enemy.statusEffects.burn.tickInterval = tickInterval; // 更新间隔
+            enemy.statusEffects.burn.source = source; // 更新来源
         } else {
             // 否则添加新的燃烧效果
             enemy.statusEffects.burn = {
-                damage: this.burnDamage,
-                duration: this.burnDuration,
-                tick: 0.5,
-                timer: 0,
-                source: player
+                damage: burnDamagePerTick,
+                duration: burnDuration,
+                tickInterval: tickInterval, 
+                tickTimer: tickInterval, // 立即开始计时
+                source: source // 记录伤害来源
             };
         }
     }
@@ -346,11 +373,11 @@ class StormBladeWeapon extends Weapon {
      */
     calculateStats() {
         this.stats = {
-            damage: 18 + (this.level - 1) * 5,
+            damage: 8 + (this.level - 1) * 5,
             projectileSpeed: 400 + (this.level - 1) * 25,
             cooldown: Math.max(0.3, this.baseCooldown - (this.level - 1) * 0.12),
             count: 1 + Math.floor((this.level - 1) / 3),
-            chainCount: 2 + Math.floor((this.level - 1) / 2),
+            chainCount: 1 + Math.floor((this.level - 1) / 2),
             chainRange: 150 + (this.level - 1) * 20,
             duration: 1.2
         };
@@ -414,15 +441,43 @@ class StormBladeWeapon extends Weapon {
      * @returns {string} 升级描述
      */
     getUpgradeDescription() {
-        let desc = `Lv${this.level + 1}: `;
-        if (this.level % 3 === 0) {
-            desc += "+1 投射物。";
-        } else if (this.level % 2 === 0) {
-            desc += "+1 连锁次数。";
-        } else {
-            desc += "+伤害/连锁范围。";
+        const nextLevel = this.level + 1;
+        if (nextLevel > this.maxLevel) return "已达最高等级";
+
+        const tempStats = JSON.parse(JSON.stringify(this.stats));
+        const originalLevel = this.level;
+        this.level = nextLevel;
+        const nextLevelStats = this.calculateStats();
+        const descParts = [];
+
+        if (nextLevelStats.damage > tempStats.damage) {
+            descParts.push(`伤害: ${tempStats.damage.toFixed(0)} → ${nextLevelStats.damage.toFixed(0)}`);
         }
-        return desc + ` (冷却: ${Math.max(0.3, this.baseCooldown - this.level * 0.12).toFixed(2)}s)`;
+        if (nextLevelStats.projectileSpeed > tempStats.projectileSpeed) {
+            descParts.push(`速度: ${tempStats.projectileSpeed.toFixed(0)} → ${nextLevelStats.projectileSpeed.toFixed(0)}`);
+        }
+        if (nextLevelStats.count > tempStats.count) {
+            descParts.push(`投射物: ${tempStats.count} → ${nextLevelStats.count}`);
+        }
+        if (nextLevelStats.chainCount > tempStats.chainCount) {
+            descParts.push(`连锁次数: ${tempStats.chainCount} → ${nextLevelStats.chainCount}`);
+        }
+        if (nextLevelStats.chainRange > tempStats.chainRange) {
+            descParts.push(`连锁范围: ${tempStats.chainRange.toFixed(0)} → ${nextLevelStats.chainRange.toFixed(0)}`);
+        }
+        const nextCooldown = Math.max(0.3, this.baseCooldown - (nextLevel - 1) * 0.12);
+        const currentCooldown = Math.max(0.3, this.baseCooldown - (originalLevel - 1) * 0.12);
+        if (nextCooldown < currentCooldown) {
+             descParts.push(`冷却: ${currentCooldown.toFixed(2)}s → ${nextCooldown.toFixed(2)}s`);
+        }
+
+        this.level = originalLevel;
+        this.calculateStats();
+
+        if (descParts.length === 0) {
+            return `Lv${nextLevel}: 属性小幅提升。`;
+        }
+        return `Lv${nextLevel}: ${descParts.join(', ')}。`;
     }
 
     /**
@@ -667,22 +722,33 @@ class StormBladeProjectile extends Projectile {
     draw(ctx) {
         // 如果投射物不活动或已标记为垃圾，不绘制
         if (!this.isActive || this.isGarbage) return;
+
         try {
-            // 获取屏幕坐标
             const screenPos = cameraManager.worldToScreen(this.x, this.y);
-            // 绘制发光效果
-            const glowSize = this.size * 1.5;
-            ctx.fillStyle = 'rgba(100, 100, 255, 0.3)';
-            ctx.beginPath();
-            ctx.arc(screenPos.x, screenPos.y, glowSize / 2, 0, Math.PI * 2);
-            ctx.fill();
-            // 设置字体
+
+            ctx.save();
+            ctx.translate(screenPos.x, screenPos.y);
+            // 可以添加旋转，如果需要的话
+            // const angle = Math.atan2(this.vy, this.vx);
+            // ctx.rotate(angle);
+
             ctx.font = `${this.size}px 'Segoe UI Emoji', Arial`;
-            // 设置对齐方式
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            // 绘制表情符号
-            ctx.fillText(this.emoji, screenPos.x, screenPos.y);
+
+            // 绘制基础匕首
+            ctx.fillText('🔪', 0, 0);
+
+            // 绘制闪电覆盖
+            const lightningSize = this.size * 0.8; // 闪电小一点
+            ctx.font = `${lightningSize}px 'Segoe UI Emoji', Arial`;
+            ctx.globalAlpha = 0.85; // 让闪电稍微透明一点
+            ctx.fillText('⚡', 0, 0);
+
+            ctx.restore();
+
+            // 绘制粒子效果 (如果需要，保留原来的粒子绘制逻辑)
+            // this.drawParticles(ctx);
         } catch (e) {
             console.error("绘制岚刀投射物时出错:", e);
         }
@@ -717,7 +783,7 @@ class HandshakeWeapon extends Weapon {
      */
     calculateStats() {
         this.stats = {
-            damage: 25 + (this.level - 1) * 8,
+            damage: 5 + (this.level - 1) * 8,
             projectileSpeed: 250 + (this.level - 1) * 15,
             cooldown: Math.max(0.5, this.baseCooldown - (this.level - 1) * 0.15),
             count: 1 + Math.floor((this.level - 1) / 4),
@@ -794,13 +860,40 @@ class HandshakeWeapon extends Weapon {
      * @returns {string} 升级描述
      */
     getUpgradeDescription() {
-        let desc = `Lv${this.level + 1}: `;
-        if (this.level % 4 === 0) {
-            desc += "+1 投射物。";
-        } else {
-            desc += "+伤害/范围/眩晕时间。";
+        const nextLevel = this.level + 1;
+        if (nextLevel > this.maxLevel) return "已达最高等级";
+
+        const tempStats = JSON.parse(JSON.stringify(this.stats));
+        const originalLevel = this.level;
+        this.level = nextLevel;
+        const nextLevelStats = this.calculateStats();
+        const descParts = [];
+
+        if (nextLevelStats.damage > tempStats.damage) {
+            descParts.push(`伤害: ${tempStats.damage.toFixed(0)} → ${nextLevelStats.damage.toFixed(0)}`);
         }
-        return desc + ` (冷却: ${Math.max(0.5, this.baseCooldown - this.level * 0.15).toFixed(2)}s)`;
+         if (nextLevelStats.area > tempStats.area) {
+            descParts.push(`范围: ${tempStats.area.toFixed(0)} → ${nextLevelStats.area.toFixed(0)}`);
+        }
+        if (nextLevelStats.stunDuration > tempStats.stunDuration) {
+            descParts.push(`眩晕: ${tempStats.stunDuration.toFixed(1)}s → ${nextLevelStats.stunDuration.toFixed(1)}s`);
+        }
+        if (nextLevelStats.count > tempStats.count) {
+            descParts.push(`投射物: ${tempStats.count} → ${nextLevelStats.count}`);
+        }
+        const nextCooldown = Math.max(0.5, this.baseCooldown - (nextLevel - 1) * 0.15);
+        const currentCooldown = Math.max(0.5, this.baseCooldown - (originalLevel - 1) * 0.15);
+         if (nextCooldown < currentCooldown) {
+             descParts.push(`冷却: ${currentCooldown.toFixed(2)}s → ${nextCooldown.toFixed(2)}s`);
+        }
+
+        this.level = originalLevel;
+        this.calculateStats();
+
+        if (descParts.length === 0) {
+            return `Lv${nextLevel}: 属性小幅提升。`;
+        }
+        return `Lv${nextLevel}: ${descParts.join(', ')}。`;
     }
 
     /**
@@ -947,7 +1040,7 @@ class HandshakeProjectile extends Projectile {
             x: this.x,
             y: this.y,
             radius: 0,
-            maxRadius: this.area,
+            maxRadius: this.area * 0.7,
             lifetime: 0.5,
             timer: 0,
             isGarbage: false,

@@ -15,7 +15,9 @@ class ExperienceGem extends GameObject {
         this.value = value;
 
         // 吸引速度
-        this.attractionSpeed = 450;
+        this.baseAttractionSpeed = 450; // 基础吸引速度
+        this.attractionSpeed = this.baseAttractionSpeed;
+        this.isAttracted = false; // 是否已被玩家吸引
 
         // 初始速度
         this.vx = (Math.random() - 0.5) * 50;
@@ -37,46 +39,59 @@ class ExperienceGem extends GameObject {
     update(dt, player) {
         // 如果经验宝石不活动或已标记为垃圾，不更新
         if (!this.isActive || this.isGarbage) return;
+
         // 计算到玩家的距离
         const dx = player.x - this.x;
         const dy = player.y - this.y;
         const distSq = dx * dx + dy * dy;
 
-        // 如果在吸引范围内，向玩家移动
-        if (distSq < player.pickupRadiusSq) {
-            // 计算吸引力
-            const dist = Math.sqrt(distSq);
-            const attractionFactor = 1 + (player.pickupRadiusSq - distSq) / player.pickupRadiusSq * 2.5;
-
-            // 计算加速度
-            if (dist > 0) {
-                this.ax = (dx / dist) * this.attractionSpeed * attractionFactor;
-                this.ay = (dy / dist) * this.attractionSpeed * attractionFactor;
+        // 如果已被吸引，或者在吸引范围内，则向玩家移动
+        if (this.isAttracted || distSq < player.pickupRadiusSq) {
+            if (!this.isAttracted) {
+                // 首次进入吸引范围
+                this.isAttracted = true;
+                this.attractionSpeed = this.baseAttractionSpeed * 2.0; // 吸引后速度翻倍
+                // 清除初始的随机速度，使其直接飞向玩家
+                this.vx = 0;
+                this.vy = 0;
             }
+
+            const dist = Math.sqrt(distSq);
+            // 即使在吸引状态，如果距离过近，也可以直接收集，避免抖动
+            if (dist < 5) { // 假设一个很小的距离阈值可以直接收集
+                 player.gainXP(this.value);
+                 this.isGarbage = true;
+                 this.isActive = false;
+                 return;
+            }
+
+            // 计算加速度/直接设置速度，使其飞向玩家
+            if (dist > 0) {
+                // 直接设置速度飞向玩家，而不是通过加速度
+                this.vx = (dx / dist) * this.attractionSpeed;
+                this.vy = (dy / dist) * this.attractionSpeed;
+            }
+            this.ax = 0; // 清除加速度，因为我们直接设置速度
+            this.ay = 0;
         } else {
-            // 不在吸引范围内，减少速度
+            // 不在吸引范围内，且未被吸引，应用初始的随机运动和摩擦力
             this.ax = 0;
             this.ay = 0;
+            // 更新速度 (如果之前有初始速度逻辑)
+            this.vx += this.ax * dt;
+            this.vy += this.ay * dt;
+            this.vx *= this.friction;
+            this.vy *= this.friction;
         }
 
-        // 更新速度
-        this.vx += this.ax * dt;
-        this.vy += this.ay * dt;
-
-        // 应用摩擦力
-        this.vx *= this.friction;
-        this.vy *= this.friction;
-
-        // 更新位置
+        // 更新位置 (如果上面没有直接设置速度，则基于vx, vy更新)
+        // 如果isAttracted，则上面已经更新了vx, vy
         this.x += this.vx * dt;
         this.y += this.vy * dt;
 
-        // 检查与玩家的碰撞
+        // 检查与玩家的碰撞 (如果上面没有因为距离过近而收集)
         if (this.checkCollision(player)) {
-            // 玩家获得经验
             player.gainXP(this.value);
-
-            // 标记为垃圾
             this.isGarbage = true;
             this.isActive = false;
         }

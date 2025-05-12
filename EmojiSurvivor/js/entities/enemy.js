@@ -64,6 +64,9 @@ class Enemy extends Character {
                 this.attackCooldown = this.attackCooldownTime;
             }
         }
+        
+        // 处理状态效果
+        this.handleStatusEffects(dt);
     }
     
     /**
@@ -181,24 +184,46 @@ class Enemy extends Character {
      * @param {GameObject} killer - 击杀者
      */
     onDeath(killer) {
-        // 调用父类死亡处理
-        super.onDeath(killer);
-        
-        // 如果是爆炸敌人，创建爆炸效果
-        if (this.type && this.type.explodeOnDeath) {
-            this.createExplosion(this.type.explodeRadius || 120, this.type.explodeDamage || 15);
-        }
-        
-        // 如果击杀者是玩家，增加击杀数
-        if (killer === player) {
-            // 增加击杀数
-            killCount++;
-            // 生成经验宝石
-            this.dropXP();
-            // 随机掉落物品
-            if (Math.random() < 0.05) { // 5%几率掉落物品
-                this.dropItem();
+        // Check for Relic Soul passive
+        let turnedToGhost = false;
+        if (killer === player && player.hasPassive('Relic Soul')) {
+            const relicSoulItem = player.passiveItems.find(item => item instanceof RelicSoulPassive);
+            if (relicSoulItem) {
+                const canConvert = !(this instanceof BossEnemy) || relicSoulItem.canConvertBoss;
+                const currentGhostCount = ghostAllies.filter(g => g.isActive && !g.isGarbage).length;
+                
+                if (canConvert && currentGhostCount < relicSoulItem.maxGhosts) {
+                    const ghost = new GhostAlly(this.x, this.y, relicSoulItem.ghostDamage, relicSoulItem.ghostDuration, player);
+                    ghostAllies.push(ghost); // Add to the new global array
+                    turnedToGhost = true;
+                    console.log('Enemy turned into Ghost Ally!');
+                }
             }
+        }
+
+        // If not turned into a ghost, proceed with normal death
+        if (!turnedToGhost) {
+            // 调用父类死亡处理 (Character.onDeath sets isGarbage/isActive)
+            super.onDeath(killer);
+            
+            // 如果是爆炸敌人，创建爆炸效果
+            if (this.type && this.type.explodeOnDeath) {
+                this.createExplosion(this.type.explodeRadius || 120, this.type.explodeDamage || 15);
+            }
+            
+            // 如果击杀者是玩家，增加击杀数, 掉落等
+            if (killer === player) {
+                // 增加击杀数
+                killCount++;
+                // 生成经验宝石
+                this.dropXP();
+                // 随机掉落物品 (use spawnRandomPickup from game.js)
+                spawnRandomPickup(this.x, this.y);
+            }
+        } else {
+            // If turned into ghost, still need to mark original enemy as garbage
+             this.isGarbage = true;
+             this.isActive = false;
         }
     }
 
@@ -308,10 +333,36 @@ class Enemy extends Character {
     draw(ctx) {
         // 如果敌人不活动或已标记为垃圾，不绘制
         if (!this.isActive || this.isGarbage) return;
-
-        // 调用父类绘制方法
-        super.draw(ctx);
-        // 如果是Boss，绘制生命条
+        
+        // 保存状态
+        ctx.save();
+        
+        // 获取屏幕坐标
+        const screenPos = cameraManager.worldToScreen(this.x, this.y);
+        
+        // 如果被眩晕，改变颜色或添加效果
+        if (this.isStunned()) {
+            ctx.filter = 'opacity(0.6) drop-shadow(0 0 5px yellow)';
+        }
+        
+        // 调用父类绘制方法绘制基础 Emoji
+        super.draw(ctx); // 传递 screenPos (假设父类 draw 接受)
+        
+        // 绘制燃烧效果
+        if (this.statusEffects.burn) {
+            const burnSize = this.size * 0.4;
+            const burnX = screenPos.x;
+            const burnY = screenPos.y - this.size * 0.6; // 在头上显示
+            ctx.font = `${burnSize}px 'Segoe UI Emoji', Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('🔥', burnX + Math.random()*4-2, burnY + Math.random()*4-2); // 加点抖动
+        }
+        
+        // 恢复状态
+        ctx.restore();
+        
+        // 绘制生命条
         if (this.isBoss) {
             this.drawHealthBar(ctx);
         }
@@ -335,6 +386,67 @@ class Enemy extends Character {
         // 绘制生命条
         ctx.fillStyle = `rgb(${255 * (1 - healthPercent)}, ${255 * healthPercent}, 0)`;
         ctx.fillRect(screenPos.x - barWidth / 2, screenPos.y + this.size / 2 + 5, barWidth * healthPercent, barHeight);
+    }
+
+    /**
+     * 处理状态效果
+     * @param {number} dt - 时间增量
+     */
+    handleStatusEffects(dt) {
+        // 处理燃烧
+        if (this.statusEffects.burn) {
+            const burn = this.statusEffects.burn;
+            burn.duration -= dt;
+            burn.tickTimer -= dt;
+            
+            if (burn.tickTimer <= 0) {
+                // 造成燃烧伤害
+                this.takeDamage(burn.damage, burn.source, true); // 添加一个 isBurnDamage 标志
+                burn.tickTimer = burn.tickInterval; // 重置计时器
+            }
+            
+            if (burn.duration <= 0) {
+                delete this.statusEffects.burn; // 移除效果
+            }
+        }
+        
+        // 处理眩晕 (已有逻辑，无需修改，除非要调整)
+        // ...
+        
+        // 处理减速 (已有逻辑，无需修改)
+        // ...
+    }
+
+    /**
+     * 受到伤害
+     * @param {number} amount - 伤害量
+     * @param {GameObject} source - 伤害来源
+     * @param {boolean} isBurnDamage - 是否是燃烧伤害（可选）
+     * @returns {boolean} 是否死亡
+     */
+    takeDamage(amount, source, isBurnDamage = false) { // 添加 isBurnDamage 参数
+        // 如果已标记为垃圾，不受伤害
+        if (this.isGarbage) return false;
+
+        // 计算护甲减伤 (燃烧伤害可能忽略护甲，根据需要决定)
+        const armor = 0; // 假设燃烧忽略护甲
+        const actualDamage = isBurnDamage ? amount : Math.max(1, amount - armor);
+
+        // 减少生命值
+        this.health -= actualDamage;
+
+        // 创建伤害数字 (区分燃烧伤害和直接伤害)
+        const damageColor = isBurnDamage ? 'orange' : 'white'; // 燃烧伤害用橙色
+        const damageText = actualDamage.toFixed(isBurnDamage ? 1 : 0); // 燃烧伤害显示小数
+        spawnDamageNumber(this.x, this.y - this.size / 2, damageText); 
+        // 注意：这里没有传递颜色，spawnDamageNumber 目前是固定红/白，需要修改它或在此处直接创建
+
+        // 检查是否死亡
+        if (this.health <= 0) {
+            this.onDeath(source);
+            return true;
+        }
+        return false;
     }
 }
 
@@ -693,11 +805,11 @@ class BossEnemy extends Enemy {
                 let alpha;
                 if (this.timer < this.expandDuration) {
                     // 扩张阶段：逐渐增加透明度
-                    alpha = this.timer / this.expandDuration * 0.5;
+                    alpha = this.timer / this.expandDuration * 0.3;
                 } else {
                     // 保持阶段：闪烁效果
                     const t = (this.timer - this.expandDuration) / this.holdDuration;
-                    alpha = 0.5 - 0.3 * Math.sin(t * Math.PI * 10);
+                    alpha = 0.3 - 0.2 * Math.sin(t * Math.PI * 10);
                 }
 
                 // 绘制范围攻击效果
@@ -893,7 +1005,7 @@ class BossEnemy extends Enemy {
      */
     performBarrage(target) {
         // 弹幕波数
-        const waveCount = 3;
+        const waveCount = 1;
 
         // 每波投射物数量
         const projectilesPerWave = this.projectileCount * 2;
@@ -1206,8 +1318,8 @@ class BossEnemy extends Enemy {
         ctx.fillRect(barX, barY, barWidth * healthPercent, barHeight);
 
         // 绘制边框
-        ctx.strokeStyle = '#222';
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 3;
         ctx.strokeRect(barX, barY, barWidth, barHeight);
         ctx.lineWidth = 1;
 
@@ -1217,35 +1329,146 @@ class BossEnemy extends Enemy {
         ctx.textAlign = 'center';
         ctx.fillText(this.name, x, barY - 5);
     }
+}
 
-    /**
-     * 死亡处理
-     * @param {GameObject} killer - 击杀者
-     */
-    onDeath(killer) {
-        // 标记为垃圾和非活动
-        this.isGarbage = true;
-        this.isActive = false;
+/**
+ * 幽灵盟友类
+ * 由舍利子回魂被动转化而来
+ */
+class GhostAlly extends Character {
+    constructor(x, y, damage, duration, owner) {
+        super(x, y, '👻', GAME_FONT_SIZE * 1.2, { health: 1, speed: 120, damage: damage, xp: 0 });
+        this.duration = duration;
+        this.timer = 0;
+        this.owner = owner; // The player who summoned it
+        this.targetEnemy = null;
+        this.attackCooldown = 0;
+        this.attackInterval = 1.0; // Attack once per second
+        this.attackRange = 50;
+    }
 
-        // 如果击杀者是玩家，掉落物品
-        if (killer instanceof Player) {
-            // 增加击杀计数
-            killCount++;
+    update(dt) {
+        if (!this.isActive || this.isGarbage) return;
 
-            // 掉落宝箱
-            worldObjects.push(new Chest(this.x, this.y));
-
-            // 掉落大量经验宝石
-            for (let i = 0; i < 15; i++) {
-                const gemX = this.x + (Math.random() - 0.5) * 60;
-                const gemY = this.y + (Math.random() - 0.5) * 60;
-                xpGems.push(new XPGem(gemX, gemY, Math.ceil(this.xpValue / 15)));
-            }
+        this.timer += dt;
+        if (this.timer >= this.duration) {
+            this.isGarbage = true;
+            this.isActive = false;
+            // Optional: add a fade-out effect
+            return;
         }
 
-        // 重置当前Boss
-        bossManager.currentBoss = null;
+        // Find nearest enemy
+        let closestEnemy = null;
+        let minDistSq = Infinity;
 
-        console.log("Boss 被击败!");
+        enemies.forEach(enemy => {
+            if (enemy.isActive && !enemy.isGarbage && !(enemy instanceof GhostAlly)) { // Don't target other ghosts
+                const dx = enemy.x - this.x;
+                const dy = enemy.y - this.y;
+                const distSq = dx * dx + dy * dy;
+                if (distSq < minDistSq) {
+                    minDistSq = distSq;
+                    closestEnemy = enemy;
+                }
+            }
+        });
+
+        this.targetEnemy = closestEnemy;
+
+        // Update movement towards target
+        if (this.targetEnemy) {
+            const dx = this.targetEnemy.x - this.x;
+            const dy = this.targetEnemy.y - this.y;
+            const dist = Math.sqrt(minDistSq);
+
+            if (dist > this.attackRange * 0.8) { // Move if outside attack range
+                const dirX = dx / dist;
+                const dirY = dy / dist;
+                const currentSpeed = this.getCurrentSpeed();
+                this.x += dirX * currentSpeed * dt;
+                this.y += dirY * currentSpeed * dt;
+            } else {
+                // Inside attack range, check attack cooldown
+                if (this.attackCooldown <= 0) {
+                    this.attack(this.targetEnemy);
+                    this.attackCooldown = this.attackInterval;
+                }
+            }
+        } else {
+            // No target? Maybe wander slightly or stay put.
+            // Simple wander: Add small random velocity occasionally
+            if (Math.random() < 0.01) {
+                 this.vx = (Math.random() - 0.5) * 50;
+                 this.vy = (Math.random() - 0.5) * 50;
+            } else {
+                this.vx *= 0.9; // Slow down
+                this.vy *= 0.9;
+            }
+             this.x += this.vx * dt;
+             this.y += this.vy * dt;
+        }
+        
+        if (this.attackCooldown > 0) {
+            this.attackCooldown -= dt;
+        }
+
+        // Keep ghost within camera bounds slightly more aggressively?
+        // Or let them roam freely.
+    }
+
+    attack(target) {
+        if (target && target.isActive && !target.isGarbage) {
+             target.takeDamage(this.damage, this.owner); // Damage source is the player
+             // Add a small visual effect for the attack
+            this.createAttackEffect(target);
+        }
+    }
+    
+    createAttackEffect(target) {
+        const effect = {
+            x: this.x,
+            y: this.y,
+            targetX: target.x,
+            targetY: target.y,
+            lifetime: 0.2,
+            timer: 0,
+            isGarbage: false,
+            update: function(dt) { this.timer += dt; if (this.timer >= this.lifetime) this.isGarbage = true; },
+            draw: function(ctx) {
+                if (this.isGarbage) return;
+                const fromPos = cameraManager.worldToScreen(this.x, this.y);
+                const toPos = cameraManager.worldToScreen(this.targetX, this.targetY);
+                const alpha = 0.6 * (1 - this.timer / this.lifetime);
+                ctx.strokeStyle = `rgba(180, 180, 220, ${alpha})`;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(fromPos.x, fromPos.y);
+                ctx.lineTo(toPos.x, toPos.y);
+                ctx.stroke();
+            }
+        };
+        visualEffects.push(effect);
+    }
+
+    draw(ctx) {
+        if (!this.isActive || this.isGarbage) return;
+        
+        ctx.save();
+        const screenPos = cameraManager.worldToScreen(this.x, this.y);
+        
+        // Make ghost semi-transparent and maybe slightly blue/white
+        ctx.globalAlpha = 0.6 + Math.sin(this.timer * 5) * 0.1; // Pulsating alpha
+        ctx.filter = 'brightness(1.2) saturate(0.5)'; // Adjust filter as needed
+        
+        super.draw(ctx); // Draw the base emoji '👻'
+        
+        ctx.restore();
+    }
+
+    // Ghosts don't drop XP or items
+    onDeath(killer) { 
+         this.isGarbage = true;
+         this.isActive = false;
     }
 }

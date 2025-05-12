@@ -68,6 +68,21 @@ class Projectile extends GameObject {
         // 状态
         this.isActive = true;
         this.isGarbage = false;
+
+        // --- 新增：重置子类可能添加的特殊属性 ---
+        this.onHit = null;          // 重置命中回调
+        this.drawEffect = null;     // 重置特殊绘制效果回调
+        this.chainCount = 0;      // 重置链式攻击计数
+        this.chainRange = 0;      // 重置链式攻击范围
+        this.stunDuration = 0;    // 重置眩晕持续时间
+        this.burnDamage = 0;      // 重置燃烧伤害
+        this.burnDuration = 0;    // 重置燃烧持续时间
+        this.chainingNow = false; // 重置岚刀属性
+        this.exploded = false;    // 重置握握手属性
+        this.rotation = 0;        // 重置握握手旋转
+        this.particleTimer = 0;   // 重置粒子计时器
+        // ---
+
         // 支持链式调用
         return this;
     }

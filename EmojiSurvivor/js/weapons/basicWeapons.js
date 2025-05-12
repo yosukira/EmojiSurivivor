@@ -71,8 +71,8 @@ class DaggerWeapon extends Weapon {
             const vx = Math.cos(angle) * speed;
             const vy = Math.sin(angle) * speed;
 
-            // 创建投射物
-            const proj = spawnProjectile(
+            // 创建投射物 - 不再使用对象池，直接创建新的 Projectile
+            const proj = new Projectile(
                 owner.x,
                 owner.y,
                 this.emoji,
@@ -84,6 +84,12 @@ class DaggerWeapon extends Weapon {
                 duration,
                 ownerStats
             );
+            // 添加到全局投射物列表 (需要确保 Projectile 类是可访问的)
+            if (typeof projectiles !== 'undefined') {
+                projectiles.push(proj);
+            } else {
+                console.error('全局 projectiles 数组未定义!');
+            }
 
             // 设置拥有者
             proj.owner = owner;
@@ -95,17 +101,40 @@ class DaggerWeapon extends Weapon {
      * @returns {string} 升级描述
      */
     getUpgradeDescription() {
-        let desc = `Lv${this.level + 1}: `;
+        const nextLevel = this.level + 1;
+        if (nextLevel > this.maxLevel) return "已达最高等级";
 
-        if (this.level % 2 === 0) {
-            desc += "+1 投射物。";
-        } else if (this.level % 3 === 0) {
-            desc += "+1 穿透。";
-        } else {
-            desc += "+伤害/速度。";
+        const tempStats = JSON.parse(JSON.stringify(this.stats));
+        const originalLevel = this.level;
+        this.level = nextLevel;
+        const nextLevelStats = this.calculateStats(); // this.stats is modified here
+        const descParts = [];
+
+        if (nextLevelStats.damage > tempStats.damage) {
+            descParts.push(`伤害: ${tempStats.damage.toFixed(0)} → ${nextLevelStats.damage.toFixed(0)}`);
+        }
+        if (nextLevelStats.projectileSpeed > tempStats.projectileSpeed) {
+            descParts.push(`速度: ${tempStats.projectileSpeed.toFixed(0)} → ${nextLevelStats.projectileSpeed.toFixed(0)}`);
+        }
+        if (nextLevelStats.count > tempStats.count) {
+            descParts.push(`投射物: ${tempStats.count} → ${nextLevelStats.count}`);
+        }
+        if (nextLevelStats.pierce > tempStats.pierce) {
+            descParts.push(`穿透: ${tempStats.pierce} → ${nextLevelStats.pierce}`);
+        }
+        const nextCooldown = Math.max(0.3, this.baseCooldown - (nextLevel - 1) * 0.08);
+        const currentCooldown = Math.max(0.3, this.baseCooldown - (originalLevel - 1) * 0.08);
+        if (nextCooldown < currentCooldown) {
+             descParts.push(`冷却: ${currentCooldown.toFixed(2)}s → ${nextCooldown.toFixed(2)}s`);
         }
 
-        return desc + ` (冷却: ${Math.max(0.3, this.baseCooldown - this.level * 0.08).toFixed(2)}s)`;
+        this.level = originalLevel; // Restore level
+        this.calculateStats(); // Restore stats
+
+        if (descParts.length === 0) {
+            return `Lv${nextLevel}: 属性小幅提升。`;
+        }
+        return `Lv${nextLevel}: ${descParts.join(', ')}。`;
     }
 
     /**
@@ -125,7 +154,7 @@ class GarlicWeapon extends Weapon {
     /**
      * 静态属性
      */
-    static Name = "大蒜";
+    static Name = "痛苦力场";
     static Emoji = "🧄";
     static MaxLevel = 8;
 
@@ -247,7 +276,37 @@ class GarlicWeapon extends Weapon {
      * @returns {string} 升级描述
      */
     getUpgradeDescription() {
-        return `Lv${this.level + 1}: +伤害/范围/减速效果。`;
+        const nextLevel = this.level + 1;
+        if (nextLevel > this.maxLevel) return "已达最高等级";
+
+        const tempStats = JSON.parse(JSON.stringify(this.stats));
+        const originalLevel = this.level;
+        this.level = nextLevel;
+        const nextLevelStats = this.calculateStats();
+        const descParts = [];
+
+        if (nextLevelStats.damage > tempStats.damage) {
+            descParts.push(`伤害: ${tempStats.damage.toFixed(0)} → ${nextLevelStats.damage.toFixed(0)}`);
+        }
+        if (nextLevelStats.radius > tempStats.radius) {
+            descParts.push(`范围: ${tempStats.radius.toFixed(0)} → ${nextLevelStats.radius.toFixed(0)}`);
+        }
+        if (nextLevelStats.knockback > tempStats.knockback) {
+            descParts.push(`击退: ${tempStats.knockback.toFixed(0)} → ${nextLevelStats.knockback.toFixed(0)}`);
+        }
+        // Note: Slow effect changes might be harder to describe briefly if factor & duration change.
+        // For simplicity, we might just state that slow effect improves.
+        if (nextLevelStats.slowFactor < tempStats.slowFactor || nextLevelStats.slowDuration > tempStats.slowDuration) {
+             descParts.push(`减速效果提升`);
+        }
+
+        this.level = originalLevel;
+        this.calculateStats();
+
+        if (descParts.length === 0) {
+            return `Lv${nextLevel}: 属性小幅提升。`;
+        }
+        return `Lv${nextLevel}: ${descParts.join(', ')}。`;
     }
 
     /**
@@ -255,7 +314,7 @@ class GarlicWeapon extends Weapon {
      * @returns {string} 初始描述
      */
     getInitialDescription() {
-        return "创建伤害光环，减速敌人。";
+        return "在你周围产生一个伤害光环，并减速敌人。";
     }
 }
 
@@ -453,7 +512,7 @@ class WhipWeapon extends Weapon {
             draw: function(ctx) {
                 if (this.isGarbage) return;
                 // 计算透明度
-                const alpha = 0.7 * (1 - this.lifetime / this.duration);
+                const alpha = 0.6 * (1 - this.lifetime / this.duration); // 稍微降低基础透明度
                 // 获取屏幕坐标
                 const screenPos = cameraManager.worldToScreen(this.x, this.y);
                 // 保存上下文
@@ -461,21 +520,25 @@ class WhipWeapon extends Weapon {
                 // 平移到玩家位置
                 ctx.translate(screenPos.x, screenPos.y);
                 // 旋转
-                ctx.rotate(this.angle);
+                ctx.rotate(this.angle + Math.PI / 2); // 旋转90度，使其与攻击方向垂直
+
                 // 绘制鞭子
-                ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
-                ctx.lineWidth = this.width * cameraManager.zoom * (0.5 + 0.5 * (1 - this.lifetime / this.duration));
-                // 绘制鞭子曲线
-                ctx.beginPath();
-                ctx.moveTo(0, 0);
-                // 绘制贝塞尔曲线
+                ctx.strokeStyle = `rgba(220, 220, 220, ${alpha})`; // 鞭子颜色调为浅灰
+                // 调整 lineWidth 使其更细，并随动画变化
+                const baseLineWidth = Math.max(2, this.width * cameraManager.zoom * 0.15); // 更细的基础宽度
                 const progress = this.lifetime / this.duration;
-                const controlX = this.length * 0.5;
-                const controlY = this.width * 0.5 * Math.sin(progress * Math.PI);
-                const endX = this.length * progress;
-                const endY = 0;
-                ctx.quadraticCurveTo(controlX, controlY, endX, endY);
+                // 鞭子宽度从中间向两端逐渐变细的效果
+                ctx.lineWidth = baseLineWidth * (1 - Math.abs(progress - 0.5) * 1.5);
+
+                ctx.beginPath();
+                ctx.moveTo(-this.length / 2, 0);
+                // 使用更平滑的曲线，或者简单的直线
+                // ctx.lineTo(this.length / 2, 0); // 简单直线
+                // 贝塞尔曲线，使其有挥舞感
+                const controlY = this.length * 0.2 * Math.sin(progress * Math.PI); // 控制点Y随动画变化
+                ctx.quadraticCurveTo(0, controlY, this.length / 2, 0);
                 ctx.stroke();
+                
                 // 恢复上下文
                 ctx.restore();
             }
@@ -517,13 +580,40 @@ class WhipWeapon extends Weapon {
      * @returns {string} 升级描述
      */
     getUpgradeDescription() {
-        let desc = `Lv${this.level + 1}: `;
-        if (this.level % 4 === 0) {
-            desc += "+1 鞭子。";
-        } else {
-            desc += "+伤害/范围。";
+        const nextLevel = this.level + 1;
+        if (nextLevel > this.maxLevel) return "已达最高等级";
+
+        const tempStats = JSON.parse(JSON.stringify(this.stats));
+        const originalLevel = this.level;
+        this.level = nextLevel;
+        const nextLevelStats = this.calculateStats();
+        const descParts = [];
+
+        if (nextLevelStats.damage > tempStats.damage) {
+            descParts.push(`伤害: ${tempStats.damage.toFixed(1)} → ${nextLevelStats.damage.toFixed(1)}`);
         }
-        return desc + ` (冷却: ${Math.max(0.3, this.baseCooldown - this.level * 0.15).toFixed(2)}s)`;
+         if (nextLevelStats.width > tempStats.width) {
+            descParts.push(`宽度: ${tempStats.width.toFixed(0)} → ${nextLevelStats.width.toFixed(0)}`);
+        }
+        if (nextLevelStats.count > tempStats.count) {
+            descParts.push(`鞭数: ${tempStats.count} → ${nextLevelStats.count}`);
+        }
+        if (nextLevelStats.pierce > tempStats.pierce) {
+            descParts.push(`穿透: ${tempStats.pierce} → ${nextLevelStats.pierce}`);
+        }
+        const nextCooldown = Math.max(0.3, this.baseCooldown - (nextLevel - 1) * 0.05);
+        const currentCooldown = Math.max(0.3, this.baseCooldown - (originalLevel - 1) * 0.05);
+         if (nextCooldown < currentCooldown) {
+             descParts.push(`冷却: ${currentCooldown.toFixed(2)}s → ${nextCooldown.toFixed(2)}s`);
+        }
+
+        this.level = originalLevel;
+        this.calculateStats();
+
+        if (descParts.length === 0) {
+            return `Lv${nextLevel}: 属性小幅提升。`;
+        }
+        return `Lv${nextLevel}: ${descParts.join(', ')}。`;
     }
 
     /**

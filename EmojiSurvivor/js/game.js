@@ -18,6 +18,7 @@ let lastTime = 0;
 let deltaTime = 0;
 let killCount = 0;
 let animationFrameId = null;
+let playerImage = null; // 用于存储玩家图片
 
 // 游戏对象
 let player;
@@ -28,6 +29,7 @@ let xpGems = [];
 let worldObjects = [];
 let visualEffects = [];
 let damageNumbers = [];
+let ghostAllies = []; // For Relic Soul passive
 
 // 对象池
 let inactiveProjectiles = [];
@@ -68,9 +70,11 @@ const enemyManager = {
     },
 
     spawnEnemies(gameTime, player) {
-        // 获取玩家位置
-        const playerX = player.x;
-        const playerY = player.y;
+        // 获取相机视图的中心和半宽/半高
+        const viewCenterX = cameraManager.x;
+        const viewCenterY = cameraManager.y;
+        const halfWidth = GAME_WIDTH / 2;
+        const halfHeight = GAME_HEIGHT / 2;
         
         // 根据游戏时间获取可用敌人类型
         const availableEnemies = ENEMY_TYPES.filter(enemy => !enemy.minTime || gameTime >= enemy.minTime);
@@ -91,12 +95,29 @@ const enemyManager = {
         
         // 生成敌人
         for (let i = 0; i < spawnCount; i++) {
-            // 生成位置（屏幕外一定距离）
-            const angle = Math.random() * Math.PI * 2;
-            const distance = SPAWN_PADDING + Math.random() * 50; // 确保从屏幕外生成
-            
-            const x = playerX + Math.cos(angle) * distance;
-            const y = playerY + Math.sin(angle) * distance;
+            // 随机选择生成边缘 (0:上, 1:右, 2:下, 3:左)
+            const edge = Math.floor(Math.random() * 4);
+            let x, y;
+            const spawnDist = SPAWN_PADDING; // 使用常量 SPAWN_PADDING
+
+            switch (edge) {
+                case 0: // 上边缘
+                    x = viewCenterX - halfWidth - spawnDist + Math.random() * (GAME_WIDTH + 2 * spawnDist);
+                    y = viewCenterY - halfHeight - spawnDist;
+                    break;
+                case 1: // 右边缘
+                    x = viewCenterX + halfWidth + spawnDist;
+                    y = viewCenterY - halfHeight - spawnDist + Math.random() * (GAME_HEIGHT + 2 * spawnDist);
+                    break;
+                case 2: // 下边缘
+                    x = viewCenterX - halfWidth - spawnDist + Math.random() * (GAME_WIDTH + 2 * spawnDist);
+                    y = viewCenterY + halfHeight + spawnDist;
+                    break;
+                case 3: // 左边缘
+                    x = viewCenterX - halfWidth - spawnDist;
+                    y = viewCenterY - halfHeight - spawnDist + Math.random() * (GAME_HEIGHT + 2 * spawnDist);
+                    break;
+            }
             
             // 根据权重随机选择敌人类型
             const rand = Math.random() * totalWeight;
@@ -194,8 +215,8 @@ const bossManager = {
         const x = player.x + Math.cos(angle) * distance;
         const y = player.y + Math.sin(angle) * distance;
 
-        // 创建Boss
-        const boss = new Enemy(x, y, bossType, true);
+        // 创建Boss - 使用 BossEnemy 类
+        const boss = new BossEnemy(x, y, bossType);
 
         // 添加到敌人列表
         enemies.push(boss);
@@ -232,6 +253,17 @@ function init() {
     offscreenCanvas.height = GAME_HEIGHT;
     offscreenCtx = offscreenCanvas.getContext('2d');
 
+    // 加载玩家图片
+    playerImage = new Image();
+    playerImage.src = 'assets/ninja.png';
+    playerImage.onload = () => {
+        console.log("玩家图片加载完成。");
+    };
+    playerImage.onerror = () => {
+        console.error("无法加载玩家图片！");
+        playerImage = null; // 加载失败则不使用图片
+    };
+
     // 清空对象池和活动列表
     inactiveProjectiles = [];
     inactiveDamageNumbers = [];
@@ -242,6 +274,7 @@ function init() {
     xpGems = [];
     worldObjects = [];
     visualEffects = [];
+    ghostAllies = []; // 清空幽灵盟友列表
 
     // 重置状态
     isGameOver = false;
@@ -323,16 +356,18 @@ function spawnProjectile(x, y, emoji, size, vx, vy, damage, pierce, duration, ow
  * @param {number} x - X坐标
  * @param {number} y - Y坐标
  * @param {string} text - 文本
- * @param {number} size - 大小
- * @param {string} color - 颜色
- * @param {number} duration - 持续时间
  * @returns {DamageNumber} 生成的伤害数字
  */
-function spawnDamageNumber(x, y, text, size = 20, color = 'white', duration = 0.8) {
+function spawnDamageNumber(x, y, text) {
+    const size = GAME_FONT_SIZE * 0.8; // 固定大小，可以调整这个系数
+    const color = 'rgb(255, 80, 80)'; // 固定为亮红色
+    const duration = 0.7; // 固定持续时间
+
     let damageNumber = null;
     if (inactiveDamageNumbers.length > 0) {
         damageNumber = inactiveDamageNumbers.pop();
-        damageNumber.init(x, y, text, color, duration);
+        // 需要确保 init 方法也更新，或者在获取时设置属性
+        damageNumber.init(x, y, text, size, color, duration);
     } else {
         damageNumber = new DamageNumber(x, y, text, size, color, duration);
     }
@@ -420,6 +455,14 @@ function update(dt) {
         }
     }
 
+    // 更新幽灵盟友
+    for (let i = ghostAllies.length - 1; i >= 0; i--) {
+        ghostAllies[i].update(dt, enemies); // Pass enemies for targeting
+        if (ghostAllies[i].isGarbage) {
+            ghostAllies.splice(i, 1);
+        }
+    }
+
     // 对象池回收
     // 倒序遍历以安全地使用 splice
     for (let i = projectiles.length - 1; i >= 0; i--) {
@@ -467,7 +510,7 @@ function update(dt) {
 function draw() {
     try {
         // 使用离屏画布进行绘制
-        offscreenCtx.fillStyle = '#2d2d3a';
+        offscreenCtx.fillStyle = '#1a4d2e';
         offscreenCtx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
         // 绘制经验宝石
         for (let i = 0; i < xpGems.length; i++) {
@@ -531,6 +574,13 @@ function draw() {
             }
         }
 
+        // 绘制幽灵盟友
+        for (const ally of ghostAllies) {
+            if (ally.isActive) {
+                ally.draw(offscreenCtx);
+            }
+        }
+
         // 将离屏画布内容复制到显示画布
         ctx.drawImage(offscreenCanvas, 0, 0);
     } catch (error) {
@@ -591,6 +641,18 @@ function updateUI() {
         const killCountValueUI = document.getElementById('killCountValue');
         const weaponIconsUI = document.getElementById('weaponIcons');
         const passiveIconsUI = document.getElementById('passiveIcons');
+        
+        // 新增：获取左下角属性UI元素
+        const statDamageUI = document.getElementById('statDamage');
+        const statProjSpeedUI = document.getElementById('statProjSpeed');
+        const statCooldownUI = document.getElementById('statCooldown');
+        const statAreaUI = document.getElementById('statArea');
+        const statDurationUI = document.getElementById('statDuration');
+        const statAmountUI = document.getElementById('statAmount');
+        const statArmorUI = document.getElementById('statArmor');
+        const statRegenUI = document.getElementById('statRegen');
+        const statMoveSpeedUI = document.getElementById('statMoveSpeed');
+        const statPickupUI = document.getElementById('statPickup');
 
         // 更新生命值
         if (healthValueUI) healthValueUI.textContent = Math.ceil(player.health);
@@ -625,8 +687,21 @@ function updateUI() {
                 `<span class="uiIcon" title="${p.name}">${p.emoji}<span class="uiItemLevel">Lv${p.level}</span></span>`
             ).join(' ');
         }
+        
+        // 新增：更新左下角属性值
+        if (statDamageUI) statDamageUI.textContent = player.getStat('damageMultiplier').toFixed(2);
+        if (statProjSpeedUI) statProjSpeedUI.textContent = player.getStat('projectileSpeedMultiplier').toFixed(2);
+        if (statCooldownUI) statCooldownUI.textContent = player.getStat('cooldownMultiplier').toFixed(2);
+        if (statAreaUI) statAreaUI.textContent = player.getStat('areaMultiplier').toFixed(2);
+        if (statDurationUI) statDurationUI.textContent = player.getStat('durationMultiplier').toFixed(2);
+        if (statAmountUI) statAmountUI.textContent = player.getStat('projectileCountBonus').toString();
+        if (statArmorUI) statArmorUI.textContent = player.getStat('armor').toFixed(1);
+        if (statRegenUI) statRegenUI.textContent = player.getStat('regen').toFixed(1);
+        if (statMoveSpeedUI) statMoveSpeedUI.textContent = player.getStat('speed').toFixed(0);
+        if (statPickupUI) statPickupUI.textContent = player.getStat('pickupRadius').toFixed(0);
+        
     } catch (error) {
-        console.error("更新UI时出错:", error);
+        console.error("更新UI时出错:", error, "Player Stats:", JSON.stringify(player?.stats), "Calculated Stats:", JSON.stringify(player?.calculatedStats));
     }
 }
 
@@ -639,12 +714,18 @@ function gameOver() {
         cancelAnimationFrame(animationFrameId);
         animationFrameId = null;
     }
-    // 更新游戏结束界面
-    finalTimeUI.textContent = formatTime(gameTime);
-    finalLevelUI.textContent = player.level;
-    finalKillsUI.textContent = killCount;
+    // 更新游戏结束界面 - **确保在这里获取元素**
+    const finalTimeUI = document.getElementById('finalTime');
+    const finalLevelUI = document.getElementById('finalLevel');
+    const finalKillsUI = document.getElementById('finalKills');
+    const gameOverScreen = document.getElementById('gameOverScreen'); // 也获取一下 gameOverScreen
+    
+    if (finalTimeUI) finalTimeUI.textContent = formatTime(gameTime);
+    if (finalLevelUI) finalLevelUI.textContent = player.level;
+    if (finalKillsUI) finalKillsUI.textContent = killCount;
+    
     // 显示游戏结束界面
-    gameOverScreen.classList.remove('hidden');
+    if (gameOverScreen) gameOverScreen.classList.remove('hidden');
 }
 
 /**
@@ -928,7 +1009,13 @@ function presentLevelUpOptions() {
             if (option.level) {
                 const levelSpan = document.createElement('span');
                 levelSpan.className = 'upgradeLevel';
-                    levelSpan.textContent = (typeof option.level === 'number' && option.level > 0) ? `Lv ${option.level}` : (option.item && option.item.level ? `Lv ${option.item.level}` : '新');
+                levelSpan.textContent = `Lv ${option.level}`;
+                textSpan.appendChild(levelSpan);
+            } else if (option.type === 'new_weapon' || option.type === 'new_passive') {
+                // 对于新武器/被动，明确显示 "新"
+                const levelSpan = document.createElement('span');
+                levelSpan.className = 'upgradeLevel';
+                levelSpan.textContent = '新'; // 使用 "新" 来表示未拥有的物品
                 textSpan.appendChild(levelSpan);
             }
             // 创建描述
@@ -1256,14 +1343,14 @@ class EnemyProjectile {
         // 获取屏幕坐标
         const screenPos = cameraManager.worldToScreen(this.x, this.y);
         
-        // 绘制投射物
-        ctx.fillStyle = 'red';
+        // 绘制投射物 (修改为紫色)
+        ctx.fillStyle = 'purple'; // 修改填充色
         ctx.beginPath();
         ctx.arc(screenPos.x, screenPos.y, this.size / 2, 0, Math.PI * 2);
         ctx.fill();
         
-        // 绘制轨迹
-        ctx.strokeStyle = 'rgba(255, 50, 50, 0.3)';
+        // 绘制轨迹 (修改为紫色)
+        ctx.strokeStyle = 'rgba(128, 0, 128, 0.4)'; // 修改描边色和透明度
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.moveTo(screenPos.x, screenPos.y);
@@ -1275,15 +1362,41 @@ class EnemyProjectile {
     }
 }
 
-// 基础武器列表
+// 基础武器列表 - 确保类名与定义文件一致
 BASE_WEAPONS.length = 0; // 清空现有数组
 if (typeof DaggerWeapon !== 'undefined') BASE_WEAPONS.push(DaggerWeapon);
 if (typeof WhipWeapon !== 'undefined') BASE_WEAPONS.push(WhipWeapon);
 if (typeof GarlicWeapon !== 'undefined') BASE_WEAPONS.push(GarlicWeapon);
-if (typeof LaserSwordWeapon !== 'undefined') BASE_WEAPONS.push(LaserSwordWeapon);
+// 添加高级武器
+if (typeof FireBladeWeapon !== 'undefined') BASE_WEAPONS.push(FireBladeWeapon); // 添加 燃烧刀
+if (typeof StormBladeWeapon !== 'undefined') BASE_WEAPONS.push(StormBladeWeapon); // 添加 岚刀
+if (typeof HandshakeWeapon !== 'undefined') BASE_WEAPONS.push(HandshakeWeapon); // 添加 握握手
 
-// 基础被动道具列表
+// 基础被动道具列表 - 确保类名与定义文件一致
 BASE_PASSIVES.length = 0; // 清空现有数组
-if (typeof MagnetPassive !== 'undefined') BASE_PASSIVES.push(MagnetPassive);
-if (typeof HeartPassive !== 'undefined') BASE_PASSIVES.push(HeartPassive);
-if (typeof TomatoPassive !== 'undefined') BASE_PASSIVES.push(TomatoPassive);
+if (typeof Magnet !== 'undefined') BASE_PASSIVES.push(Magnet); // 修正: MagnetPassive -> Magnet
+if (typeof HollowHeart !== 'undefined') BASE_PASSIVES.push(HollowHeart); // 修正: HeartPassive -> HollowHeart
+if (typeof Pummarola !== 'undefined') BASE_PASSIVES.push(Pummarola); // 修正: TomatoPassive -> Pummarola
+if (typeof Spinach !== 'undefined') BASE_PASSIVES.push(Spinach); // 添加 Spinach
+if (typeof Armor !== 'undefined') BASE_PASSIVES.push(Armor); // 添加 Armor
+if (typeof Wings !== 'undefined') BASE_PASSIVES.push(Wings); // 添加 Wings
+if (typeof EmptyTome !== 'undefined') BASE_PASSIVES.push(EmptyTome); // 添加 EmptyTome
+if (typeof Candelabrador !== 'undefined') BASE_PASSIVES.push(Candelabrador); // 添加 Candelabrador
+if (typeof Bracer !== 'undefined') BASE_PASSIVES.push(Bracer); // 添加 Bracer
+
+function spawnRandomPickup(x, y) {
+    const rand = Math.random();
+
+    // 调整掉落率：
+    // 磁铁: 2% -> 0.5%
+    // 心: 3% -> 1% (累计概率，所以是 0.005 到 0.015)
+    if (rand < 0.005) { // 0.5% 几率掉落磁铁
+        spawnPickup(x, y, 'magnet');
+    } else if (rand < 0.015) { // 1% 几率掉落心 (0.015 - 0.005 = 0.01)
+        spawnPickup(x, y, 'heart');
+    } else {
+        // 剩余 (98.5%) 几率掉落经验
+        const xpValue = Math.random() < 0.1 ? 5 : 1; // 10% 几率掉落大经验
+        spawnPickup(x, y, 'xp', xpValue);
+    }
+}
