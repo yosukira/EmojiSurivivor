@@ -34,6 +34,7 @@ const EMOJI = {
     PROJECTILE_LIGHTNING: '⚡',
     PROJECTILE_GHOST: '👻',
     PROJECTILE_HANDSHAKE: '🤝',
+    SWORD: '🗡️',
     
     // 物品
     XP_GEM: '✨',
@@ -143,7 +144,12 @@ const BOSS_TYPES = [
         damageMult: 1.0,
         xpMult: 1.0,
         attackPattern: "melee",
-        minTime: 0
+        minTime: 0,
+        earthquakeRadius: 280,
+        earthquakeDamageMultiplier: 1.8,
+        earthquakeDuration: 2.0,
+        specialAbilityCooldown: 4.5,
+        specialAttackWarningDuration: 1.0
     },
     {
         name: "幽灵领主",
@@ -157,14 +163,14 @@ const BOSS_TYPES = [
         minTime: BOSS_INTERVAL
     },
     {
-        name: "Giant Zombie",
-        emoji: "🧟",
+        name: "巨型僵尸",
+        emoji: EMOJI.BOSS_ZOMBIE,
         healthMult: 3.0,
         speedMult: 0.6,
         damageMult: 1.8,
         xpMult: 5.0,
         attackPattern: "aoe",
-        minTime: 120
+        minTime: BOSS_INTERVAL * 2
     },
     {
         name: "恶魔领主",
@@ -188,18 +194,5 @@ const BOSS_TYPES = [
         projectileSpeed: 200,
         laserWidth: 40,
         laserDamage: 20
-    },
-    {
-        name: "异形统领",
-        emoji: EMOJI.BOSS_ALIEN,
-        healthMult: 1.8,
-        speedMult: 1.1,
-        damageMult: 1.3,
-        xpMult: 3.0,
-        attackPattern: "dash",
-        minTime: BOSS_INTERVAL * 5,
-        dashSpeed: 500,
-        dashDamage: 25,
-        dashCooldown: 3.0
     }
 ];

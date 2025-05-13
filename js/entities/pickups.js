@@ -465,10 +465,21 @@ class Chest extends GameObject {
         console.log(`宝箱提供 ${numberOfUpgrades} 次升级机会.`);
         
         if (target.pendingLevelUpsFromChest !== undefined) {
-            target.pendingLevelUpsFromChest += numberOfUpgrades; // 使用 += 
+            // 如果当前没有宝箱升级在进行，则这次是新的序列
+            if (target.currentChestTotalUpgrades === 0) {
+                target.currentChestTotalUpgrades = numberOfUpgrades;
+            } else {
+                // 如果已经有宝箱升级在进行，可以选择累加总数，或者按新序列算
+                // 为简单起见，我们假设每次开箱都可能是一个新的序列的开始，或者延续
+                // 如果希望严格区分序列，则逻辑会更复杂。
+                // 当前：将本次次数也计入总数，如果之前就有的话。
+                target.currentChestTotalUpgrades += numberOfUpgrades; 
+            }
+            target.pendingLevelUpsFromChest += numberOfUpgrades; 
         } else {
-            console.warn("Player 对象缺少 pendingLevelUpsFromChest 属性! 将直接给予次数.");
+            console.warn("Player 对象缺少 pendingLevelUpsFromChest 或 currentChestTotalUpgrades 属性! 将直接给予次数.");
             target.pendingLevelUpsFromChest = numberOfUpgrades;
+            target.currentChestTotalUpgrades = numberOfUpgrades;
         }
         // --- 结束核心逻辑 ---
         

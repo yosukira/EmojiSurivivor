@@ -45,6 +45,9 @@ class Player extends Character {
         
         // 新增：宝箱待处理升级次数
         this.pendingLevelUpsFromChest = 0;
+        
+        // 新增：当前宝箱序列的总升级次数
+        this.currentChestTotalUpgrades = 0;
     }
 
     /**
@@ -250,7 +253,17 @@ class Player extends Character {
             this.levelUp();
         } else {
             // 否则，显示升级选项
-            isLevelUp = true;
+            // 只有在没有待处理的宝箱升级时，才由普通升级触发 isLevelUp
+            if (this.pendingLevelUpsFromChest > 0) {
+                // 如果有宝箱升级正在等待或进行中，普通升级不应抢占 isLevelUp。
+                // 经验会保留，宝箱升级序列结束后，如果经验仍然满足条件，
+                // 理论上应该由后续的经验获取再次触发 player.gainXP -> player.levelUp 来处理。
+                // 或者在宝箱序列结束后，在 game.js 中添加逻辑主动检查一次。
+                // 目前的策略是简单地不设置 isLevelUp，让宝箱升级优先。
+                console.log("Player.levelUp: XP met for next level, but pending chest upgrades exist. Suppressing normal level up screen trigger.");
+            } else {
+                isLevelUp = true; // 设置全局标志，由 game.js 处理升级界面的显示
+            }
         }
     }
 

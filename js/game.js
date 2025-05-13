@@ -44,6 +44,11 @@ let killCount = 0;
 let animationFrameId = null;
 let playerImage = null; // 用于存储玩家图片
 
+// 屏幕震动相关变量
+let screenShakeIntensity = 0;
+let screenShakeDuration = 0;
+let screenShakeTimer = 0;
+
 // 游戏对象
 let player;
 let enemies = [];
@@ -409,15 +414,19 @@ function update(dt) {
     }
     // --- 结束新增 ---
 
-    // 如果游戏结束或暂停或升级，只更新经验宝石
-    if (isGameOver || isPaused || isLevelUp) {
-        if (player && xpGems.length > 0) {
-            xpGems.forEach(gem => gem.update(dt * 3.5, player));
-        }
-        return;
-    }
-    // 更新游戏时间
+    if (isGameOver || isPaused || isLevelUp) return;
+
     gameTime += dt;
+
+    // 更新屏幕震动计时器
+    if (screenShakeDuration > 0) {
+        screenShakeTimer += dt;
+        if (screenShakeTimer >= screenShakeDuration) {
+            screenShakeIntensity = 0;
+            screenShakeDuration = 0;
+            screenShakeTimer = 0;
+        }
+    }
 
     // 更新相机
     cameraManager.setTarget(player.x, player.y);
@@ -559,6 +568,23 @@ function update(dt) {
  */
 function draw() {
     try {
+        // 保存原始画布状态
+        ctx.save();
+
+        // 应用屏幕震动
+        let appliedShakeX = 0;
+        let appliedShakeY = 0;
+        if (screenShakeDuration > 0 && screenShakeIntensity > 0) {
+            const currentProgress = screenShakeTimer / screenShakeDuration;
+            // 震动强度可以随时间衰减，例如线性衰减或更复杂的曲线
+            // const currentIntensity = screenShakeIntensity * (1 - currentProgress); // 线性衰减
+            const currentIntensity = screenShakeIntensity; // 或者保持固定强度直到结束
+
+            appliedShakeX = (Math.random() - 0.5) * 2 * currentIntensity;
+            appliedShakeY = (Math.random() - 0.5) * 2 * currentIntensity;
+            ctx.translate(appliedShakeX, appliedShakeY);
+        }
+
         // 使用离屏画布进行绘制
         offscreenCtx.fillStyle = '#1a4d2e';
         offscreenCtx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
@@ -633,6 +659,9 @@ function draw() {
 
         // 将离屏画布内容复制到显示画布
         ctx.drawImage(offscreenCanvas, 0, 0);
+
+        // 恢复画布状态 (移除震动等变换)
+        ctx.restore();
     } catch (error) {
         console.error("绘制过程中发生错误:", error);
     }
@@ -1029,12 +1058,21 @@ function getAvailableUpgrades(player) {
  */
 function presentLevelUpOptions() {
     // 暂停游戏
-    isPaused = true; // 确保 isPaused 在 try 外部设置，以便 finally 中可以正确处理
-    // isLevelUp = true; // 这个状态应该在 Player.levelUp 成功后设置，这里是显示选项
-    console.log("Presenting level up options. Setting isPaused = true."); // <-- 添加日志
+    isPaused = true; 
+    console.log("Presenting level up options. Setting isPaused = true.");
     
     const levelUpScreenElement = document.getElementById('levelUpScreen');
     const upgradeOptionsContainer = document.getElementById('upgradeOptions');
+    const chestUpgradeInfoElement = document.getElementById('chestUpgradeInfo'); // 获取新DOM元素
+
+    // --- 显示宝箱升级提示 ---
+    if (player && player.currentChestTotalUpgrades > 0 && (player.pendingLevelUpsFromChest + 1) > 0) {
+        chestUpgradeInfoElement.textContent = `开启宝箱！共 ${player.currentChestTotalUpgrades} 次升级机会，还剩 ${player.pendingLevelUpsFromChest + 1} 次选择。`;
+        chestUpgradeInfoElement.style.display = 'block';
+    } else {
+        chestUpgradeInfoElement.style.display = 'none';
+    }
+    // --- 结束提示 ---
 
     try {
         // 获取升级选项
@@ -1080,19 +1118,26 @@ function presentLevelUpOptions() {
             button.onclick = () => {
                 try {
                     // 执行选项操作
-                    console.log("Upgrade button clicked. Action:", option.text); // <-- 添加日志
+                    console.log("Upgrade button clicked. Action:", option.text);
                     if (typeof option.action === 'function') {
                         option.action();
                     }
                     levelUpScreenElement.classList.add('hidden');
-                    console.log("Hiding level up screen. Setting isPaused=false, isLevelUp=false."); // <-- 添加日志
+                    console.log("Hiding level up screen. Setting isPaused=false, isLevelUp=false.");
                     isPaused = false;
-                    isLevelUp = false; // <<< 允许主循环检查下一次宝箱升级
+                    isLevelUp = false; 
+
+                    // --- 重置宝箱计数器 (如果适用) ---
+                    if (player && player.pendingLevelUpsFromChest === 0) {
+                        player.currentChestTotalUpgrades = 0; // 所有宝箱升级已完成
+                        console.log("All chest upgrades complete. Resetting currentChestTotalUpgrades.");
+                    }
+                    // --- 结束重置 ---
 
                 } catch (error) {
                     console.error("升级选项执行错误:", error);
                     levelUpScreenElement.classList.add('hidden');
-                    console.log("Error in upgrade action. Setting isPaused=false, isLevelUp=false."); // <-- 添加日志
+                    console.log("Error in upgrade action. Setting isPaused=false, isLevelUp=false.");
                     isPaused = false;
                     isLevelUp = false;
                 }
@@ -1453,4 +1498,14 @@ function spawnRandomPickup(x, y) {
         const xpValue = Math.random() < 0.1 ? 5 : 1; // 10% 几率掉落大经验
         spawnPickup(x, y, 'xp', xpValue);
     }
+}
+
+// 新增：触发屏幕震动函数
+function triggerScreenShake(intensity, duration) {
+    // 如果当前有震动，并且新震动的强度更大，则覆盖；或者简单地总是接受新的震动
+    // 为了简单，这里总是接受新的震动参数，并重置计时器
+    screenShakeIntensity = intensity;
+    screenShakeDuration = duration;
+    screenShakeTimer = 0; // 重置计时器，使新震动立即生效并持续其完整时长
+    // console.log(`Screen shake: intensity=${intensity.toFixed(2)}, duration=${duration.toFixed(2)}`);
 }

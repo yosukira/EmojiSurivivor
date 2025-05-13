@@ -215,16 +215,13 @@ class Enemy extends Character {
 
             // --- 新增：如果是 Boss，则掉落宝箱 ---
             if (this instanceof BossEnemy) {
-                console.log("Boss死亡，尝试掉落宝箱...");
-                if (typeof Chest === 'function' && typeof worldObjects !== 'undefined') {
-                    const chest = new Chest(this.x, this.y);
-                    worldObjects.push(chest);
-                    console.log("宝箱已添加到 worldObjects", chest);
-                    
-                    // 触发游戏结束或胜利状态？
-                    // gameManager.triggerVictory(); // 假设有这样一个方法
-                } else {
-                    console.error("无法创建宝箱，Chest 类或 worldObjects 未定义!");
+                console.log("Boss defeated! Spawning chest...");
+                const chest = new Chest(this.x, this.y);
+                worldObjects.push(chest);
+                // 确保宝箱立即激活（如果 Chest 构造函数没有这么做，或者 isActive 默认为 false）
+                // 并且确保我们操作的是正确的 Chest 实例，以防 worldObjects 中有其他类型的对象
+                if (chest instanceof Chest && !chest.isActive) {
+                     chest.isActive = true;
                 }
             }
             // --- 结束新增 ---
@@ -304,11 +301,18 @@ class Enemy extends Character {
      * 生成经验宝石
      */
     dropXP() {
+        // 如果是Boss，则不掉落经验
+        if (this.isBoss) {
+            return;
+        }
         // 计算经验值
         const xpValue = Math.ceil(this.xpValue);
 
         // 创建经验宝石
-        const gem = new ExperienceGem(this.x, this.y, xpValue);
+        // 在生成经验宝石时，稍微分散一下，避免完全重叠
+        const offsetX = (Math.random() - 0.5) * this.size * 0.5;
+        const offsetY = (Math.random() - 0.5) * this.size * 0.5;
+        const gem = new ExperienceGem(this.x + offsetX, this.y + offsetY, xpValue);
 
         // 添加到经验宝石列表
         xpGems.push(gem);
@@ -502,14 +506,30 @@ class BossEnemy extends Enemy {
         
         // 攻击相关属性
         this.attackTimer = 0;
-        this.attackCooldown = 3.0;
+        this.attackCooldown = bossType.attackCooldown || 3.0; // 普通攻击冷却时间
         this.attackPhase = 0;
         this.projectileCount = bossType.projectileCount || 8;
         
         // 特殊能力
         this.specialAbilityTimer = 0;
-        this.specialAbilityCooldown = 10.0;
+        this.specialAbilityCooldown = bossType.specialAbilityCooldown || 12.0; // 从 bossType 读取或默认12秒
         
+        // 特殊攻击警告相关
+        this.isWarningForSpecialAttack = false;
+        this.specialAttackWarningDuration = bossType.specialAttackWarningDuration || 1.0; // 从 bossType 读取或默认1秒
+        this.specialAttackWarningTimer = 0;
+
+        // 挥剑攻击相关
+        this.isSwingingSword = false;
+        this.swordSwingTimer = 0;
+        this.swordSwingDuration = 0.7; 
+        this.swordAngle = 0;         
+        this.initialSwordAngle = 0;  
+        this.swordReach = this.size * 1.3; // 修改: 判定距离以匹配新的视觉设定 (0.2 + 1.1)
+        this.swordArc = Math.PI / 1.8; 
+        this.swordDamageCooldown = 0.25; 
+        this.lastSwordDamageTime = -1; 
+
         // 掉落几率
         this.dropChance = {
             magnet: 0.5, // 50%几率掉落吸铁石
@@ -520,42 +540,80 @@ class BossEnemy extends Enemy {
     /**
      * 更新Boss状态
      * @param {number} dt - 时间增量
-     * @param {Player} target - 目标玩家
+     * @param {Player} target - 目标玩家 (通常是全局的 player 对象)
      */
     update(dt, target) {
-        // 如果Boss不活动或已标记为垃圾，不更新
         if (this.isGarbage || !this.isActive) return;
 
-        // 调用父类更新方法
-        super.update(dt, target);
+        if (target && target.isActive && !target.isGarbage) {
+            this.target = target;
+        }
+        super.update(dt); // Handles Enemy.updateMovement (which includes base collision attacks) & status effects
 
-        // 更新攻击计时器
-        this.attackTimer -= dt;
+        // 更新挥剑攻击的动画和伤害判定 (如果正在挥剑)
+        if (this.isSwingingSword) {
+            this.swordSwingTimer += dt;
+            this.swordAngle = this.initialSwordAngle + (this.swordSwingTimer / this.swordSwingDuration) * this.swordArc;
 
-        // 如果攻击计时器结束且未被眩晕，执行攻击
-        if (this.attackTimer <= 0 && !this.isStunned()) {
-            // 执行攻击
-            this.performAttack(target);
+            if (target && target.isActive && !target.isGarbage) {
+                if (this.swordSwingTimer > this.lastSwordDamageTime + this.swordDamageCooldown) {
+                    const dxToPlayer = target.x - this.x;
+                    const dyToPlayer = target.y - this.y;
+                    const distToPlayerSq = dxToPlayer * dxToPlayer + dyToPlayer * dyToPlayer;
 
-            // 重置攻击计时器
-            this.attackTimer = this.attackCooldown;
+                    if (distToPlayerSq <= (this.swordReach + target.size * 0.5) * (this.swordReach + target.size * 0.5)) {
+                        const angleToPlayer = Math.atan2(dyToPlayer, dxToPlayer);
+                        let angleDifference = Math.abs(normalizeAngle(angleToPlayer - this.swordAngle));
+                        if (angleDifference > Math.PI) {
+                             angleDifference = 2 * Math.PI - angleDifference;
+                        }
+                        const swordEffectiveAngleWidth = Math.PI / 12;
+                        if (angleDifference <= swordEffectiveAngleWidth / 2) {
+                            target.takeDamage(this.stats.damage, this);
+                            this.lastSwordDamageTime = this.swordSwingTimer;
+                        }
+                    }
+                }
+            }
+
+            if (this.swordSwingTimer >= this.swordSwingDuration) {
+                this.isSwingingSword = false; // 结束挥剑
+            }
         }
 
-        // 更新特殊能力计时器
-        this.specialAbilityTimer -= dt;
+        // 更新普通攻击计时器 (例如挥剑)
+        if (!this.isStunned()) {
+            this.attackTimer -= dt;
+            if (this.attackTimer <= 0) {
+                if (!this.isSwingingSword) { // 只有在不挥剑时才开始新的挥剑
+                    this.performAttack(target); // 对于骷髅王，会调用 performMeleeAttack
+                }
+                // 无论是否开始新挥剑，都重置计时器，以安排下一次尝试
+                this.attackTimer = this.attackCooldown;
+            }
+        }
 
-        // 如果特殊能力计时器结束且未被眩晕，执行特殊能力
-        if (this.specialAbilityTimer <= 0 && !this.isStunned()) {
-            // 执行特殊能力
-            this.performSpecialAbility(target);
-
-            // 重置特殊能力计时器
-            this.specialAbilityTimer = this.specialAbilityCooldown;
+        // 更新特殊攻击计时器和逻辑 (例如地震)
+        if (!this.isStunned()) {
+            if (this.isWarningForSpecialAttack) {
+                this.specialAttackWarningTimer += dt;
+                if (this.specialAttackWarningTimer >= this.specialAttackWarningDuration) {
+                    this.isWarningForSpecialAttack = false;
+                    this.performSpecialAbility(target); // 特殊攻击可以与挥剑同时发生
+                    this.specialAbilityTimer = this.specialAbilityCooldown; // 重置特殊攻击主冷却
+                }
+            } else {
+                this.specialAbilityTimer -= dt;
+                if (this.specialAbilityTimer <= 0) {
+                    this.isWarningForSpecialAttack = true;
+                    this.specialAttackWarningTimer = 0;
+                }
+            }
         }
     }
 
     /**
-     * 执行攻击
+     * 执行攻击 (常规攻击分发)
      * @param {Player} target - 目标玩家
      */
     performAttack(target) {
@@ -596,120 +654,22 @@ class BossEnemy extends Enemy {
      * @param {Player} target - 目标玩家
      */
     performMeleeAttack(target) {
-        // 如果目标不存在或没有攻击能力，则返回
-        // if (!this.currentAbility || !this.currentAbility.type.startsWith('melee')) return; // 暂时注释掉能力检查，以防干扰
-        
-        // --- 新增：更详细的日志 ---
-        console.log(`Boss ${this.name} trying melee attack. Target:`, target);
-        if (!target) {
-             console.error(`Boss ${this.name} melee attack failed: Target is null or undefined.`);
-             return;
-        }
-        if (typeof target.x === 'undefined' || typeof target.y === 'undefined') {
-             console.error(`Boss ${this.name} melee attack failed: Target exists but missing x/y properties. Target:`, JSON.stringify(target));
-             return;
-        }
-         console.log(`Boss ${this.name} melee attack target validated. Accessing target.x...`);
-        // --- 结束新增 ---
+        if (!target || this.isSwingingSword || !this.isActive) return; // 如果正在挥剑、没有目标或Boss不活动，则不执行
 
-        // const ability = this.currentAbility; // 暂时注释掉能力相关代码
-        // 计算到目标的方向
-        const dx = target.x - this.x; // <--- 错误发生点
+        console.log(`Boss ${this.name} initiating sword swing towards target.`);
+        this.isSwingingSword = true;
+        this.swordSwingTimer = 0;
+        this.lastSwordDamageTime = -1; // 重置上次伤害时间，允许新挥剑立即造成伤害
+
+        // 计算初始挥剑角度，大致朝向目标玩家
+        // 剑将从目标的一侧扫向另一侧
+        const dx = target.x - this.x;
         const dy = target.y - this.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-
-        // 如果距离足够远，冲向目标
-        if (dist > 0) {
-            // 创建冲锋效果 (这部分逻辑可能也需要检查 target，但暂时保持不变)
-            const effect = {
-                x: this.x,
-                y: this.y,
-                targetX: target.x, // <--- 再次访问 target.x
-                targetY: target.y, // <--- 再次访问 target.y
-                speed: this.speed * 3,
-                damage: this.damage * 1.5, // 暂时使用基础伤害
-                radius: this.size,
-                lifetime: 1.0,
-                timer: 0,
-                boss: this,
-                isGarbage: false,
-
-                update: function(dt) {
-                    // 更新计时器
-                    this.timer += dt;
-
-                    // 如果计时器结束，标记为垃圾
-                    if (this.timer >= this.lifetime) {
-                        this.isGarbage = true;
-                        return;
-                    }
-
-                    // 检查 player 是否有效
-                    if (!player || typeof player.x === 'undefined' || typeof player.y === 'undefined') {
-                        console.warn("Melee charge effect: Player is invalid during update.");
-                        this.isGarbage = true; // 如果玩家无效，停止效果
-                        return;
-                    }
-
-
-                    // 计算方向 (向记录的目标位置移动，而不是实时玩家位置)
-                    const dx = this.targetX - this.x;
-                    const dy = this.targetY - this.y;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
-
-                    // 如果距离足够远，移动向目标
-                    if (dist > 10) {
-                        // 更新位置
-                        const moveX = (dx / dist) * this.speed * dt;
-                        const moveY = (dy / dist) * this.speed * dt;
-
-                        this.x += moveX;
-                        this.y += moveY;
-
-                        // 更新Boss位置 (如果需要Boss跟随效果移动)
-                        // this.boss.x = this.x;
-                        // this.boss.y = this.y;
-                    }
-
-                    // 检查与玩家的碰撞 (使用当前玩家位置)
-                    const playerDx = player.x - this.x;
-                    const playerDy = player.y - this.y;
-                    const playerDistSq = playerDx * playerDx + playerDy * playerDy;
-
-                    // 如果与玩家碰撞，造成伤害
-                    if (playerDistSq <= (this.radius + player.size / 2) * (this.radius + player.size / 2)) {
-                         if (player.takeDamage) { // 确保方法存在
-                            player.takeDamage(this.damage, this.boss);
-                         } else {
-                             console.warn("Melee charge effect: player.takeDamage is not a function.");
-                         }
-                        // 可以在碰撞后停止效果，或者让其继续完成lifetime
-                        // this.isGarbage = true; 
-                    }
-                },
-
-                draw: function(ctx) {
-                    if (this.isGarbage) return;
-                     // 检查 cameraManager 是否存在
-                    if (typeof cameraManager === 'undefined' || !cameraManager) {
-                        console.warn("Melee charge effect: cameraManager is undefined during draw.");
-                        return;
-                    }
-
-                    // 获取屏幕坐标
-                    const screenPos = cameraManager.worldToScreen(this.x, this.y);
-
-                    // 绘制冲锋效果
-                    ctx.fillStyle = 'rgba(255, 100, 100, 0.2)'; // 淡一点的红色
-                    ctx.beginPath();
-                    ctx.arc(screenPos.x, screenPos.y, this.radius * (1 - this.timer / this.lifetime), 0, Math.PI * 2); // 效果随时间缩小
-                    ctx.fill();
-                }
-            };
-
-            // 添加到视觉效果列表
-            visualEffects.push(effect);
-        }
+        const angleToTarget = Math.atan2(dy, dx);
+        
+        // 挥剑从目标左侧 (逆时针 swordArc/2) 开始，扫过 swordArc 角度
+        this.initialSwordAngle = normalizeAngle(angleToTarget - this.swordArc / 2);
+        this.swordAngle = this.initialSwordAngle; // 初始设置，将在update中动态变化
     }
 
     /**
@@ -985,70 +945,180 @@ class BossEnemy extends Enemy {
      * @param {Player} target - 目标玩家
      */
     performEarthquake(target) {
+        console.log(`Boss ${this.name} performing Earthquake! Warning duration was: ${this.specialAttackWarningDuration}`);
         // 创建地震效果
         const effect = {
             x: this.x,
             y: this.y,
             radius: 0,
-            maxRadius: 300,
-            damage: this.damage * 2,
-            expandDuration: 2.0,
+            maxRadius: this.bossType.earthquakeRadius || 280, // 使用 bossType 配置或默认值
+            damage: this.stats.damage * (this.bossType.earthquakeDamageMultiplier || 1.8), // Boss类型可配置伤害倍率
+            expandDuration: this.bossType.earthquakeDuration || 2.0, // Boss类型可配置持续时间
             timer: 0,
             boss: this,
             hitTargets: new Set(),
             isGarbage: false,
+            particles: [], // 用于存储粒子
+            crackLines: [], // 用于存储裂纹线段
+
+            // 初始化裂纹
+            initCracks: function() {
+                this.crackLines = [];
+                const numCracks = 5 + Math.floor(Math.random() * 4); // 5到8条裂纹
+                for (let i = 0; i < numCracks; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const length = this.maxRadius * (0.6 + Math.random() * 0.4); // 裂纹长度是最大半径的60%-100%
+                    this.crackLines.push({
+                        angle: angle,
+                        startRadius: 0, // 裂纹从中心开始，随效果扩大
+                        endRadius: length,
+                        thickness: 2 + Math.random() * 3, // 裂纹粗细
+                        segments: [] // 用于存储裂纹的抖动点
+                    });
+                    // 生成裂纹的抖动路径
+                    const crack = this.crackLines[i];
+                    let currentAngle = crack.angle;
+                    let currentRadius = crack.startRadius;
+                    const numSegments = 10 + Math.floor(Math.random() * 10); // 10-19段
+                    crack.segments.push({ r: currentRadius, a: currentAngle });
+                    for (let j = 0; j < numSegments; j++) {
+                        currentRadius += crack.endRadius / numSegments;
+                        currentAngle += (Math.random() - 0.5) * 0.3; // 随机角度偏移
+                        crack.segments.push({ r: currentRadius, a: normalizeAngle(currentAngle) });
+                    }
+                }
+            },
 
             update: function(dt) {
-                // 更新计时器
                 this.timer += dt;
-
-                // 如果计时器结束，标记为垃圾
                 if (this.timer >= this.expandDuration) {
                     this.isGarbage = true;
                     return;
                 }
+                const progress = this.timer / this.expandDuration;
+                this.radius = progress * this.maxRadius;
 
-                // 更新半径
-                this.radius = (this.timer / this.expandDuration) * this.maxRadius;
-
-                // 检查与玩家的碰撞
-                const playerDx = player.x - this.x;
-                const playerDy = player.y - this.y;
-                const playerDistSq = playerDx * playerDx + playerDy * playerDy;
-
-                // 如果玩家在范围内且尚未命中，造成伤害
-                if (playerDistSq <= this.radius * this.radius && !this.hitTargets.has(player)) {
-                    player.takeDamage(this.damage, this.boss);
-                    this.hitTargets.add(player);
+                // 碰撞检测和伤害 (只对玩家造成伤害)
+                // 使用传入的 target (在 performEarthquake 调用时是 player)
+                if (target && target.isActive && !target.isGarbage && !this.hitTargets.has(target)) {
+                    const playerDx = target.x - this.x;
+                    const playerDy = target.y - this.y;
+                    const playerDistSq = playerDx * playerDx + playerDy * playerDy;
+                    if (playerDistSq <= this.radius * this.radius) {
+                        target.takeDamage(this.damage, this.boss);
+                        this.hitTargets.add(target);
+                    }
                 }
+
+                // 生成粒子
+                if (Math.random() < 0.8) { // 控制粒子生成频率
+                    const numParticles = 2 + Math.floor(Math.random() * 3);
+                    for (let i = 0; i < numParticles; i++) {
+                        const angle = Math.random() * Math.PI * 2;
+                        // 在当前冲击波边缘生成粒子
+                        const particleX = this.x + Math.cos(angle) * this.radius * (0.8 + Math.random() * 0.2) ;
+                        const particleY = this.y + Math.sin(angle) * this.radius * (0.8 + Math.random() * 0.2) ;
+                        this.particles.push({
+                            x: particleX,
+                            y: particleY,
+                            vx: (Math.random() - 0.5) * 50, // 水平速度
+                            vy: -Math.random() * 80 - 50,  // 向上速度
+                            size: 2 + Math.random() * 3,
+                            lifetime: 0.5 + Math.random() * 0.5, // 粒子存活时间
+                            timer: 0,
+                            color: `rgba(100, 70, 30, ${0.5 + Math.random() * 0.3})` // 深棕色粒子
+                        });
+                    }
+                }
+
+                // 更新粒子
+                for (let i = this.particles.length - 1; i >= 0; i--) {
+                    const p = this.particles[i];
+                    p.timer += dt;
+                    if (p.timer >= p.lifetime) {
+                        this.particles.splice(i, 1);
+                    } else {
+                        p.x += p.vx * dt;
+                        p.y += p.vy * dt;
+                        p.vy += 150 * dt; // 重力
+                    }
+                }
+                
+                // 触发屏幕震动 (假设 cameraManager.shake 存在)
+                // cameraManager.shake(10 * (1 - progress), 0.1); 
+                // 实际震动应在 game.js 中根据全局状态处理
+                if (typeof triggerScreenShake === 'function') {
+                     triggerScreenShake(8 * (1-progress), 0.15);
+                }
+
+
             },
 
             draw: function(ctx) {
                 if (this.isGarbage) return;
-
-                // 获取屏幕坐标
                 const screenPos = cameraManager.worldToScreen(this.x, this.y);
+                const progress = this.timer / this.expandDuration;
+                const currentRadius = this.radius;
 
-                // 计算透明度
-                const alpha = 0.3 * (1 - (this.timer / this.expandDuration));
+                // --- 绘制地面裂纹 ---
+                ctx.strokeStyle = `rgba(60, 40, 20, ${0.6 * (1 - progress)})`; // 深棕色裂纹
+                this.crackLines.forEach(crack => {
+                    if (crack.segments.length < 2) return;
+                    ctx.lineWidth = crack.thickness * (1 - progress * 0.5); // 裂纹随时间变细一点
+                    ctx.beginPath();
+                    let firstPoint = true;
+                    crack.segments.forEach(seg => {
+                        // 裂纹长度也随效果扩大而增长
+                        const r = seg.r * progress; 
+                        if (r > currentRadius * 1.1) return; // 不超出当前冲击波太多
 
-                // 绘制地震效果
-                ctx.fillStyle = `rgba(139, 69, 19, ${alpha})`;
+                        const crackX = screenPos.x + Math.cos(seg.a) * r;
+                        const crackY = screenPos.y + Math.sin(seg.a) * r;
+                        if (firstPoint) {
+                            ctx.moveTo(crackX, crackY);
+                            firstPoint = false;
+                        } else {
+                            ctx.lineTo(crackX, crackY);
+                        }
+                    });
+                    ctx.stroke();
+                });
+
+
+                // --- 绘制主要的冲击波圆圈 ---
+                const alpha = 0.4 * (1 - progress); // 调整透明度变化
+                ctx.fillStyle = `rgba(139, 69, 19, ${alpha})`; // 棕色
                 ctx.beginPath();
-                ctx.arc(screenPos.x, screenPos.y, this.radius, 0, Math.PI * 2);
+                ctx.arc(screenPos.x, screenPos.y, currentRadius, 0, Math.PI * 2);
                 ctx.fill();
 
-                // 绘制地震波纹
-                ctx.strokeStyle = `rgba(139, 69, 19, ${alpha * 2})`;
-                ctx.lineWidth = 5;
+                // 可选: 绘制一个更亮的内圆或边缘，增加层次感
+                ctx.strokeStyle = `rgba(200, 100, 30, ${alpha * 1.5})`; // 亮一点的棕橙色边缘
+                ctx.lineWidth = 3 + 3 * (1-progress); // 边缘宽度随时间变化
                 ctx.beginPath();
-                ctx.arc(screenPos.x, screenPos.y, this.radius, 0, Math.PI * 2);
+                ctx.arc(screenPos.x, screenPos.y, currentRadius, 0, Math.PI * 2);
                 ctx.stroke();
+                
+                // --- 绘制粒子 ---
+                this.particles.forEach(p => {
+                    const pScreenPos = cameraManager.worldToScreen(p.x, p.y);
+                    const particleAlpha = (1 - (p.timer / p.lifetime)) * 0.8;
+                    ctx.fillStyle = p.color.replace(/,[^,]*\)/, `,${particleAlpha})`); // 动态设置透明度
+                    ctx.beginPath();
+                    ctx.arc(pScreenPos.x, pScreenPos.y, p.size, 0, Math.PI * 2);
+                    ctx.fill();
+                });
             }
         };
-
-        // 添加到视觉效果列表
+        
+        // 在创建效果时初始化裂纹
+        effect.initCracks();
         visualEffects.push(effect);
+        
+        // // 播放音效 (如果 audioManager 和音效已定义)
+        // if (typeof audioManager !== 'undefined' && audioManager.playSound) {
+        //     audioManager.playSound('earthquake_sound'); 
+        // }
     }
 
     /**
@@ -1353,9 +1423,51 @@ class BossEnemy extends Enemy {
         }
         // 调用父类的绘制方法 (绘制Boss本身和血条等)
         super.draw(ctx);
-        // 显式调用Boss特有的血条绘制方法
+        // 绘制挥动的剑 (如果正在挥剑)
+        if (this.isSwingingSword && this.isActive) {
+            const swordScreenPos = cameraManager.worldToScreen(this.x, this.y);
+            ctx.save();
+            ctx.translate(swordScreenPos.x, swordScreenPos.y);
+            ctx.rotate(this.swordAngle); // 使用当前计算的挥剑角度
+            
+            // 剑的绘制参数
+            const swordEmoji = EMOJI.SWORD || '🗡️';
+            const swordDisplaySize = this.size * 1.1; // 修改: 剑本身视觉大小, 从 1.2 改为 1.1
+            const swordOffset = this.size * 0.2;   // 保持剑柄偏移量
+
+            ctx.font = `${swordDisplaySize}px 'Segoe UI Emoji', Arial`;
+            ctx.textAlign = 'left'; 
+            ctx.textBaseline = 'middle';
+            ctx.fillText(swordEmoji, swordOffset, 0); // 绘制剑，使其从偏移点向右伸出
+            
+            ctx.restore();
+        }
+
+        // 特殊攻击警告效果：在Boss身上绘制闪烁的黄色叠加层
+        if (this.isWarningForSpecialAttack && this.isActive) {
+            const screenPos = cameraManager.worldToScreen(this.x, this.y);
+            const warningBlinkInterval = 0.20; // 闪烁间隔 (秒)
+            const isWarningVisibleThisFrame = (this.specialAttackWarningTimer % warningBlinkInterval) < (warningBlinkInterval / 2);
+
+            if (isWarningVisibleThisFrame) {
+                ctx.save();
+                ctx.globalAlpha = 0.5; // 半透明
+                ctx.fillStyle = 'yellow';
+                // 绘制一个覆盖 Boss Emoji 的圆形或使用 Boss 的 emoji 本身再次绘制并着色
+                // 简单起见，绘制一个黄色圆圈覆盖
+                const warningIndicatorSize = this.size * 0.7;
+                ctx.beginPath();
+                ctx.arc(screenPos.x, screenPos.y, warningIndicatorSize, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        // 显式调用Boss特有的血条绘制方法 (如果 super.draw 没有很好地处理它)
+        // 或者确保 Character.draw 或 Enemy.draw 中有合适的血条绘制逻辑
+        // 当前 BossEnemy 有自己的 drawBossHealthBar，在 Character.draw 之后调用是合适的
         const screenPos = cameraManager.worldToScreen(this.x, this.y);
-        this.drawBossHealthBar(ctx, screenPos.x, screenPos.y);
+        this.drawBossHealthBar(ctx, screenPos.x, screenPos.y); // 确保Boss血条总是绘制
     }
 
     /**
@@ -1565,4 +1677,14 @@ class GhostEnemy extends Character {
             }
         }
     }
+}
+
+// 辅助函数，将角度标准化到 [0, 2PI) 或 (-PI, PI] 范围，具体取决于你的偏好
+// 这里我们标准化到 [0, 2PI)
+function normalizeAngle(angle) {
+    angle = angle % (2 * Math.PI);
+    if (angle < 0) {
+        angle += (2 * Math.PI);
+    }
+    return angle;
 }
