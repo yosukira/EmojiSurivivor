@@ -42,6 +42,9 @@ class Player extends Character {
 
         // 无敌时间
         this.invincibleTime = 0;
+        
+        // 新增：宝箱待处理升级次数
+        this.pendingLevelUpsFromChest = 0;
     }
 
     /**

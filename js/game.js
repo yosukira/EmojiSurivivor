@@ -379,6 +379,12 @@ function spawnDamageNumber(x, y, text, color = 'rgb(255, 80, 80)', size = GAME_F
  * @param {number} dt - 时间增量
  */
 function update(dt) {
+    // --- 新增：日志记录 ---
+    if (player) {
+        console.log(`Update Start: isPaused=${isPaused}, isLevelUp=${isLevelUp}, pendingChestUps=${player.pendingLevelUpsFromChest}`);
+    }
+    // --- 结束新增 ---
+
     // 如果游戏结束或暂停或升级，只更新经验宝石
     if (isGameOver || isPaused || isLevelUp) {
         if (player && xpGems.length > 0) {
@@ -403,12 +409,15 @@ function update(dt) {
         player.update(dt, keys);
     }
 
-    // 更新敌人
+    // 更新敌人 (包括普通敌人和Boss)
     for (let i = 0; i < enemies.length; i++) {
         if (!enemies[i].isGarbage && enemies[i].isActive) {
-            // 设置目标为玩家
-            enemies[i].target = player;
-            enemies[i].update(dt);
+            enemies[i].target = player; // 确保所有敌人都有目标
+            if (enemies[i] instanceof BossEnemy) {
+                enemies[i].update(dt, player); // <--- 确保 BossEnemy 的 update 也接收 player
+            } else {
+                enemies[i].update(dt);
+            }
         }
     }
 
@@ -496,10 +505,25 @@ function update(dt) {
     enemyManager.cleanup();
     bossManager.cleanup();
 
+    // --- 新增：处理宝箱多次升级 ---
+    if (player && player.pendingLevelUpsFromChest > 0 && !isPaused && !isLevelUp) {
+        console.log(`宝箱升级待处理: ${player.pendingLevelUpsFromChest} 次. Setting isLevelUp = true.`); // <-- 添加日志
+        isLevelUp = true; // 标记需要显示升级界面
+        player.pendingLevelUpsFromChest--; 
+        // 注意：升级选项执行完毕后会自动将 isPaused 和 isLevelUp 设为 false
+        // presentLevelUpOptions() 会在下面的 isLevelUp 检查中被调用
+    }
+    // --- 结束新增 ---
+
     // 处理升级
     if (isLevelUp) {
+        // 如果是因为宝箱触发的升级，并且次数用尽，确保 isLevelUp 不会再被错误设置
+        if (player && player.pendingLevelUpsFromChest === 0 && arguments.callee.caller !== player.levelUp) {
+             // This check is tricky and might not be perfectly robust.
+             // The idea is to prevent re-triggering if level up was from normal XP gain right after chest.
+        }
         presentLevelUpOptions();
-        isLevelUp = false;
+        // isLevelUp = false; // presentLevelUpOptions 或其按钮回调会处理 isPaused 和 isLevelUp
     }
 
     // 更新UI
@@ -983,6 +1007,7 @@ function presentLevelUpOptions() {
     // 暂停游戏
     isPaused = true; // 确保 isPaused 在 try 外部设置，以便 finally 中可以正确处理
     // isLevelUp = true; // 这个状态应该在 Player.levelUp 成功后设置，这里是显示选项
+    console.log("Presenting level up options. Setting isPaused = true."); // <-- 添加日志
     
     const levelUpScreenElement = document.getElementById('levelUpScreen');
     const upgradeOptionsContainer = document.getElementById('upgradeOptions');
@@ -1031,20 +1056,21 @@ function presentLevelUpOptions() {
             button.onclick = () => {
                 try {
                     // 执行选项操作
-                        if (typeof option.action === 'function') {
-                    option.action();
-                        }
-                         // 恢复游戏状态在 option.action 内部或 Player.levelUp 之后处理
-                        // resumeGame(); // 不应在这里直接调用，会中断升级流程
-                        levelUpScreenElement.classList.add('hidden');
+                    console.log("Upgrade button clicked. Action:", option.text); // <-- 添加日志
+                    if (typeof option.action === 'function') {
+                        option.action();
+                    }
+                    levelUpScreenElement.classList.add('hidden');
+                    console.log("Hiding level up screen. Setting isPaused=false, isLevelUp=false."); // <-- 添加日志
                     isPaused = false;
-                        // isLevelUp = false; // 这个状态应该在升级选择完成后，游戏逻辑继续时重置
+                    isLevelUp = false; // <<< 允许主循环检查下一次宝箱升级
 
                 } catch (error) {
                     console.error("升级选项执行错误:", error);
-                        levelUpScreenElement.classList.add('hidden');
+                    levelUpScreenElement.classList.add('hidden');
+                    console.log("Error in upgrade action. Setting isPaused=false, isLevelUp=false."); // <-- 添加日志
                     isPaused = false;
-                        // isLevelUp = false;
+                    isLevelUp = false;
                 }
             };
             // 添加到容器

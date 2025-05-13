@@ -596,21 +596,38 @@ class BossEnemy extends Enemy {
      * @param {Player} target - 目标玩家
      */
     performMeleeAttack(target) {
+        // 如果目标不存在或没有攻击能力，则返回
+        // if (!this.currentAbility || !this.currentAbility.type.startsWith('melee')) return; // 暂时注释掉能力检查，以防干扰
+        
+        // --- 新增：更详细的日志 ---
+        console.log(`Boss ${this.name} trying melee attack. Target:`, target);
+        if (!target) {
+             console.error(`Boss ${this.name} melee attack failed: Target is null or undefined.`);
+             return;
+        }
+        if (typeof target.x === 'undefined' || typeof target.y === 'undefined') {
+             console.error(`Boss ${this.name} melee attack failed: Target exists but missing x/y properties. Target:`, JSON.stringify(target));
+             return;
+        }
+         console.log(`Boss ${this.name} melee attack target validated. Accessing target.x...`);
+        // --- 结束新增 ---
+
+        // const ability = this.currentAbility; // 暂时注释掉能力相关代码
         // 计算到目标的方向
-        const dx = target.x - this.x;
+        const dx = target.x - this.x; // <--- 错误发生点
         const dy = target.y - this.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
 
         // 如果距离足够远，冲向目标
         if (dist > 0) {
-            // 创建冲锋效果
+            // 创建冲锋效果 (这部分逻辑可能也需要检查 target，但暂时保持不变)
             const effect = {
                 x: this.x,
                 y: this.y,
-                targetX: target.x,
-                targetY: target.y,
+                targetX: target.x, // <--- 再次访问 target.x
+                targetY: target.y, // <--- 再次访问 target.y
                 speed: this.speed * 3,
-                damage: this.damage * 1.5,
+                damage: this.damage * 1.5, // 暂时使用基础伤害
                 radius: this.size,
                 lifetime: 1.0,
                 timer: 0,
@@ -627,7 +644,15 @@ class BossEnemy extends Enemy {
                         return;
                     }
 
-                    // 计算方向
+                    // 检查 player 是否有效
+                    if (!player || typeof player.x === 'undefined' || typeof player.y === 'undefined') {
+                        console.warn("Melee charge effect: Player is invalid during update.");
+                        this.isGarbage = true; // 如果玩家无效，停止效果
+                        return;
+                    }
+
+
+                    // 计算方向 (向记录的目标位置移动，而不是实时玩家位置)
                     const dx = this.targetX - this.x;
                     const dy = this.targetY - this.y;
                     const dist = Math.sqrt(dx * dx + dy * dy);
@@ -641,32 +666,43 @@ class BossEnemy extends Enemy {
                         this.x += moveX;
                         this.y += moveY;
 
-                        // 更新Boss位置
-                        this.boss.x = this.x;
-                        this.boss.y = this.y;
+                        // 更新Boss位置 (如果需要Boss跟随效果移动)
+                        // this.boss.x = this.x;
+                        // this.boss.y = this.y;
                     }
 
-                    // 检查与玩家的碰撞
+                    // 检查与玩家的碰撞 (使用当前玩家位置)
                     const playerDx = player.x - this.x;
                     const playerDy = player.y - this.y;
                     const playerDistSq = playerDx * playerDx + playerDy * playerDy;
 
                     // 如果与玩家碰撞，造成伤害
                     if (playerDistSq <= (this.radius + player.size / 2) * (this.radius + player.size / 2)) {
-                        player.takeDamage(this.damage, this.boss);
+                         if (player.takeDamage) { // 确保方法存在
+                            player.takeDamage(this.damage, this.boss);
+                         } else {
+                             console.warn("Melee charge effect: player.takeDamage is not a function.");
+                         }
+                        // 可以在碰撞后停止效果，或者让其继续完成lifetime
+                        // this.isGarbage = true; 
                     }
                 },
 
                 draw: function(ctx) {
                     if (this.isGarbage) return;
+                     // 检查 cameraManager 是否存在
+                    if (typeof cameraManager === 'undefined' || !cameraManager) {
+                        console.warn("Melee charge effect: cameraManager is undefined during draw.");
+                        return;
+                    }
 
                     // 获取屏幕坐标
                     const screenPos = cameraManager.worldToScreen(this.x, this.y);
 
                     // 绘制冲锋效果
-                    ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
+                    ctx.fillStyle = 'rgba(255, 100, 100, 0.2)'; // 淡一点的红色
                     ctx.beginPath();
-                    ctx.arc(screenPos.x, screenPos.y, this.radius, 0, Math.PI * 2);
+                    ctx.arc(screenPos.x, screenPos.y, this.radius * (1 - this.timer / this.lifetime), 0, Math.PI * 2); // 效果随时间缩小
                     ctx.fill();
                 }
             };
@@ -741,7 +777,7 @@ class BossEnemy extends Enemy {
                     const screenPos = cameraManager.worldToScreen(this.x, this.y);
 
                     // 绘制投射物
-                    ctx.fillStyle = 'rgba(255, 0, 0, 0.7)';
+                    ctx.fillStyle = 'rgba(255, 0, 255, 0.7)';
                     ctx.beginPath();
                     ctx.arc(screenPos.x, screenPos.y, this.size / 2, 0, Math.PI * 2);
                     ctx.fill();
@@ -1297,16 +1333,26 @@ class BossEnemy extends Enemy {
      * @param {CanvasRenderingContext2D} ctx - 画布上下文
      */
     draw(ctx) {
-        // 调用父类绘制方法
-        super.draw(ctx);
-        // 如果Boss活动且有生命，绘制生命条
-        if (!this.isGarbage && this.isActive && this.health > 0) {
-            // 获取屏幕坐标
-            const screenPos = cameraManager.worldToScreen(this.x, this.y);
-
-            // 绘制Boss生命条
-            this.drawBossHealthBar(ctx, screenPos.x, screenPos.y);
+        // 如果正在执行AOE攻击且有特效，则绘制特效
+        if (this.isPerformingAOE && this.aoeEffect && this.aoeEffect.isActive) {
+            // 暂时不绘制 AOE 攻击范围圆圈，以避免遮挡血条或根据用户反馈移除
+            /*
+            const screenPos = cameraManager.worldToScreen(this.aoeEffect.x, this.aoeEffect.y);
+            let alpha = 0.3; // 之前是 0.5，降低了
+            if (this.aoeEffect.timer < this.aoeEffect.expandDuration) {
+                alpha = (this.aoeEffect.timer / this.aoeEffect.expandDuration) * 0.3;
+            } else {
+                const t = (this.aoeEffect.timer - this.aoeEffect.expandDuration) / this.aoeEffect.holdDuration;
+                alpha = 0.3 - 0.2 * Math.sin(t * Math.PI * 10); 
+            }
+            ctx.fillStyle = `rgba(255, 0, 0, ${alpha})`;
+            ctx.beginPath();
+            ctx.arc(screenPos.x, screenPos.y, this.aoeEffect.currentRadius, 0, Math.PI * 2);
+            ctx.fill();
+            */
         }
+        // 调用父类的绘制方法 (绘制Boss本身和血条等)
+        super.draw(ctx);
     }
 
     /**
@@ -1476,15 +1522,22 @@ class GhostEnemy extends Character {
         if (this.isGarbage || !this.isActive) return;
 
         const screenPos = cameraManager.worldToScreen(this.x, this.y);
-        const alpha = 0.6 * (1 - this.lifetime / this.maxLifetime); // 随时间淡出
+        // 增加基础透明度，并让淡出效果不那么剧烈
+        const baseAlpha = 0.8; // 原来是 0.6
+        const fadeFactor = Math.max(0.2, 1 - (this.lifetime / this.maxLifetime) * 0.8); // 淡出到 0.2 而不是 0
+        const alpha = baseAlpha * fadeFactor;
 
         ctx.save();
         ctx.globalAlpha = alpha;
         ctx.font = `${this.size}px 'Segoe UI Emoji', Arial`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        // 修改滤镜效果使其更明显
-        ctx.filter = 'drop-shadow(0 0 7px cyan) brightness(1.3)'; 
+        
+        // --- 添加外发光效果 ---
+        ctx.shadowColor = 'cyan'; // 外发光颜色
+        ctx.shadowBlur = 10; // 外发光模糊半径
+        // --- 结束外发光 --- 
+        
         ctx.fillText(this.emoji, screenPos.x, screenPos.y);
         ctx.restore();
 

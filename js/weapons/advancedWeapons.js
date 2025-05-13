@@ -649,24 +649,36 @@ class StormBladeProjectile extends Projectile {
                 const fromPos = cameraManager.worldToScreen(this.fromX, this.fromY);
                 const toPos = cameraManager.worldToScreen(this.toX, this.toY);
                 // 计算透明度
-                const alpha = 0.8 * (1 - (this.timer / this.lifetime));
+                const alpha = 0.9 * (1 - (this.timer / this.lifetime)); // 增加基础透明度
+                
+                ctx.save(); // 保存状态，用于发光
+                
+                // --- 添加发光效果 ---
+                ctx.shadowColor = 'cyan'; 
+                ctx.shadowBlur = 10; 
+                // --- 结束发光效果 ---
+                
                 // 绘制闪电效果
-                ctx.strokeStyle = `rgba(100, 100, 255, ${alpha})`;
-                ctx.lineWidth = 3;
+                ctx.strokeStyle = `rgba(180, 220, 255, ${alpha})`; // 更亮的蓝白色
+                ctx.lineWidth = 5; // 增加宽度
                 ctx.beginPath();
                 ctx.moveTo(fromPos.x, fromPos.y);
                 // 绘制锯齿状闪电
                 const segments = 5;
                 const dx = (toPos.x - fromPos.x) / segments;
                 const dy = (toPos.y - fromPos.y) / segments;
+                const zigZagAmount = 15; // 增加锯齿幅度
                 for (let i = 1; i < segments; i++) {
                     const x = fromPos.x + dx * i;
                     const y = fromPos.y + dy * i;
-                    const offset = (Math.random() - 0.5) * 20;
-                    ctx.lineTo(x + offset, y + offset);
+                    const offsetX = (Math.random() - 0.5) * zigZagAmount;
+                    const offsetY = (Math.random() - 0.5) * zigZagAmount;
+                    ctx.lineTo(x + offsetX, y + offsetY);
                 }
                 ctx.lineTo(toPos.x, toPos.y);
                 ctx.stroke();
+                
+                ctx.restore(); // 恢复状态，清除发光设置
             }
         };
         // 添加到视觉效果列表
@@ -718,38 +730,28 @@ class StormBladeProjectile extends Projectile {
      * @param {CanvasRenderingContext2D} ctx - 画布上下文
      */
     draw(ctx) {
-        // 如果投射物不活动或已标记为垃圾，不绘制
-        if (!this.isActive || this.isGarbage) return;
+        if (this.isGarbage || !this.isActive) return;
 
-        try {
-            const screenPos = cameraManager.worldToScreen(this.x, this.y);
+        const screenPos = cameraManager.worldToScreen(this.x, this.y);
+        const size = this.size * (this.ownerStats.areaMultiplier || 1);
+        
+        ctx.save();
+        ctx.translate(screenPos.x, screenPos.y);
+        ctx.rotate(this.rotation); // 使用 projectile 的旋转角度
 
-            ctx.save();
-            ctx.translate(screenPos.x, screenPos.y);
-            // 可以添加旋转，如果需要的话
-            // const angle = Math.atan2(this.vy, this.vx);
-            // ctx.rotate(angle);
+        // 绘制闪电 Emoji
+        ctx.font = `${size}px 'Segoe UI Emoji', Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
 
-            ctx.font = `${this.size}px 'Segoe UI Emoji', Arial`;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
+        // --- 添加发光效果 ---
+        ctx.shadowColor = 'cyan'; // 发光颜色
+        ctx.shadowBlur = 15; // 发光模糊半径
+        // --- 结束发光效果 ---
 
-            // 绘制基础匕首
-            ctx.fillText('🔪', 0, 0);
+        ctx.fillText('⚡', 0, 0); // 在旋转后的原点绘制
 
-            // 绘制闪电覆盖
-            const lightningSize = this.size * 0.8; // 闪电小一点
-            ctx.font = `${lightningSize}px 'Segoe UI Emoji', Arial`;
-            ctx.globalAlpha = 0.85; // 让闪电稍微透明一点
-            ctx.fillText('⚡', 0, 0);
-
-            ctx.restore();
-
-            // 绘制粒子效果 (如果需要，保留原来的粒子绘制逻辑)
-            // this.drawParticles(ctx);
-        } catch (e) {
-            console.error("绘制岚刀投射物时出错:", e);
-        }
+        ctx.restore(); // 恢复旋转和发光设置
     }
 }
 

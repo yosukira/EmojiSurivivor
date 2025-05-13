@@ -451,38 +451,32 @@ class Chest extends GameObject {
      * @param {Player} target - 目标玩家
      */
     open(target) {
-        console.log("宝箱已开启!");
+        // 防止重复打开或无效目标
+        if (this.isOpen || !target || !(target instanceof Player)) return; 
+        
+        this.isOpen = true; 
+        console.log("宝箱已打开！准备触发多次升级...");
+        
+        // 创建打开特效
+        this.createOpenEffect();
 
-        // 随机决定奖励数量 (1-5)
-        const numRewards = Math.floor(Math.random() * 5) + 1;
-        console.log(`宝箱奖励: ${numRewards} 个升级!`);
-
-        // 获取所有可用升级选项
-        const availableUpgrades = getAvailableUpgrades(target); // 假设 target 是 player
-        shuffleArray(availableUpgrades); // 打乱顺序
-
-        // 应用随机选择的奖励
-        for (let i = 0; i < Math.min(numRewards, availableUpgrades.length); i++) {
-            const rewardOption = availableUpgrades[i];
-            console.log(`应用奖励: ${rewardOption.text}`);
-            if (typeof rewardOption.action === 'function') {
-                try {
-                    rewardOption.action(); // 执行升级/获取操作
-                } catch (error) {
-                    console.error(`应用宝箱奖励 \'${rewardOption.text}\' 时出错:`, error);
-                }
-            }
+        // --- 核心逻辑：触发多次升级 ---
+        const numberOfUpgrades = Math.floor(Math.random() * 5) + 1; // 1到5次升级
+        console.log(`宝箱提供 ${numberOfUpgrades} 次升级机会.`);
+        
+        if (target.pendingLevelUpsFromChest !== undefined) {
+            target.pendingLevelUpsFromChest += numberOfUpgrades; // 使用 += 
+        } else {
+            console.warn("Player 对象缺少 pendingLevelUpsFromChest 属性! 将直接给予次数.");
+            target.pendingLevelUpsFromChest = numberOfUpgrades;
         }
-
-        // 更新 UI 显示变化
-        updateUI();
-
-        // 标记宝箱为垃圾
-        this.isGarbage = true;
+        // --- 结束核心逻辑 ---
+        
+        // --- 确保宝箱立即消失 ---
+        this.isGarbage = true; // 打开后立即标记为垃圾
         this.isActive = false;
-
-        // 播放音效 (如果需要)
-        // playSound(\'chestOpen\');
+        this.collected = true; // 标记为已收集
+        // --- 结束确保消失 ---
     }
 
     /**

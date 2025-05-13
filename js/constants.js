@@ -157,14 +157,14 @@ const BOSS_TYPES = [
         minTime: BOSS_INTERVAL
     },
     {
-        name: "巨型僵尸",
-        emoji: EMOJI.BOSS_ZOMBIE,
-        healthMult: 1.5,
+        name: "Giant Zombie",
+        emoji: "🧟",
+        healthMult: 3.0,
         speedMult: 0.6,
-        damageMult: 1.2,
-        xpMult: 1.5,
+        damageMult: 1.8,
+        xpMult: 5.0,
         attackPattern: "aoe",
-        minTime: BOSS_INTERVAL * 2
+        minTime: 120
     },
     {
         name: "恶魔领主",
