@@ -29,6 +29,7 @@ let xpGems = [];
 let worldObjects = [];
 let visualEffects = [];
 let damageNumbers = [];
+let activeGhosts = []; // 新增：用于存储活动的幽灵
 
 // 对象池
 let inactiveProjectiles = [];
@@ -273,6 +274,7 @@ function init() {
     xpGems = [];
     worldObjects = [];
     visualEffects = [];
+    activeGhosts = []; // 清空活动的幽灵
 
     // 重置状态
     isGameOver = false;
@@ -354,13 +356,12 @@ function spawnProjectile(x, y, emoji, size, vx, vy, damage, pierce, duration, ow
  * @param {number} x - X坐标
  * @param {number} y - Y坐标
  * @param {string} text - 文本
+ * @param {string} [color='white'] - 文本颜色
+ * @param {number} [size=GAME_FONT_SIZE * 0.8] - 文本大小
+ * @param {number} [duration=0.7] - 持续时间
  * @returns {DamageNumber} 生成的伤害数字
  */
-function spawnDamageNumber(x, y, text) {
-    const size = GAME_FONT_SIZE * 0.8; // 固定大小，可以调整这个系数
-    const color = 'rgb(255, 80, 80)'; // 固定为亮红色
-    const duration = 0.7; // 固定持续时间
-
+function spawnDamageNumber(x, y, text, color = 'rgb(255, 80, 80)', size = GAME_FONT_SIZE * 0.8, duration = 0.7) {
     let damageNumber = null;
     if (inactiveDamageNumbers.length > 0) {
         damageNumber = inactiveDamageNumbers.pop();
@@ -450,6 +451,17 @@ function update(dt) {
     for (let i = 0; i < visualEffects.length; i++) {
         if (!visualEffects[i].isGarbage) {
             visualEffects[i].update(dt);
+        }
+    }
+
+    // 新增：更新活动的幽灵
+    for (let i = activeGhosts.length - 1; i >= 0; i--) {
+        if (activeGhosts[i] && !activeGhosts[i].isGarbage && activeGhosts[i].isActive) {
+            activeGhosts[i].update(dt);
+        } else if (activeGhosts[i] && activeGhosts[i].isGarbage) {
+            // GhostEnemy.destroy() 应该已经处理了从数组中移除
+            // 但以防万一，如果仍然存在已标记为垃圾的，这里可以再次确认移除
+            // activeGhosts.splice(i, 1); // GhostEnemy.destroy() 中已包含此逻辑
         }
     }
 
@@ -548,6 +560,13 @@ function draw() {
 
             // 绘制玩家
             player.draw(offscreenCtx);
+        }
+
+        // 新增：绘制活动的幽灵 (在玩家之后，特效之前绘制，确保层级关系)
+        for (let i = 0; i < activeGhosts.length; i++) {
+            if (activeGhosts[i] && !activeGhosts[i].isGarbage && activeGhosts[i].isActive) {
+                activeGhosts[i].draw(offscreenCtx);
+            }
         }
 
         // 绘制视觉特效
@@ -1366,6 +1385,8 @@ if (typeof Wings !== 'undefined') BASE_PASSIVES.push(Wings); // 添加 Wings
 if (typeof EmptyTome !== 'undefined') BASE_PASSIVES.push(EmptyTome); // 添加 EmptyTome
 if (typeof Candelabrador !== 'undefined') BASE_PASSIVES.push(Candelabrador); // 添加 Candelabrador
 if (typeof Bracer !== 'undefined') BASE_PASSIVES.push(Bracer); // 添加 Bracer
+// 新增：添加舍利子回魂
+if (typeof SoulRelic !== 'undefined') BASE_PASSIVES.push(SoulRelic);
 
 function spawnRandomPickup(x, y) {
     const rand = Math.random();

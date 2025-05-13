@@ -101,17 +101,44 @@ class DaggerWeapon extends Weapon {
      * @returns {string} 升级描述
      */
     getUpgradeDescription() {
-        let desc = `Lv${this.level + 1}: `;
+        const nextLevel = this.level + 1;
+        if (nextLevel > this.maxLevel) return "已达最高等级";
 
-        if (this.level % 2 === 0) {
-            desc += "+1 投射物。";
-        } else if (this.level % 3 === 0) {
-            desc += "+1 穿透。";
-        } else {
-            desc += "+伤害/速度。";
+        if (!this.stats) {
+            this.calculateStats();
+        }
+        console.log('DaggerWeapon this.stats after calculate:', JSON.stringify(this.stats)); // 调试日志
+
+        const tempStats = JSON.parse(JSON.stringify(this.stats));
+        const originalLevel = this.level;
+        this.level = nextLevel;
+        this.calculateStats();
+        const nextLevelCalculatedStats = this.stats;
+        const descParts = [];
+
+        if (nextLevelCalculatedStats.damage > tempStats.damage) {
+            descParts.push(`伤害: ${tempStats.damage.toFixed(0)} → ${nextLevelCalculatedStats.damage.toFixed(0)}`);
+        }
+        if (nextLevelCalculatedStats.projectileSpeed > tempStats.projectileSpeed) {
+            descParts.push(`速度: ${tempStats.projectileSpeed.toFixed(0)} → ${nextLevelCalculatedStats.projectileSpeed.toFixed(0)}`);
+        }
+        if (nextLevelCalculatedStats.count > tempStats.count) {
+            descParts.push(`投射物: ${tempStats.count} → ${nextLevelCalculatedStats.count}`);
+        }
+        if (nextLevelCalculatedStats.pierce > tempStats.pierce) {
+            descParts.push(`穿透: ${tempStats.pierce} → ${nextLevelCalculatedStats.pierce}`);
+        }
+        if (nextLevelCalculatedStats.cooldown < tempStats.cooldown) {
+            descParts.push(`冷却: ${tempStats.cooldown.toFixed(2)}s → ${nextLevelCalculatedStats.cooldown.toFixed(2)}s`);
         }
 
-        return desc + ` (冷却: ${Math.max(0.3, this.baseCooldown - this.level * 0.08).toFixed(2)}s)`;
+        this.level = originalLevel;
+        this.calculateStats();
+
+        if (descParts.length === 0) {
+            return `Lv${nextLevel}: 属性小幅提升。`;
+        }
+        return `Lv${nextLevel}: ${descParts.join(', ')}。`;
     }
 
     /**
@@ -253,7 +280,44 @@ class GarlicWeapon extends Weapon {
      * @returns {string} 升级描述
      */
     getUpgradeDescription() {
-        return `Lv${this.level + 1}: +伤害/范围/减速效果。`;
+        const nextLevel = this.level + 1;
+        if (nextLevel > this.maxLevel) return "已达最高等级";
+
+        if (!this.stats) {
+            this.calculateStats();
+        }
+
+        const tempStats = JSON.parse(JSON.stringify(this.stats));
+        const originalLevel = this.level;
+        this.level = nextLevel;
+        this.calculateStats();
+        const nextLevelCalculatedStats = this.stats;
+        const descParts = [];
+
+        if (nextLevelCalculatedStats.damage > tempStats.damage) {
+            descParts.push(`伤害: ${tempStats.damage.toFixed(0)} → ${nextLevelCalculatedStats.damage.toFixed(0)}`);
+        }
+        if (nextLevelCalculatedStats.radius > tempStats.radius) {
+            descParts.push(`范围: ${tempStats.radius.toFixed(0)} → ${nextLevelCalculatedStats.radius.toFixed(0)}`);
+        }
+        if (nextLevelCalculatedStats.knockback > tempStats.knockback) {
+            descParts.push(`击退: ${tempStats.knockback.toFixed(0)} → ${nextLevelCalculatedStats.knockback.toFixed(0)}`);
+        }
+        if (nextLevelCalculatedStats.slowFactor < tempStats.slowFactor) { // 注意减速因子是越小越强
+            descParts.push(`减速: ${(tempStats.slowFactor * 100).toFixed(0)}% → ${(nextLevelCalculatedStats.slowFactor * 100).toFixed(0)}%`);
+        }
+        if (nextLevelCalculatedStats.slowDuration > tempStats.slowDuration) {
+            descParts.push(`减速持续: ${tempStats.slowDuration.toFixed(1)}s → ${nextLevelCalculatedStats.slowDuration.toFixed(1)}s`);
+        }
+        // Cooldown for Garlic is fixed (this.baseCooldown), so no change expected.
+
+        this.level = originalLevel;
+        this.calculateStats();
+
+        if (descParts.length === 0) {
+            return `Lv${nextLevel}: 属性小幅提升。`;
+        }
+        return `Lv${nextLevel}: ${descParts.join(', ')}。`;
     }
 
     /**
@@ -527,13 +591,48 @@ class WhipWeapon extends Weapon {
      * @returns {string} 升级描述
      */
     getUpgradeDescription() {
-        let desc = `Lv${this.level + 1}: `;
-        if (this.level % 4 === 0) {
-            desc += "+1 鞭子。";
-        } else {
-            desc += "+伤害/范围。";
+        const nextLevel = this.level + 1;
+        if (nextLevel > this.maxLevel) return "已达最高等级";
+
+        if (!this.stats) {
+            this.calculateStats();
         }
-        return desc + ` (冷却: ${Math.max(0.3, this.baseCooldown - this.level * 0.15).toFixed(2)}s)`;
+
+        const tempStats = JSON.parse(JSON.stringify(this.stats));
+        const originalLevel = this.level;
+        this.level = nextLevel;
+        this.calculateStats();
+        const nextLevelCalculatedStats = this.stats;
+        const descParts = [];
+
+        if (nextLevelCalculatedStats.damage > tempStats.damage) {
+            descParts.push(`伤害: ${tempStats.damage.toFixed(0)} → ${nextLevelCalculatedStats.damage.toFixed(0)}`);
+        }
+        if (nextLevelCalculatedStats.width > tempStats.width || nextLevelCalculatedStats.length > tempStats.length) {
+            // 将宽度和长度合并为范围描述
+            const currentArea = tempStats.width * tempStats.length;
+            const nextArea = nextLevelCalculatedStats.width * nextLevelCalculatedStats.length;
+             if (nextArea > currentArea) {
+                // 简单地表示范围提升，或者可以更具体
+                descParts.push(`范围提升`);
+                // 或者更具体: descParts.push(`范围: ${tempStats.width.toFixed(0)}x${tempStats.length.toFixed(0)} → ${nextLevelCalculatedStats.width.toFixed(0)}x${nextLevelCalculatedStats.length.toFixed(0)}`);
+             }
+        }
+        if (nextLevelCalculatedStats.count > tempStats.count) {
+            descParts.push(`鞭挞次数: ${tempStats.count} → ${nextLevelCalculatedStats.count}`);
+        }
+        if (nextLevelCalculatedStats.cooldown < tempStats.cooldown) {
+            descParts.push(`冷却: ${tempStats.cooldown.toFixed(2)}s → ${nextLevelCalculatedStats.cooldown.toFixed(2)}s`);
+        }
+        // duration is fixed
+
+        this.level = originalLevel;
+        this.calculateStats();
+
+        if (descParts.length === 0) {
+            return `Lv${nextLevel}: 属性小幅提升。`;
+        }
+        return `Lv${nextLevel}: ${descParts.join(', ')}。`;
     }
 
     /**

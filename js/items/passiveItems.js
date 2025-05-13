@@ -364,7 +364,109 @@ class Magnet extends PassiveItem {
         if (this.level >= this.maxLevel) {
             return "已达最大等级。";
         }
-        return `再提升 ${this.basePickupRadiusBonus*100}% 拾取范围。吸取间隔减少至 ${this.triggerInterval.toFixed(1)}秒 (Lv${this.level + 1} 总计范围: +${((this.level + 1) * this.basePickupRadiusBonus * 100).toFixed(0)}%)。`;
+        return `再提升 ${this.basePickupRadiusBonus*100}% 拾取范围 (Lv${this.level + 1} 总计: +${((this.level + 1) * this.basePickupRadiusBonus * 100).toFixed(0)}%)。仍然每 ${this.triggerInterval.toFixed(1)} 秒自动吸取经验。`;
+    }
+}
+
+/**
+ * 舍利子回魂类
+ * 击杀敌人有几率召唤一个幽灵协助战斗
+ */
+class SoulRelic extends PassiveItem {
+    /**
+     * 静态属性
+     */
+    static Name = "舍利子回魂";
+    static Emoji = '💫'; // 可以换一个更合适的 Emoji
+    static MaxLevel = 5;
+
+    constructor() {
+        super(SoulRelic.Name, SoulRelic.Emoji, `击杀敌人时有几率召唤幽灵。`, SoulRelic.MaxLevel);
+        // 其他特定于SoulRelic的属性将在calculateBonuses中基于等级设置
+        // super()的调用会触发一次calculateBonuses，所以不需要在这里显式调用或初始化那些依赖等级的属性
+    }
+
+    // 这个被动主要通过事件触发，而不是直接提供属性加成
+    // 但我们可以在这里设置与等级相关的参数
+    calculateBonuses() {
+        // 确保 this.ghostEffects 在首次（由super构造函数触发）调用时已初始化
+        if (typeof this.ghostEffects === 'undefined') {
+            this.ghostEffects = {};
+        }
+
+        const level = this.level; // this.level 由 PassiveItem 基类设置 (初始为0，或通过升级改变)
+        this.reanimationChance = 0.03 + level * 0.03; // 3% -> 6% -> 9% -> 12% -> 15%
+        this.ghostDamage = 3 + level * 2;           // 5 -> 7 -> 9 -> 11 -> 13 (假设level从1开始算有意义的值)
+        this.ghostDuration = 4 + level * 1.5;       // 5.5s -> 7s -> 8.5s -> 10s -> 11.5s
+        this.maxGhosts = 1 + Math.floor(level / 2); // 1 -> 1 -> 2 -> 2 -> 3
+
+        // L5 增加减速效果
+        if (level >= 5) {
+            this.ghostEffects.slow = { factor: 0.8, duration: 0.5 };
+        } else {
+            delete this.ghostEffects.slow; // 安全删除，如果ghostEffects存在且有slow属性
+        }
+
+        // bonuses 对象用于存储直接的属性加成，或者用于升级描述的生成
+        // 对于 SoulRelic，这些值更多是其行为参数
+        this.bonuses = {
+            reanimationChance: this.reanimationChance,
+            ghostDamage: this.ghostDamage,
+            ghostDuration: this.ghostDuration,
+            maxGhosts: this.maxGhosts
+            // ghostEffects 不直接作为 "bonus" stat 显示
+        };
+    }
+
+    // 提供给 Enemy.onDeath 调用的方法，用于尝试召唤幽灵
+    tryReanimate(enemyX, enemyY, owner) {
+        if (typeof activeGhosts === 'undefined') {
+            console.warn("activeGhosts 数组未定义，无法召唤幽灵。");
+            return false;
+        }
+        // 检查是否达到最大数量
+        if (activeGhosts.length >= this.maxGhosts) {
+            return false;
+        }
+        // 检查几率
+        if (Math.random() < this.reanimationChance) {
+            // 召唤幽灵
+            const ghost = new GhostEnemy(enemyX, enemyY, owner, this.ghostDamage, this.ghostDuration, 150, this.ghostEffects);
+            // visualEffects.push(...) // 可以添加一个召唤特效
+            return true;
+        }
+        return false;
+    }
+
+    getInitialDescription() {
+        this.level = 1; // 临时设置等级以计算初始值
+        this.calculateBonuses();
+        const desc = `击杀敌人时有 ${Math.round(this.reanimationChance * 100)}% 几率召唤一个幽灵 (最多 ${this.maxGhosts} 个)，持续 ${this.ghostDuration.toFixed(1)} 秒，造成 ${this.ghostDamage} 伤害。 (当前 Lv1)`;
+        this.level = 0; // 还原等级
+        return desc;
+    }
+
+    getUpgradeDescription() {
+        if (this.level >= this.maxLevel) {
+            return "已达最大等级。";
+        }
+        const nextLevel = this.level + 1;
+        // 模拟下一级属性
+        const originalLevel = this.level;
+        this.level = nextLevel;
+        this.calculateBonuses();
+
+        let desc = `几率: ${Math.round(this.reanimationChance * 100)}%, 伤害: ${this.ghostDamage}, 持续: ${this.ghostDuration.toFixed(1)}s, 数量: ${this.maxGhosts}`;
+        if (nextLevel === 5 && this.ghostEffects.slow) {
+            desc += ", 攻击附加减速";
+        }
+        desc += ` (Lv${nextLevel})`;
+
+        // 还原当前等级
+        this.level = originalLevel;
+        this.calculateBonuses();
+
+        return desc + "。";
     }
 }
 
@@ -383,5 +485,8 @@ if (typeof Bracer === 'function') BASE_PASSIVES.push(Bracer);
 if (typeof HollowHeart === 'function') BASE_PASSIVES.push(HollowHeart);
 if (typeof Pummarola === 'function') BASE_PASSIVES.push(Pummarola);
 if (typeof Magnet === 'function') BASE_PASSIVES.push(Magnet);
+
+// 新增：添加舍利子回魂
+if (typeof SoulRelic === 'function') BASE_PASSIVES.push(SoulRelic);
 
 console.log('BASE_PASSIVES initialized in passiveItems.js:', BASE_PASSIVES.map(p => p.name));

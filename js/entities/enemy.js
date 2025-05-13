@@ -192,16 +192,42 @@ class Enemy extends Character {
             this.createExplosion(this.type.explodeRadius || 120, this.type.explodeDamage || 15);
         }
         
-        // 如果击杀者是玩家，增加击杀数
-        if (killer === player) {
+        // 如果击杀者是玩家
+        if (killer instanceof Player) { // 确保 killer 是玩家实例
             // 增加击杀数
             killCount++;
             // 生成经验宝石
             this.dropXP();
-            // 随机掉落物品
-            if (Math.random() < 0.05) { // 5%几率掉落物品
+            // 随机掉落物品 (普通敌人)
+            if (!(this instanceof BossEnemy) && Math.random() < 0.05) { // Boss 不掉落普通小物品
                 this.dropItem();
             }
+
+            // 检查舍利子回魂
+            const soulRelicItem = killer.passiveItems.find(item => item instanceof SoulRelic);
+            if (soulRelicItem) {
+                // 尝试召唤幽灵，并获取是否成功召唤
+                const reanimated = soulRelicItem.tryReanimate(this.x, this.y, killer);
+                if(reanimated) {
+                    // 如果成功召唤幽灵，可以考虑不掉落宝箱或经验？(当前逻辑保留都掉落)
+                }
+            }
+
+            // --- 新增：如果是 Boss，则掉落宝箱 ---
+            if (this instanceof BossEnemy) {
+                console.log("Boss死亡，尝试掉落宝箱...");
+                if (typeof Chest === 'function' && typeof worldObjects !== 'undefined') {
+                    const chest = new Chest(this.x, this.y);
+                    worldObjects.push(chest);
+                    console.log("宝箱已添加到 worldObjects", chest);
+                    
+                    // 触发游戏结束或胜利状态？
+                    // gameManager.triggerVictory(); // 假设有这样一个方法
+                } else {
+                    console.error("无法创建宝箱，Chest 类或 worldObjects 未定义!");
+                }
+            }
+            // --- 结束新增 ---
         }
     }
 
@@ -344,6 +370,14 @@ class Enemy extends Character {
         if (this.isBoss) {
             this.drawHealthBar(ctx);
         }
+
+        // 如果有燃烧效果，绘制火焰图标
+        if (this.statusEffects.burn && this.isActive) {
+            ctx.font = `${this.size * 0.5}px 'Segoe UI Emoji', Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('🔥', screenPos.x + this.size * 0.35, screenPos.y - this.size * 0.35); // 调整位置，使其在血条附近或右上角
+        }
     }
 
     /**
@@ -416,7 +450,7 @@ class Enemy extends Character {
         // 创建伤害数字 (区分燃烧伤害和直接伤害)
         const damageColor = isBurnDamage ? 'orange' : 'white'; // 燃烧伤害用橙色
         const damageText = actualDamage.toFixed(isBurnDamage ? 1 : 0); // 燃烧伤害显示小数
-        spawnDamageNumber(this.x, this.y - this.size / 2, damageText); 
+        spawnDamageNumber(this.x, this.y - this.size / 2, damageText, damageColor); // 传递颜色
         // 注意：这里没有传递颜色，spawnDamageNumber 目前是固定红/白，需要修改它或在此处直接创建
 
         // 检查是否死亡
@@ -779,19 +813,23 @@ class BossEnemy extends Enemy {
                 // 获取屏幕坐标
                 const screenPos = cameraManager.worldToScreen(this.x, this.y);
 
-                // 计算透明度
+                // 计算透明度 (修改后，使其更透明)
                 let alpha;
+                const maxAlpha = 0.3; // 设置最大透明度为 0.3 (更透明)
+                const minAlpha = 0.1; // 设置最小透明度
+                
                 if (this.timer < this.expandDuration) {
-                    // 扩张阶段：逐渐增加透明度
-                    alpha = this.timer / this.expandDuration * 0.3;
+                    // 扩张阶段：从 0 到 maxAlpha
+                    alpha = (this.timer / this.expandDuration) * maxAlpha;
                 } else {
-                    // 保持阶段：闪烁效果
+                    // 保持阶段：在 minAlpha 和 maxAlpha 之间闪烁
                     const t = (this.timer - this.expandDuration) / this.holdDuration;
-                    alpha = 0.3 - 0.2 * Math.sin(t * Math.PI * 10);
+                    // 使用 (maxAlpha + minAlpha) / 2 作为中心点, (maxAlpha - minAlpha) / 2 作为振幅
+                    alpha = (maxAlpha + minAlpha) / 2 + (maxAlpha - minAlpha) / 2 * Math.sin(t * Math.PI * 10); 
                 }
 
                 // 绘制范围攻击效果
-                ctx.fillStyle = `rgba(255, 0, 0, ${alpha})`;
+                ctx.fillStyle = `rgba(255, 0, 0, ${alpha})`; // 使用调整后的 alpha
                 ctx.beginPath();
                 ctx.arc(screenPos.x, screenPos.y, this.radius, 0, Math.PI * 2);
                 ctx.fill();
@@ -1307,35 +1345,168 @@ class BossEnemy extends Enemy {
         ctx.textAlign = 'center';
         ctx.fillText(this.name, x, barY - 5);
     }
+}
 
+/**
+ * 幽灵敌人实体 (由舍利子回魂召唤)
+ * 不会伤害玩家，会自动攻击其他敌人
+ */
+class GhostEnemy extends Character {
     /**
-     * 死亡处理
-     * @param {GameObject} killer - 击杀者
+     * 构造函数
+     * @param {number} x - X坐标
+     * @param {number} y - Y坐标
+     * @param {Player} owner - 召唤者 (玩家)
+     * @param {number} damage - 幽灵造成的伤害
+     * @param {number} duration - 幽灵持续时间
+     * @param {number} speed - 幽灵移动速度
+     * @param {Object} effects - 额外效果 (例如减速)
      */
-    onDeath(killer) {
-        // 标记为垃圾和非活动
-        this.isGarbage = true;
-        this.isActive = false;
+    constructor(x, y, owner, damage, duration, speed = 150, effects = {}) {
+        // 使用幽灵 emoji 和基础属性
+        super(x, y, '👻', GAME_FONT_SIZE * 0.9, { health: 1, speed: speed, damage: damage, xp: 0 });
+        this.owner = owner;
+        this.lifetime = 0;
+        this.maxLifetime = duration;
+        this.targetEnemy = null;
+        this.attackCooldown = 0;
+        this.attackInterval = 0.8; // 攻击间隔
+        this.attackRangeSq = 50 * 50; // 攻击范围平方
+        this.searchRangeSq = 300 * 300; // 搜索敌人范围平方
+        this.effects = effects; // 如 { slow: { factor: 0.8, duration: 0.5 } }
 
-        // 如果击杀者是玩家，掉落物品
-        if (killer instanceof Player) {
-            // 增加击杀计数
-            killCount++;
+        // 添加到全局幽灵列表
+        if (typeof activeGhosts !== 'undefined') {
+            activeGhosts.push(this);
+        } else {
+            console.warn("activeGhosts 数组未定义!");
+        }
+    }
 
-            // 掉落宝箱
-            worldObjects.push(new Chest(this.x, this.y));
+    update(dt) {
+        if (this.isGarbage || !this.isActive) return;
 
-            // 掉落大量经验宝石
-            for (let i = 0; i < 15; i++) {
-                const gemX = this.x + (Math.random() - 0.5) * 60;
-                const gemY = this.y + (Math.random() - 0.5) * 60;
-                xpGems.push(new XPGem(gemX, gemY, Math.ceil(this.xpValue / 15)));
-            }
+        // 更新生命周期
+        this.lifetime += dt;
+        if (this.lifetime >= this.maxLifetime) {
+            this.destroy();
+            return;
         }
 
-        // 重置当前Boss
-        bossManager.currentBoss = null;
+        // 更新攻击冷却
+        if (this.attackCooldown > 0) {
+            this.attackCooldown -= dt;
+        }
 
-        console.log("Boss 被击败!");
+        // 寻找目标
+        if (!this.targetEnemy || this.targetEnemy.isGarbage || !this.targetEnemy.isActive) {
+            this.findTargetEnemy();
+        }
+
+        // 移动和攻击
+        if (this.targetEnemy) {
+            const dx = this.targetEnemy.x - this.x;
+            const dy = this.targetEnemy.y - this.y;
+            const distSq = dx * dx + dy * dy;
+
+            if (distSq > this.attackRangeSq) {
+                // 移动向目标
+                const dist = Math.sqrt(distSq);
+                const moveX = (dx / dist) * this.stats.speed * dt;
+                const moveY = (dy / dist) * this.stats.speed * dt;
+                this.x += moveX;
+                this.y += moveY;
+            } else if (this.attackCooldown <= 0) {
+                // 在攻击范围内，进行攻击
+                this.attack(this.targetEnemy);
+                this.attackCooldown = this.attackInterval;
+            }
+        } else {
+            // 没有目标时随机漂移或返回玩家附近? (可选)
+            // 简单处理：原地不动或缓慢移动
+        }
+    }
+
+    findTargetEnemy() {
+        let closestEnemy = null;
+        let minDistanceSq = this.searchRangeSq;
+
+        enemies.forEach(enemy => {
+            // 跳过自身、其他幽灵或已死亡的敌人
+            if (enemy === this || enemy.isGarbage || !enemy.isActive || enemy instanceof GhostEnemy) {
+                return;
+            }
+
+            const dx = enemy.x - this.x;
+            const dy = enemy.y - this.y;
+            const distanceSq = dx * dx + dy * dy;
+
+            if (distanceSq < minDistanceSq) {
+                minDistanceSq = distanceSq;
+                closestEnemy = enemy;
+            }
+        });
+
+        this.targetEnemy = closestEnemy;
+    }
+
+    attack(target) {
+        // 对目标造成伤害
+        target.takeDamage(this.stats.damage, this.owner); // 伤害来源算玩家
+
+        // 应用效果 (例如减速)
+        if (this.effects.slow && target.applyStatusEffect) {
+             target.applyStatusEffect('slow', {
+                 factor: this.effects.slow.factor,
+                 duration: this.effects.slow.duration,
+                 source: this.owner // 效果来源算玩家
+             });
+        }
+
+        // 创建攻击视觉效果 (可选)
+        const hitEffect = {
+             x: target.x, y: target.y, radius: target.size * 0.5, maxRadius: target.size * 0.7, lifetime: 0.2, timer: 0, isGarbage: false,
+             update: function(dt) { this.timer += dt; if (this.timer >= this.lifetime) this.isGarbage = true; this.radius = this.maxRadius * (this.timer/this.lifetime); },
+             draw: function(ctx) { if (this.isGarbage) return; const screenPos = cameraManager.worldToScreen(this.x, this.y); const alpha = 0.6 - (this.timer/this.lifetime)*0.6; ctx.fillStyle = `rgba(180, 180, 255, ${alpha})`; ctx.beginPath(); ctx.arc(screenPos.x, screenPos.y, this.radius, 0, Math.PI*2); ctx.fill(); }
+        };
+        visualEffects.push(hitEffect);
+    }
+
+    draw(ctx) {
+        if (this.isGarbage || !this.isActive) return;
+
+        const screenPos = cameraManager.worldToScreen(this.x, this.y);
+        const alpha = 0.6 * (1 - this.lifetime / this.maxLifetime); // 随时间淡出
+
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.font = `${this.size}px 'Segoe UI Emoji', Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        // 修改滤镜效果使其更明显
+        ctx.filter = 'drop-shadow(0 0 7px cyan) brightness(1.3)'; 
+        ctx.fillText(this.emoji, screenPos.x, screenPos.y);
+        ctx.restore();
+
+        // 可选：绘制生命周期条
+        // const barWidth = this.size;
+        // const barHeight = 3;
+        // const lifePercent = 1 - (this.lifetime / this.maxLifetime);
+        // ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+        // ctx.fillRect(screenPos.x - barWidth / 2, screenPos.y + this.size / 2 + 2, barWidth, barHeight);
+        // ctx.fillStyle = 'rgba(100, 100, 255, 0.8)';
+        // ctx.fillRect(screenPos.x - barWidth / 2, screenPos.y + this.size / 2 + 2, barWidth * lifePercent, barHeight);
+    }
+
+    destroy() {
+        this.isGarbage = true;
+        this.isActive = false;
+        // 从 activeGhosts 数组中移除自身
+        if (typeof activeGhosts !== 'undefined') {
+            const index = activeGhosts.indexOf(this);
+            if (index > -1) {
+                activeGhosts.splice(index, 1);
+            }
+        }
     }
 }

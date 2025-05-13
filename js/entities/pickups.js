@@ -453,11 +453,36 @@ class Chest extends GameObject {
     open(target) {
         console.log("宝箱已开启!");
 
-        // 获得大量经验值
-        target.gainXP(target.xpToNextLevel * 1.5);
+        // 随机决定奖励数量 (1-5)
+        const numRewards = Math.floor(Math.random() * 5) + 1;
+        console.log(`宝箱奖励: ${numRewards} 个升级!`);
 
-        // 创建宝箱开启效果
-        this.createOpenEffect();
+        // 获取所有可用升级选项
+        const availableUpgrades = getAvailableUpgrades(target); // 假设 target 是 player
+        shuffleArray(availableUpgrades); // 打乱顺序
+
+        // 应用随机选择的奖励
+        for (let i = 0; i < Math.min(numRewards, availableUpgrades.length); i++) {
+            const rewardOption = availableUpgrades[i];
+            console.log(`应用奖励: ${rewardOption.text}`);
+            if (typeof rewardOption.action === 'function') {
+                try {
+                    rewardOption.action(); // 执行升级/获取操作
+                } catch (error) {
+                    console.error(`应用宝箱奖励 \'${rewardOption.text}\' 时出错:`, error);
+                }
+            }
+        }
+
+        // 更新 UI 显示变化
+        updateUI();
+
+        // 标记宝箱为垃圾
+        this.isGarbage = true;
+        this.isActive = false;
+
+        // 播放音效 (如果需要)
+        // playSound(\'chestOpen\');
     }
 
     /**
