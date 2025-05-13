@@ -3,6 +3,30 @@
  * 包含游戏初始化、更新和绘制逻辑
  */
 
+// Conditional Debug Panel Loader
+(function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const DEBUG_MODE = urlParams.get('debug') === 'true';
+
+    if (DEBUG_MODE) {
+        console.log("Debug mode activated. Loading debug panel...");
+        const script = document.createElement('script');
+        script.src = 'js/debug.js';
+        script.onload = () => {
+            if (window.DebugPanel && typeof window.DebugPanel.init === 'function') {
+                window.DebugPanel.init();
+            } else {
+                console.error("Failed to initialize Debug Panel. DebugPanel.init not found.");
+            }
+        };
+        script.onerror = () => {
+            console.error("Failed to load js/debug.js. Ensure the file exists and path is correct.");
+        };
+        // Append to head or body. Body is generally safer for DOM manipulation scripts.
+        document.body.appendChild(script);
+    }
+})();
+
 let canvas, ctx;
 
 // 添加离屏画布

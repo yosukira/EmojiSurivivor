@@ -1353,6 +1353,9 @@ class BossEnemy extends Enemy {
         }
         // 调用父类的绘制方法 (绘制Boss本身和血条等)
         super.draw(ctx);
+        // 显式调用Boss特有的血条绘制方法
+        const screenPos = cameraManager.worldToScreen(this.x, this.y);
+        this.drawBossHealthBar(ctx, screenPos.x, screenPos.y);
     }
 
     /**
@@ -1523,7 +1526,7 @@ class GhostEnemy extends Character {
 
         const screenPos = cameraManager.worldToScreen(this.x, this.y);
         // 增加基础透明度，并让淡出效果不那么剧烈
-        const baseAlpha = 0.8; // 原来是 0.6
+        const baseAlpha = 0.9; // 从 0.8 提升到 0.9
         const fadeFactor = Math.max(0.2, 1 - (this.lifetime / this.maxLifetime) * 0.8); // 淡出到 0.2 而不是 0
         const alpha = baseAlpha * fadeFactor;
 
@@ -1534,8 +1537,8 @@ class GhostEnemy extends Character {
         ctx.textBaseline = 'middle';
         
         // --- 添加外发光效果 ---
-        ctx.shadowColor = 'cyan'; // 外发光颜色
-        ctx.shadowBlur = 10; // 外发光模糊半径
+        ctx.shadowColor = 'yellow'; // 外发光颜色改为 yellow
+        ctx.shadowBlur = 20; // 增加外发光模糊半径到 20
         // --- 结束外发光 --- 
         
         ctx.fillText(this.emoji, screenPos.x, screenPos.y);

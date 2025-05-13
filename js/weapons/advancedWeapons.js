@@ -38,11 +38,8 @@ class FireBladeWeapon extends Weapon {
      * @param {Player} owner - 拥有者
      */
     fire(owner) {
-        // 获取拥有者属性
         const ownerStats = this.getOwnerStats(owner);
-
-        // 计算实际投射物数量（基础数量 + 加成）
-        const count = this.stats.count + (ownerStats.projectileCountBonus || 0);
+        const projectileCount = this.stats.count + (ownerStats.projectileCountBonus || 0);
         const speed = this.stats.projectileSpeed * (ownerStats.projectileSpeedMultiplier || 1);
         const damage = this.stats.damage * (ownerStats.damageMultiplier || 1);
         const pierce = this.stats.pierce;
@@ -51,46 +48,51 @@ class FireBladeWeapon extends Weapon {
         const burnDamage = this.stats.burnDamage * (ownerStats.damageMultiplier || 1);
         const burnDuration = this.stats.burnDuration * (ownerStats.durationMultiplier || 1);
 
-        // 获取目标敌人
-        let target = owner.findNearestEnemy(GAME_WIDTH * 1.5) || {
-            x: owner.x + owner.lastMoveDirection.x * 100,
-            y: owner.y + owner.lastMoveDirection.y * 100
-        };
+        let sortedEnemies = [];
+        if (typeof enemies !== 'undefined' && enemies.length > 0) {
+            sortedEnemies = enemies.filter(e => e && !e.isGarbage && e.isActive && !(e instanceof GhostEnemy))
+                .map(enemy => ({
+                    enemy,
+                    distSq: (enemy.x - owner.x) * (enemy.x - owner.x) + (enemy.y - owner.y) * (enemy.y - owner.y)
+                }))
+                .sort((a, b) => a.distSq - b.distSq)
+                .map(item => item.enemy);
+        }
 
-        // 计算方向
-        const dx = target.x - owner.x;
-        const dy = target.y - owner.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const dirX = dist > 0 ? dx / dist : owner.lastMoveDirection.x;
-        const dirY = dist > 0 ? dy / dist : owner.lastMoveDirection.y;
+        for (let i = 0; i < projectileCount; i++) {
+            let dirX, dirY;
 
-        // 计算角度间隔
-        const angleStep = count > 1 ? (Math.PI / 6) : 0;
-        const startAngle = Math.atan2(dirY, dirX) - (angleStep * (count - 1) / 2);
+            if (sortedEnemies.length > 0) {
+                const targetEnemy = sortedEnemies[i % sortedEnemies.length];
+                const dx = targetEnemy.x - owner.x;
+                const dy = targetEnemy.y - owner.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                dirX = dist > 0 ? dx / dist : owner.lastMoveDirection.x;
+                dirY = dist > 0 ? dy / dist : owner.lastMoveDirection.y;
+            } else {
+                // 无敌人时，保持原有的扇形发射逻辑，以玩家朝向为中心
+                const baseAngle = Math.atan2(owner.lastMoveDirection.y, owner.lastMoveDirection.x);
+                const angleStep = projectileCount > 1 ? (Math.PI / 6) : 0; // FireBlade 原有的 angleStep
+                const startAngle = baseAngle - (angleStep * (projectileCount - 1) / 2);
+                const currentAngle = startAngle + i * angleStep;
+                dirX = Math.cos(currentAngle);
+                dirY = Math.sin(currentAngle);
+                 // 如果 lastMoveDirection 是 (0,0)，给一个默认方向，比如向上
+                if (owner.lastMoveDirection.x === 0 && owner.lastMoveDirection.y === 0 && dirX === 0 && dirY === 0) {
+                     dirX = Math.cos(angleStep * (i - (projectileCount -1) / 2)); // 默认向上为0度开始扇形
+                     dirY = Math.sin(angleStep * (i - (projectileCount -1) / 2));
+                }
+                 if (dirX === 0 && dirY === 0) { // 再次检查，确保有方向
+                    dirX = 0; dirY = -1;
+                }
+            }
 
-        // 发射多个投射物
-        for (let i = 0; i < count; i++) {
-            // 计算角度
-            const angle = startAngle + i * angleStep;
-            const vx = Math.cos(angle) * speed;
-            const vy = Math.sin(angle) * speed;
+            const vx = dirX * speed;
+            const vy = dirY * speed;
 
-            // 直接创建 FireBladeProjectile
             const proj = new FireBladeProjectile(
-                owner.x,
-                owner.y,
-                size,
-                vx,
-                vy,
-                damage,
-                pierce,
-                duration,
-                ownerStats,
-                burnDamage,
-                burnDuration
+                owner.x, owner.y, size, vx, vy, damage, pierce, duration, ownerStats, burnDamage, burnDuration
             );
-
-            // 设置拥有者
             proj.owner = owner;
             projectiles.push(proj);
         }
@@ -294,17 +296,26 @@ class FireBladeProjectile extends Projectile {
             },
             draw: function(ctx) {
                 if (this.isGarbage) return;
-                // 获取屏幕坐标
-                const screenPos = cameraManager.worldToScreen(this.x, this.y);
-                // 计算透明度
-                const alpha = 0.7 * (1 - (this.timer / this.lifetime));
-                // 计算大小
-                const particleSize = this.size * (1 - (this.timer / this.lifetime));
-                // 绘制火焰粒子
-                ctx.fillStyle = `rgba(255, 100, 0, ${alpha})`;
-                ctx.beginPath();
-                ctx.arc(screenPos.x, screenPos.y, particleSize / 2, 0, Math.PI * 2);
-                ctx.fill();
+
+                ctx.save();
+                try {
+                    const screenPos = cameraManager.worldToScreen(this.x, this.y);
+                    const baseParticleAlpha = 0.7; 
+                    const visibilityFactor = (1 - (this.timer / this.lifetime));
+                    
+                    const originalGlobalAlpha = ctx.globalAlpha;
+                    ctx.globalAlpha = originalGlobalAlpha * baseParticleAlpha * visibilityFactor;
+
+                    const particleDrawSize = this.size * visibilityFactor;
+                    
+                    ctx.fillStyle = 'rgb(255, 100, 0)'; 
+                    
+                    ctx.beginPath();
+                    ctx.arc(screenPos.x, screenPos.y, particleDrawSize / 2, 0, Math.PI * 2);
+                    ctx.fill();
+                } finally {
+                    ctx.restore();
+                }
             }
         };
         // 添加到视觉效果列表
@@ -316,26 +327,31 @@ class FireBladeProjectile extends Projectile {
      * @param {CanvasRenderingContext2D} ctx - 画布上下文
      */
     draw(ctx) {
-        // 如果投射物不活动或已标记为垃圾，不绘制
         if (!this.isActive || this.isGarbage) return;
+        
+        ctx.save();
         try {
-            // 获取屏幕坐标
             const screenPos = cameraManager.worldToScreen(this.x, this.y);
-            // 绘制发光效果
+            
             const glowSize = this.size * 1.5;
-            ctx.fillStyle = 'rgba(255, 100, 0, 0.3)';
+            const originalGlobalAlpha = ctx.globalAlpha; 
+            ctx.globalAlpha = originalGlobalAlpha * 0.3; 
+            ctx.fillStyle = 'rgb(255, 100, 0)';
+
             ctx.beginPath();
             ctx.arc(screenPos.x, screenPos.y, glowSize / 2, 0, Math.PI * 2);
             ctx.fill();
-            // 设置字体
+            
+            ctx.globalAlpha = originalGlobalAlpha; 
+
             ctx.font = `${this.size}px 'Segoe UI Emoji', Arial`;
-            // 设置对齐方式
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            // 绘制表情符号
             ctx.fillText(this.emoji, screenPos.x, screenPos.y);
         } catch (e) {
             console.error("绘制燃烧刀投射物时出错:", e);
+        } finally {
+            ctx.restore();
         }
     }
 }
@@ -383,51 +399,62 @@ class StormBladeWeapon extends Weapon {
      * @param {Player} owner - 拥有者
      */
     fire(owner) {
-        // 获取拥有者属性
         const ownerStats = this.getOwnerStats(owner);
-        // 计算实际投射物数量（基础数量 + 加成）
-        const count = this.stats.count + (ownerStats.projectileCountBonus || 0);
+        const projectileCount = this.stats.count + (ownerStats.projectileCountBonus || 0);
         const speed = this.stats.projectileSpeed * (ownerStats.projectileSpeedMultiplier || 1);
-        const damage = this.stats.damage;
-        const chainCount = this.stats.chainCount;
-        const chainRange = this.stats.chainRange * (ownerStats.areaMultiplier || 1);
+        const damage = this.stats.damage * (ownerStats.damageMultiplier || 1);
         const duration = this.stats.duration * (ownerStats.durationMultiplier || 1);
         const size = GAME_FONT_SIZE * (ownerStats.areaMultiplier || 1);
-        // 获取目标敌人
-        let target = owner.findNearestEnemy(GAME_WIDTH * 1.5) || {
-            x: owner.x + owner.lastMoveDirection.x * 100,
-            y: owner.y + owner.lastMoveDirection.y * 100
-        };
-        // 计算方向
-        const dx = target.x - owner.x;
-        const dy = target.y - owner.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const dirX = dist > 0 ? dx / dist : owner.lastMoveDirection.x;
-        const dirY = dist > 0 ? dy / dist : owner.lastMoveDirection.y;
-        // 计算角度间隔
-        const angleStep = count > 1 ? (Math.PI / 10) : 0;
-        const startAngle = Math.atan2(dirY, dirX) - (angleStep * (count - 1) / 2);
-        // 发射多个投射物
-        for (let i = 0; i < count; i++) {
-            // 计算角度
-            const angle = startAngle + i * angleStep;
-            const vx = Math.cos(angle) * speed;
-            const vy = Math.sin(angle) * speed;
-            // 创建岚刀投射物
-            const projectile = new StormBladeProjectile(
-                owner.x,
-                owner.y,
-                size,
-                vx,
-                vy,
-                damage,
-                duration,
-                ownerStats,
-                chainCount,
-                chainRange
+        const chainCount = this.stats.chainCount;
+        const chainRange = this.stats.chainRange * (ownerStats.areaMultiplier || 1); // 连锁范围也受范围影响
+
+        let sortedEnemies = [];
+        if (typeof enemies !== 'undefined' && enemies.length > 0) {
+            sortedEnemies = enemies.filter(e => e && !e.isGarbage && e.isActive && !(e instanceof GhostEnemy))
+                .map(enemy => ({
+                    enemy,
+                    distSq: (enemy.x - owner.x) * (enemy.x - owner.x) + (enemy.y - owner.y) * (enemy.y - owner.y)
+                }))
+                .sort((a, b) => a.distSq - b.distSq)
+                .map(item => item.enemy);
+        }
+
+        for (let i = 0; i < projectileCount; i++) {
+            let dirX, dirY;
+
+            if (sortedEnemies.length > 0) {
+                const targetEnemy = sortedEnemies[i % sortedEnemies.length];
+                const dx = targetEnemy.x - owner.x;
+                const dy = targetEnemy.y - owner.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                dirX = dist > 0 ? dx / dist : owner.lastMoveDirection.x;
+                dirY = dist > 0 ? dy / dist : owner.lastMoveDirection.y;
+            } else {
+                // 无敌人时，保持原有的扇形发射逻辑，以玩家朝向为中心
+                const baseAngle = Math.atan2(owner.lastMoveDirection.y, owner.lastMoveDirection.x);
+                const angleStep = projectileCount > 1 ? (Math.PI / 4) : 0; // StormBlade 原有的 angleStep
+                const startAngle = baseAngle - (angleStep * (projectileCount - 1) / 2);
+                const currentAngle = startAngle + i * angleStep;
+                dirX = Math.cos(currentAngle);
+                dirY = Math.sin(currentAngle);
+                // 如果 lastMoveDirection 是 (0,0)，给一个默认方向，比如向上
+                if (owner.lastMoveDirection.x === 0 && owner.lastMoveDirection.y === 0 && dirX === 0 && dirY === 0) {
+                     dirX = Math.cos(angleStep * (i - (projectileCount -1) / 2)); 
+                     dirY = Math.sin(angleStep * (i - (projectileCount -1) / 2));
+                }
+                 if (dirX === 0 && dirY === 0) { // 再次检查，确保有方向
+                    dirX = 0; dirY = -1;
+                }
+            }
+
+            const vx = dirX * speed;
+            const vy = dirY * speed;
+
+            const proj = new StormBladeProjectile(
+                owner.x, owner.y, size, vx, vy, damage, duration, ownerStats, chainCount, chainRange
             );
-            // 添加到投射物列表
-            projectiles.push(projectile);
+            proj.owner = owner;
+            projectiles.push(proj);
         }
     }
 

@@ -36,42 +36,84 @@ class DaggerWeapon extends Weapon {
      * @param {Player} owner - 拥有者
      */
     fire(owner) {
-        // 获取拥有者属性
         const ownerStats = this.getOwnerStats(owner);
-
-        // 计算实际投射物数量（基础数量 + 加成）
-        const count = this.stats.count + (ownerStats.projectileCountBonus || 0);
+        const projectileCount = this.stats.count + (ownerStats.projectileCountBonus || 0);
         const speed = this.stats.projectileSpeed * (ownerStats.projectileSpeedMultiplier || 1);
         const damage = this.stats.damage * (ownerStats.damageMultiplier || 1);
         const pierce = this.stats.pierce;
         const duration = this.stats.duration * (ownerStats.durationMultiplier || 1);
         const size = GAME_FONT_SIZE * (ownerStats.areaMultiplier || 1);
 
-        // 获取目标敌人
-        let target = owner.findNearestEnemy(GAME_WIDTH * 1.5) || {
-            x: owner.x + owner.lastMoveDirection.x * 100,
-            y: owner.y + owner.lastMoveDirection.y * 100
-        };
+        // 1. 获取并排序敌人
+        let sortedEnemies = [];
+        if (typeof enemies !== 'undefined' && enemies.length > 0) {
+            sortedEnemies = enemies.filter(e => e && !e.isGarbage && e.isActive && !(e instanceof GhostEnemy)) // 排除幽灵
+                .map(enemy => ({
+                    enemy,
+                    distSq: (enemy.x - owner.x) * (enemy.x - owner.x) + (enemy.y - owner.y) * (enemy.y - owner.y)
+                }))
+                .sort((a, b) => a.distSq - b.distSq)
+                .map(item => item.enemy);
+        }
 
-        // 计算方向
-        const dx = target.x - owner.x;
-        const dy = target.y - owner.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const dirX = dist > 0 ? dx / dist : owner.lastMoveDirection.x;
-        const dirY = dist > 0 ? dy / dist : owner.lastMoveDirection.y;
+        // 2. 为每个投射物确定目标并发射
+        for (let i = 0; i < projectileCount; i++) {
+            let dirX, dirY;
 
-        // 计算角度间隔
-        const angleStep = count > 1 ? (Math.PI / 8) : 0;
-        const startAngle = Math.atan2(dirY, dirX) - (angleStep * (count - 1) / 2);
+            if (sortedEnemies.length > 0) {
+                // 循环选择目标敌人
+                const targetEnemy = sortedEnemies[i % sortedEnemies.length];
+                const dx = targetEnemy.x - owner.x;
+                const dy = targetEnemy.y - owner.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                dirX = dist > 0 ? dx / dist : owner.lastMoveDirection.x;
+                dirY = dist > 0 ? dy / dist : owner.lastMoveDirection.y;
+            } else {
+                // 没有敌人时的后备行为：向玩家最后移动方向发射
+                // 或者，如果之前有 target 的概念，可以像之前一样找一个大致的目标点
+                let fallbackTargetX = owner.x + owner.lastMoveDirection.x * 100;
+                let fallbackTargetY = owner.y + owner.lastMoveDirection.y * 100;
+                
+                // 如果鼠标位置可用且更合适作为无目标时的方向，可以使用 (需引入 mousePos)
+                // if (typeof mousePos !== 'undefined' && mousePos.x !== undefined) {
+                // fallbackTargetX = mousePos.x;
+                // fallbackTargetY = mousePos.y;
+                // }
 
-        // 发射多个投射物
-        for (let i = 0; i < count; i++) {
-            // 计算角度
-            const angle = startAngle + i * angleStep;
-            const vx = Math.cos(angle) * speed;
-            const vy = Math.sin(angle) * speed;
 
-            // 创建投射物 - 不再使用对象池，直接创建新的 Projectile
+                const dx = fallbackTargetX - owner.x;
+                const dy = fallbackTargetY - owner.y;
+
+                // 对于匕首这种单向武器，如果只有一个投射物且无敌人，应该直接按玩家朝向
+                // 如果有多个投射物且无敌人，匕首原来的扇形逻辑可能更合适
+                if (projectileCount === 1 || sortedEnemies.length === 0) {
+                     dirX = owner.lastMoveDirection.x;
+                     dirY = owner.lastMoveDirection.y;
+                     // 如果 lastMoveDirection 是 (0,0) (例如玩家静止)，给一个默认方向，比如向上
+                     if (dirX === 0 && dirY === 0) {
+                         dirX = 0;
+                         dirY = -1;
+                     }
+                } else {
+                    // 当有多个投射物但无敌人时，可以恢复扇形发射，或都朝一个方向
+                    // 这里为了简化，暂时也使其朝向 lastMoveDirection，或者可以引入之前的扇形逻辑
+                     const angleStep = Math.PI / 8; // 与之前匕首逻辑类似
+                     const baseAngle = Math.atan2(owner.lastMoveDirection.y, owner.lastMoveDirection.x);
+                     const startAngle = baseAngle - (angleStep * (projectileCount - 1) / 2);
+                     const currentAngle = startAngle + i * angleStep;
+                     dirX = Math.cos(currentAngle);
+                     dirY = Math.sin(currentAngle);
+                }
+
+                // 确保方向向量不是0,0，如果玩家完全静止且没有lastMoveDirection
+                if (dirX === 0 && dirY === 0) {
+                    dirX = 0; dirY = -1; // 默认向上
+                }
+            }
+
+            const vx = dirX * speed;
+            const vy = dirY * speed;
+
             const proj = new Projectile(
                 owner.x,
                 owner.y,
@@ -84,14 +126,11 @@ class DaggerWeapon extends Weapon {
                 duration,
                 ownerStats
             );
-            // 添加到全局投射物列表 (需要确保 Projectile 类是可访问的)
             if (typeof projectiles !== 'undefined') {
                 projectiles.push(proj);
             } else {
                 console.error('全局 projectiles 数组未定义!');
             }
-
-            // 设置拥有者
             proj.owner = owner;
         }
     }

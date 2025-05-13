@@ -611,46 +611,49 @@ class Chest extends GameObject {
      * @param {CanvasRenderingContext2D} ctx - 画布上下文
      */
     draw(ctx) {
-        // 如果宝箱不活动或已标记为垃圾，不绘制
-        if (!this.isActive || this.isGarbage) return;
+        if (!this.isActive || this.isGarbage || this.collected) {
+            // console.log(`Chest not drawn: active=${this.isActive}, garbage=${this.isGarbage}, collected=${this.collected}, emoji=${this.emoji}`);
+            return;
+        }
+        // console.log(`Attempting to draw Chest (Restored Pulsing Glow Attempt): emoji=${this.emoji}`);
 
         try {
-            // 获取屏幕坐标
             const screenPos = cameraManager.worldToScreen(this.x, this.y);
+            const baseSize = this.size;
 
-            // 绘制发光效果
-            const glowSize = this.size * (1.2 + 0.2 * Math.sin(this.glowTimer));
-            const glowAlpha = 0.4 + 0.2 * Math.sin(this.glowTimer);
+            const glowValue = Math.sin(this.glowTimer); 
+            const sizePulse = (1 + glowValue * 0.1) * baseSize; 
+            const alphaPulse = 0.7 + (glowValue + 1) * 0.15; 
 
-            ctx.fillStyle = `rgba(255, 215, 0, ${glowAlpha})`;
-            ctx.beginPath();
-            ctx.arc(screenPos.x, screenPos.y, glowSize / 1.5, 0, Math.PI * 2);
-            ctx.fill();
+            // console.log(`Chest values (Restored Pulsing Glow): sizePulse=${sizePulse}, alphaPulse=${alphaPulse}`);
 
-            // 设置字体
-            ctx.font = `${this.size}px 'Segoe UI Emoji', Arial`;
+            if (sizePulse <= 0 || baseSize <= 0) { 
+                // console.error("Chest sizePulse or baseSize is zero/negative.");
+                return;
+            }
+            if (alphaPulse <= 0) {
+                // console.log("Chest alphaPulse is zero/negative.");
+                return;
+            }
 
-            // 设置对齐方式
+            ctx.save(); 
+            
+            ctx.globalAlpha = alphaPulse; 
+
+            ctx.shadowColor = 'rgba(255, 223, 0, 0.7)'; 
+            ctx.shadowBlur = 15;    
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 0;
+
+            ctx.font = `${sizePulse}px 'Segoe UI Emoji', Arial`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-
-            // 绘制表情符号
             ctx.fillText(this.emoji, screenPos.x, screenPos.y);
+            
+            ctx.restore(); 
 
-            // 如果生命周期少于5秒，绘制闪烁警告
-            if (this.lifetime < 5) {
-                // 计算闪烁透明度
-                const blinkAlpha = Math.sin(this.lifetime * 10) * 0.5 + 0.5;
-
-                // 绘制闪烁警告
-                ctx.strokeStyle = `rgba(255, 0, 0, ${blinkAlpha})`;
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                ctx.arc(screenPos.x, screenPos.y, this.size * 0.8, 0, Math.PI * 2);
-                ctx.stroke();
-            }
         } catch (e) {
-            console.error("绘制宝箱时出错:", e);
+            console.error('Error in Chest.draw (Restored Pulsing Glow Attempt):', e);
         }
     }
 }
