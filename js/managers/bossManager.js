@@ -49,10 +49,34 @@ class BossManager {
     spawnBoss(gameTime, player) {
         // 根据游戏时间筛选可用Boss类型
         const availableTypes = BOSS_TYPES.filter(type => gameTime >= (type.minTime || 0));
-        if (availableTypes.length === 0) return;
-        // 随机选择Boss类型
-        const typeIndex = Math.floor(Math.random() * availableTypes.length);
-        const chosenType = availableTypes[typeIndex];
+        if (availableTypes.length === 0) {
+            console.warn("No available boss types to spawn at gameTime:", gameTime);
+            return;
+        }
+
+        let chosenType;
+
+        // 检查是否是游戏中的第一个Boss生成周期 (例如，在第一个BOSS_INTERVAL内)
+        // 并检查是否有 minTime === 0 的Boss (即骷髅王)
+        const skeletonKingCandidate = availableTypes.find(type => type.minTime === 0);
+        
+        // 如果这是第一次（或非常早期）的Boss生成，并且骷髅王可用，则强制选择骷髅王
+        // nextBossTime 在第一次生成时约等于 BOSS_INTERVAL。
+        // 我们检查 gameTime 是否小于 BOSS_INTERVAL + 一点点缓冲，确保是处理第一个Boss的情况。
+        if (gameTime < BOSS_INTERVAL + (BOSS_INTERVAL / 2) && skeletonKingCandidate) {
+            chosenType = skeletonKingCandidate;
+            console.log("Forcing Skeleton King as the first boss.");
+        } else {
+            // 否则，从可用类型中随机选择
+            const typeIndex = Math.floor(Math.random() * availableTypes.length);
+            chosenType = availableTypes[typeIndex];
+        }
+        
+        if (!chosenType) { // 以防万一 chosenType 未被设定
+            console.error("Failed to choose a boss type!", availableTypes);
+            chosenType = BOSS_TYPES[0]; // 极端情况下的回退
+        }
+
         // 计算生成位置（在屏幕外围）
         let spawnX, spawnY;
         // 考虑无限地图，使用相对于玩家的位置

@@ -179,6 +179,7 @@ const bossManager = {
     currentBoss: null,
     bossWarningTimer: 0,
     showingWarning: false,
+    pendingBossType: null, // 新增：用于存储待生成的Boss类型
 
     update(dt, gameTime, player) {
         // 如果当前有Boss，更新Boss
@@ -195,32 +196,37 @@ const bossManager = {
 
             // 如果警告计时器超过3秒，生成Boss
             if (this.bossWarningTimer >= 3) {
-                this.spawnBoss(gameTime, player);
+                if (this.pendingBossType) {
+                    this.spawnBoss(player, this.pendingBossType); // 使用预选的Boss类型
+                }
                 this.showingWarning = false;
                 this.bossWarningTimer = 0;
+                this.pendingBossType = null; // 清除预选的Boss
             }
-
             return;
         }
 
         // 如果游戏时间超过下一次Boss生成时间，显示警告
         if (gameTime >= this.nextBossTime) {
-            this.showBossWarning(gameTime);
-            this.showingWarning = true;
-            this.nextBossTime = gameTime + BOSS_INTERVAL;
+            const availableBosses = BOSS_TYPES.filter(boss => gameTime >= (boss.minTime || 0));
+            if (availableBosses.length > 0) {
+                // 随机选择一个Boss并存储
+                this.pendingBossType = availableBosses[Math.floor(Math.random() * availableBosses.length)];
+                this.showBossWarning(this.pendingBossType.name); // 用选定的Boss名字显示警告
+                this.showingWarning = true;
+            } else {
+                // 如果没有可用的Boss（理论上不应发生，除非BOSS_TYPES为空或minTime都过高）
+                // 简单地推迟下一次检查，或者可以记录一个错误
+                console.warn("No bosses available to choose from at gameTime:", gameTime);
+            }
+            this.nextBossTime = gameTime + BOSS_INTERVAL; // 设置下一次Boss生成的时间
         }
     },
 
-    showBossWarning(gameTime) {
-        // 获取可用Boss类型
-        const availableBosses = BOSS_TYPES.filter(boss => gameTime >= (boss.minTime || 0));
-
-        // 如果没有可用Boss，使用第一个
-        const bossType = availableBosses.length > 0 ? availableBosses[availableBosses.length - 1] : BOSS_TYPES[0];
-
+    showBossWarning(bossName) { // 修改：接收Boss名字
         // 显示Boss警告
         const bossWarningElement = document.getElementById('bossWarning');
-        bossWarningElement.textContent = `👹 BOSS ${bossType.name} 来袭! 👹`;
+        bossWarningElement.textContent = `👹 BOSS ${bossName} 来袭! 👹`; // 使用传入的Boss名字
         bossWarningElement.style.display = 'block';
         bossWarningElement.classList.add('animate');
 
@@ -231,13 +237,7 @@ const bossManager = {
         }, 3000);
     },
 
-    spawnBoss(gameTime, player) {
-        // 获取可用Boss类型
-        const availableBosses = BOSS_TYPES.filter(boss => gameTime >= (boss.minTime || 0));
-
-        // 如果没有可用Boss，使用第一个
-        const bossType = availableBosses.length > 0 ? availableBosses[availableBosses.length - 1] : BOSS_TYPES[0];
-
+    spawnBoss(player, bossTypeToSpawn) { // 修改：接收预选的Boss类型
         // 计算生成位置
         const angle = Math.random() * Math.PI * 2;
         const distance = 300;
@@ -245,7 +245,7 @@ const bossManager = {
         const y = player.y + Math.sin(angle) * distance;
 
         // 创建Boss - 使用 BossEnemy 类
-        const boss = new BossEnemy(x, y, bossType);
+        const boss = new BossEnemy(x, y, bossTypeToSpawn); // 使用传入的Boss类型
 
         // 添加到敌人列表
         enemies.push(boss);
@@ -1225,6 +1225,56 @@ function checkEvolution(player, item) {
 }
 
 /**
+ * 创建通用爆炸特效
+ * @param {number} x - X坐标
+ * @param {number} y - Y坐标
+ * @param {number} maxRadius - 最大半径
+ * @param {string} color - 颜色 (例如 'rgba(255, 100, 50, 0.7)')
+ * @param {number} [lifetime=0.5] - 持续时间（秒）
+ */
+function createExplosionEffect(x, y, maxRadius, color, lifetime = 0.5) {
+    const effect = {
+        x: x,
+        y: y,
+        radius: 0,
+        maxRadius: maxRadius,
+        color: color,
+        lifetime: lifetime,
+        timer: 0,
+        isGarbage: false,
+
+        update: function(dt) {
+            this.timer += dt;
+            if (this.timer >= this.lifetime) {
+                this.isGarbage = true;
+                return;
+            }
+            this.radius = (this.timer / this.lifetime) * this.maxRadius;
+        },
+
+        draw: function(ctx) {
+            if (this.isGarbage) return;
+
+            const screenPos = cameraManager.worldToScreen(this.x, this.y);
+            // 从颜色字符串中提取alpha值，或者如果没有提供alpha，则根据生命周期计算
+            let baseAlpha = 0.7;
+            const colorParts = this.color.match(/(\d+(\.\d+)?)/g);
+            if (colorParts && colorParts.length === 4) {
+                baseAlpha = parseFloat(colorParts[3]);
+            }
+            
+            const alpha = baseAlpha - (this.timer / this.lifetime) * baseAlpha;
+            
+            ctx.fillStyle = this.color.replace(/(\d\.?\d*\))$/, `${alpha})`); // 动态更新颜色的alpha值
+            ctx.beginPath();
+            ctx.arc(screenPos.x, screenPos.y, this.radius, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    };
+    visualEffects.push(effect);
+}
+
+/**
  * 创建进化特效
  * @param {number} x - X坐标
  * @param {number} y - Y坐标
@@ -1309,23 +1359,26 @@ class EnemyProjectile {
      * @param {number} vy - Y速度
      * @param {number} damage - 伤害
      * @param {Enemy} owner - 拥有者
+     * @param {string} [emoji=null] - 可选的表情符号用于显示
+     * @param {number} [customSize=null] - 可选的自定义大小
      */
-    constructor(x, y, vx, vy, damage, owner) {
+    constructor(x, y, vx, vy, damage, owner, emoji = null, customSize = null) {
         this.x = x;
         this.y = y;
         this.vx = vx;
         this.vy = vy;
         this.damage = damage;
         this.owner = owner;
+        this.emoji = emoji;
         
         // 大小
-        this.size = GAME_FONT_SIZE * 0.6;
+        this.size = customSize !== null ? customSize : (this.emoji ? GAME_FONT_SIZE * 0.8 : GAME_FONT_SIZE * 0.6);
         this.width = this.size;
         this.height = this.size;
         
         // 生命周期
         this.lifetime = 0;
-        this.duration = 3.0;
+        this.duration = 3.0; 
         
         // 活动状态
         this.isActive = true;
@@ -1437,17 +1490,24 @@ class EnemyProjectile {
         // 如果投射物不活动或已标记为垃圾，不绘制
         if (this.isGarbage || !this.isActive) return;
         
-        // 获取屏幕坐标
         const screenPos = cameraManager.worldToScreen(this.x, this.y);
         
-        // 绘制投射物 (修改为紫色)
-        ctx.fillStyle = 'purple'; // 修改填充色
-        ctx.beginPath();
-        ctx.arc(screenPos.x, screenPos.y, this.size / 2, 0, Math.PI * 2);
-        ctx.fill();
+        if (this.emoji) {
+            ctx.font = `${this.size}px 'Segoe UI Emoji', Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(this.emoji, screenPos.x, screenPos.y);
+        } else {
+            // 默认绘制：紫色圆形
+            ctx.fillStyle = 'purple'; 
+            ctx.beginPath();
+            ctx.arc(screenPos.x, screenPos.y, this.size / 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
         
-        // 绘制轨迹 (修改为紫色)
-        ctx.strokeStyle = 'rgba(128, 0, 128, 0.4)'; // 修改描边色和透明度
+        // 移除轨迹绘制，如果使用emoji则轨迹可能不合适
+        /*
+        ctx.strokeStyle = 'rgba(128, 0, 128, 0.4)'; 
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.moveTo(screenPos.x, screenPos.y);
@@ -1456,6 +1516,7 @@ class EnemyProjectile {
             screenPos.y - this.vy / 10
         );
         ctx.stroke();
+        */
     }
 }
 

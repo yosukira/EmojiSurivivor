@@ -33,6 +33,8 @@ const EMOJI = {
     PROJECTILE_FIRE: '🔥',
     PROJECTILE_LIGHTNING: '⚡',
     PROJECTILE_GHOST: '👻',
+    PROJECTILE_GHOST_ALT: '🔹',
+    PROJECTILE_GHOST_SPECIAL: '💠',
     PROJECTILE_HANDSHAKE: '🤝',
     SWORD: '🗡️',
     
@@ -149,7 +151,8 @@ const BOSS_TYPES = [
         earthquakeDamageMultiplier: 1.8,
         earthquakeDuration: 2.0,
         specialAbilityCooldown: 4.5,
-        specialAttackWarningDuration: 1.0
+        specialAttackWarningDuration: 1.0,
+        displaySizeMultiplier: 4.0
     },
     {
         name: "幽灵领主",
@@ -159,8 +162,24 @@ const BOSS_TYPES = [
         damageMult: 0.9,
         xpMult: 1.2,
         attackPattern: "ranged",
-        projectileCount: 3,
-        minTime: BOSS_INTERVAL
+        attackCooldown: 1.8,
+        minTime: BOSS_INTERVAL,
+        specialAbilityCooldown: 6.0,
+        specialAttackWarningDuration: 1.5,
+        displaySizeMultiplier: 4.0,
+        projectileInfo: {
+            emoji: EMOJI.PROJECTILE_GHOST_ALT,
+            emojiSpecial: EMOJI.PROJECTILE_GHOST_SPECIAL,
+            speed: 220,
+            damageFactor: 0.8,
+            countNormal: 8,
+            countSpecialSingleWave: 12,
+            specialAttackWaves: 4,
+            projectilesPerWaveSpecial: 8,
+            specialAttackWaveDelay: 0.3,
+            sizeFactorNormal: 0.25,
+            sizeFactorSpecial: 0.3
+        }
     },
     {
         name: "巨型僵尸",
@@ -170,7 +189,8 @@ const BOSS_TYPES = [
         damageMult: 1.8,
         xpMult: 5.0,
         attackPattern: "aoe",
-        minTime: BOSS_INTERVAL * 2
+        minTime: BOSS_INTERVAL * 2,
+        displaySizeMultiplier: 4.5
     },
     {
         name: "恶魔领主",
@@ -180,7 +200,8 @@ const BOSS_TYPES = [
         damageMult: 1.1,
         xpMult: 2.0,
         attackPattern: "summon",
-        minTime: BOSS_INTERVAL * 3
+        minTime: BOSS_INTERVAL * 3,
+        displaySizeMultiplier: 4.0
     },
     {
         name: "远古巨龙",
@@ -193,6 +214,7 @@ const BOSS_TYPES = [
         minTime: BOSS_INTERVAL * 4,
         projectileSpeed: 200,
         laserWidth: 40,
-        laserDamage: 20
+        laserDamage: 20,
+        displaySizeMultiplier: 4.2
     }
 ];

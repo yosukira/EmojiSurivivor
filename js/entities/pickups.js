@@ -269,57 +269,46 @@ class Pickup extends GameObject {
      * 吸取所有经验宝石
      */
     magnetizeAllXP() {
-        // 创建磁铁特效
+        // 创建磁铁特效 (使用 this.target 来引用玩家)
         const effect = {
-            x: player.x,
-            y: player.y,
+            x: this.target ? this.target.x : 0, // Safely access target
+            y: this.target ? this.target.y : 0,
             radius: 0,
-            maxRadius: 300,
-            lifetime: 0.5,
+            maxRadius: Math.min(GAME_WIDTH, GAME_HEIGHT) * 0.8, // 更大的视觉效果
+            lifetime: 0.6,
             timer: 0,
             isGarbage: false,
 
             update: function(dt) {
-                // 更新计时器
                 this.timer += dt;
-
-                // 如果计时器结束，标记为垃圾
                 if (this.timer >= this.lifetime) {
                     this.isGarbage = true;
                     return;
                 }
-
-                // 更新半径
                 this.radius = (this.timer / this.lifetime) * this.maxRadius;
             },
 
             draw: function(ctx) {
                 if (this.isGarbage) return;
-
-                // 获取屏幕坐标
                 const screenPos = cameraManager.worldToScreen(this.x, this.y);
-
-                // 计算透明度
-                const alpha = 0.5 - (this.timer / this.lifetime) * 0.5;
-
-                // 绘制磁铁效果
+                const alpha = 0.6 - (this.timer / this.lifetime) * 0.6;
                 ctx.strokeStyle = `rgba(0, 100, 255, ${alpha})`;
-                ctx.lineWidth = 3;
+                ctx.lineWidth = 5; // 更粗的线条
                 ctx.beginPath();
                 ctx.arc(screenPos.x, screenPos.y, this.radius, 0, Math.PI * 2);
                 ctx.stroke();
             }
         };
-
-        // 添加到视觉效果列表
         visualEffects.push(effect);
 
-        // 将所有经验宝石移动到玩家位置
+        // 使所有经验宝石飞向玩家
         xpGems.forEach(gem => {
-            if (!gem.isGarbage && gem.isActive) {
-                // 设置宝石位置为玩家位置
-                gem.x = player.x;
-                gem.y = player.y;
+            if (gem && !gem.isGarbage && gem.isActive) {
+                gem.isAttracted = true;
+                // 显著提高吸引速度，使其快速飞向玩家
+                gem.attractionSpeed = gem.baseAttractionSpeed * 3.0; 
+                gem.vx = 0; // 清除当前速度，以便直接飞向目标
+                gem.vy = 0;
             }
         });
     }
@@ -458,36 +447,51 @@ class Chest extends GameObject {
         console.log("宝箱已打开！准备触发多次升级...");
         
         // 创建打开特效
-        this.createOpenEffect();
+        // this.createOpenEffect(); // 移除打开时的特效
 
-        // --- 核心逻辑：触发多次升级 ---
-        const numberOfUpgrades = Math.floor(Math.random() * 5) + 1; // 1到5次升级
-        console.log(`宝箱提供 ${numberOfUpgrades} 次升级机会.`);
+        // --- 核心逻辑：触发多次升级 (带权重) ---
+        let numberOfUpgrades;
+        const upgradeWeights = [
+            { value: 1, weight: 1 }, // 1次升级 (权重1)
+            { value: 2, weight: 3 }, // 2次升级 (权重3)
+            { value: 3, weight: 5 }, // 3次升级 (权重5 - 最常见)
+            { value: 4, weight: 3 }, // 4次升级 (权重3)
+            { value: 5, weight: 1 }  // 5次升级 (权重1)
+        ];
+        const totalWeight = upgradeWeights.reduce((sum, item) => sum + item.weight, 0);
+        const randomValue = Math.random() * totalWeight;
+        let cumulativeWeight = 0;
+        for (const item of upgradeWeights) {
+            cumulativeWeight += item.weight;
+            if (randomValue < cumulativeWeight) {
+                numberOfUpgrades = item.value;
+                break;
+            }
+        }
+        // 安全回退，理论上不应触发
+        if (typeof numberOfUpgrades === 'undefined') {
+            console.warn("宝箱升级次数权重计算出错，默认为3次。");
+            numberOfUpgrades = 3; 
+        }
+
+        console.log(`宝箱提供 ${numberOfUpgrades} 次升级机会 (权重计算).`);
         
-        if (target.pendingLevelUpsFromChest !== undefined) {
+        if (target.pendingLevelUpsFromChest !== undefined && target.currentChestTotalUpgrades !== undefined) {
             // 如果当前没有宝箱升级在进行，则这次是新的序列
             if (target.currentChestTotalUpgrades === 0) {
                 target.currentChestTotalUpgrades = numberOfUpgrades;
             } else {
-                // 如果已经有宝箱升级在进行，可以选择累加总数，或者按新序列算
-                // 为简单起见，我们假设每次开箱都可能是一个新的序列的开始，或者延续
-                // 如果希望严格区分序列，则逻辑会更复杂。
-                // 当前：将本次次数也计入总数，如果之前就有的话。
+                // 如果已经有宝箱升级在进行，将本次次数也计入总数
                 target.currentChestTotalUpgrades += numberOfUpgrades; 
             }
             target.pendingLevelUpsFromChest += numberOfUpgrades; 
         } else {
             console.warn("Player 对象缺少 pendingLevelUpsFromChest 或 currentChestTotalUpgrades 属性! 将直接给予次数.");
-            target.pendingLevelUpsFromChest = numberOfUpgrades;
-            target.currentChestTotalUpgrades = numberOfUpgrades;
+            // 即使属性缺失，也尽量尝试赋值
+            target.pendingLevelUpsFromChest = (target.pendingLevelUpsFromChest || 0) + numberOfUpgrades;
+            target.currentChestTotalUpgrades = (target.currentChestTotalUpgrades || 0) + numberOfUpgrades;
         }
         // --- 结束核心逻辑 ---
-        
-        // --- 确保宝箱立即消失 ---
-        this.isGarbage = true; // 打开后立即标记为垃圾
-        this.isActive = false;
-        this.collected = true; // 标记为已收集
-        // --- 结束确保消失 ---
     }
 
     /**

@@ -216,6 +216,15 @@ class Enemy extends Character {
             // --- 新增：如果是 Boss，则掉落宝箱 ---
             if (this instanceof BossEnemy) {
                 console.log("Boss defeated! Spawning chest...");
+                
+                // 在生成宝箱前播放特效
+                if (typeof createEvolutionEffect === 'function') {
+                    createEvolutionEffect(this.x, this.y);
+                } else {
+                    // 如果 createEvolutionEffect 不可用，可以放一个简单的备用特效或日志
+                    console.warn("createEvolutionEffect function not found. Skipping Boss death effect.");
+                }
+                
                 const chest = new Chest(this.x, this.y);
                 worldObjects.push(chest);
                 // 确保宝箱立即激活（如果 Chest 构造函数没有这么做，或者 isActive 默认为 false）
@@ -371,7 +380,7 @@ class Enemy extends Character {
         ctx.restore();
         
         // 绘制生命条
-        if (this.isBoss) {
+        if (this.isBoss && !(this instanceof BossEnemy)) {
             this.drawHealthBar(ctx);
         }
 
@@ -478,138 +487,220 @@ class BossEnemy extends Enemy {
      * @param {Object} bossType - Boss类型
      */
     constructor(x, y, bossType) {
-        // 计算Boss循环次数
-        const bossCount = Math.floor(gameTime / BOSS_INTERVAL);
+        // 计算Boss基础属性
+        const bossStats = { ...ENEMY_BASE_STATS }; // 基础敌人属性
+        bossStats.health = (bossType.healthBase || ENEMY_BASE_STATS.health * 5) * (bossType.healthMult || 1); // Boss有更高的基础生命
+        bossStats.speed = (bossType.speedBase || ENEMY_BASE_STATS.speed) * (bossType.speedMult || 1);
+        bossStats.damage = (bossType.damageBase || ENEMY_BASE_STATS.damage * 2) * (bossType.damageMult || 1);
+        bossStats.xp = (bossType.xpBase || ENEMY_BASE_STATS.xp * 10) * (bossType.xpMult || 1);
+        bossStats.attackInterval = bossType.attackCooldown || 1.5; // Boss普通攻击间隔
 
-        // 创建类型数据
-        const typeData = {
-            emoji: bossType.emoji,
-            healthMult: bossType.healthMult * (BOSS_BASE_HEALTH_MULTIPLIER + bossCount * 15),
-            speedMult: bossType.speedMult,
-            damageMult: bossType.damageMult * (BOSS_BASE_DAMAGE_MULTIPLIER + bossCount * 0.6),
-            xpMult: bossType.xpMult * (BOSS_BASE_HEALTH_MULTIPLIER + bossCount * 15)
-        };
-        
-        // 调用父类构造函数
-        super(x, y, typeData);
-        
-        // 设置Boss属性
-        this.size = GAME_FONT_SIZE * 3.5;
-        this.isBoss = true;
-        this.name = bossType.name;
-        this.attackPattern = bossType.attackPattern;
-        this.bossType = bossType;
+        super(x, y, bossType); // 调用Enemy构造函数，它会使用bossType的emoji等
 
-        // 确保Boss生命值足够高
-        this.stats.health = Math.max(150, this.stats.health);
+        // 覆盖 Character 基类中设置的 stats，使用上面计算的 bossStats
+        this.stats = bossStats;
         this.health = this.stats.health;
-        
-        // 攻击相关属性
-        this.attackTimer = 0;
-        this.attackCooldown = bossType.attackCooldown || 3.0; // 普通攻击冷却时间
-        this.attackPhase = 0;
-        this.projectileCount = bossType.projectileCount || 8;
-        
-        // 特殊能力
-        this.specialAbilityTimer = 0;
-        this.specialAbilityCooldown = bossType.specialAbilityCooldown || 12.0; // 从 bossType 读取或默认12秒
-        
-        // 特殊攻击警告相关
-        this.isWarningForSpecialAttack = false;
-        this.specialAttackWarningDuration = bossType.specialAttackWarningDuration || 1.0; // 从 bossType 读取或默认1秒
-        this.specialAttackWarningTimer = 0;
+        this.maxHealth = this.stats.health; // 确保maxHealth也设置了
 
-        // 挥剑攻击相关
+        // Boss特定属性
+        this.type = bossType; // 确保 this.type 是 bossType 对象
+        this.isBoss = true;
+        this.meleeAttackTimer = 0;
+        this.specialAbilityTimer = 0;
+        this.isPerformingSpecial = false;
+        this.specialAbilityEffects = []; // 用于存储特殊技能产生的持久效果或对象
+
+        // 应用显示大小乘数
+        this.originalSize = this.size; // 保存原始大小 (来自GAME_FONT_SIZE)
+        this.size = this.originalSize * (this.type.displaySizeMultiplier || 1.0);
+        // 现在 this.size 反映了Boss的期望显示大小，所有依赖 this.size 的绘制都会放大
+        // 包括 Character.draw 中的 emoji 绘制，以及 BossEnemy.drawBossHealthBar 中的血条宽度
+        // 剑的 swordReach 和 swordDisplaySize 也依赖 this.size，它们也会相应变大
+
+        // 骷髅王特定属性 (保留)
         this.isSwingingSword = false;
         this.swordSwingTimer = 0;
-        this.swordSwingDuration = 0.7; 
-        this.swordAngle = 0;         
-        this.initialSwordAngle = 0;  
-        this.swordReach = this.size * 1.3; // 修改: 判定距离以匹配新的视觉设定 (0.2 + 1.1)
-        this.swordArc = Math.PI / 1.8; 
-        this.swordDamageCooldown = 0.25; 
-        this.lastSwordDamageTime = -1; 
+        this.swordSwingDuration = 0.6; // 挥剑动画持续时间
+        this.swordAngle = 0;
+        this.initialSwordAngle = -Math.PI / 3;
+        this.swordReach = this.size * 0.7; // 调整剑的触及范围基于新的、更大的this.size (之前是1.3*小size)
+        this.swordArc = Math.PI * 0.8;
+        this.swordDamageCooldown = 0.3; // 每次挥剑造成伤害的最小间隔
+        this.lastSwordDamageTime = 0;
 
-        // 掉落几率
-        this.dropChance = {
-            magnet: 0.5, // 50%几率掉落吸铁石
-            heart: 1.0   // 100%几率掉落心
-        };
+        // 特殊攻击警告相关 (通用)
+        this.isWarningForSpecialAttack = false;
+        this.specialAttackWarningDuration = this.type.specialAttackWarningDuration || 1.0;
+        this.specialAttackWarningTimer = 0;
+        
+        // 幽灵领主特殊攻击波次相关
+        if (this.type.name === "幽灵领主") {
+            this.ghostLordSpecialAttackWaveTimer = 0;
+            this.ghostLordCurrentWave = 0;
+        }
     }
 
-    /**
-     * 更新Boss状态
-     * @param {number} dt - 时间增量
-     * @param {Player} target - 目标玩家 (通常是全局的 player 对象)
-     */
-    update(dt, target) {
-        if (this.isGarbage || !this.isActive) return;
+    update(dt, target) { // target 就是 player
+        if (!this.isActive || this.isGarbage) return;
 
-        if (target && target.isActive && !target.isGarbage) {
-            this.target = target;
+        super.update(dt); // 调用Enemy的update，处理基础逻辑如状态效果
+
+        this.target = target; // 确保Boss的目标是玩家
+
+        // 计时器更新
+        this.specialAbilityTimer += dt;
+
+        // 普通攻击逻辑 (使用 this.stats.attackInterval 作为冷却)
+        if (!this.isStunned() && !this.isPerformingSpecial && !this.isWarningForSpecialAttack) {
+            this.meleeAttackTimer += dt;
+            if (this.meleeAttackTimer >= this.stats.attackInterval) {
+                this.performMeleeAttack(target); 
+                this.meleeAttackTimer = 0;
+            }
         }
-        super.update(dt); // Handles Enemy.updateMovement (which includes base collision attacks) & status effects
 
-        // 更新挥剑攻击的动画和伤害判定 (如果正在挥剑)
-        if (this.isSwingingSword) {
+        // 更新骷髅王挥剑动画与伤害判定 (如果正在挥剑)
+        if (this.isSwingingSword && this.type.name === "骷髅王") {
             this.swordSwingTimer += dt;
-            this.swordAngle = this.initialSwordAngle + (this.swordSwingTimer / this.swordSwingDuration) * this.swordArc;
+            const swingProgress = this.swordSwingTimer / this.swordSwingDuration;
 
-            if (target && target.isActive && !target.isGarbage) {
-                if (this.swordSwingTimer > this.lastSwordDamageTime + this.swordDamageCooldown) {
-                    const dxToPlayer = target.x - this.x;
-                    const dyToPlayer = target.y - this.y;
-                    const distToPlayerSq = dxToPlayer * dxToPlayer + dyToPlayer * dyToPlayer;
+            if (swingProgress >= 1) {
+                this.isSwingingSword = false;
+                // this.swordSwingTimer will be reset by performMeleeAttack next time
+            } else {
+                // 更新剑的角度以实现挥动效果
+                this.swordAngle = this.initialSwordAngle + swingProgress * this.swordArc;
 
-                    if (distToPlayerSq <= (this.swordReach + target.size * 0.5) * (this.swordReach + target.size * 0.5)) {
-                        const angleToPlayer = Math.atan2(dyToPlayer, dxToPlayer);
-                        let angleDifference = Math.abs(normalizeAngle(angleToPlayer - this.swordAngle));
-                        if (angleDifference > Math.PI) {
-                             angleDifference = 2 * Math.PI - angleDifference;
+                // 剑的伤害判定逻辑
+                if (target && target.isActive && !target.isGarbage && 
+                    (this.swordSwingTimer - this.lastSwordDamageTime >= this.swordDamageCooldown)) {
+                    
+                    const dx = target.x - this.x;
+                    const dy = target.y - this.y;
+                    const distSq = dx * dx + dy * dy;
+
+                    // 检查玩家是否在剑的攻击范围内
+                    if (distSq <= this.swordReach * this.swordReach) {
+                        const angleToPlayer = normalizeAngle(Math.atan2(dy, dx));
+                        
+                        // 判定玩家是否在当前剑挥过的扇形区域内
+                        // swordAngle 是剑当前的朝向，initialSwordAngle 是起始朝向
+                        let swordEffectiveStartAngle = normalizeAngle(this.initialSwordAngle);
+                        let swordEffectiveCurrentAngle = normalizeAngle(this.swordAngle);
+                        
+                        let inSweptArc = false;
+                        // 处理正向挥动 (swordArc > 0)
+                        if (this.swordArc >= 0) { 
+                            if (swordEffectiveStartAngle <= swordEffectiveCurrentAngle) {
+                                if (angleToPlayer >= swordEffectiveStartAngle && angleToPlayer <= swordEffectiveCurrentAngle) {
+                                    inSweptArc = true;
+                                }
+                            } else { // 弧线跨过0/2PI点
+                                if (angleToPlayer >= swordEffectiveStartAngle || angleToPlayer <= swordEffectiveCurrentAngle) {
+                                    inSweptArc = true;
+                                }
+                            }
+                        } else { // 处理反向挥动 (swordArc < 0), 尽管当前 swordArc 是正数
+                            if (swordEffectiveCurrentAngle <= swordEffectiveStartAngle) {
+                                if (angleToPlayer >= swordEffectiveCurrentAngle && angleToPlayer <= swordEffectiveStartAngle) {
+                                    inSweptArc = true;
+                                }
+                            } else { // 弧线跨过0/2PI点
+                                if (angleToPlayer >= swordEffectiveCurrentAngle || angleToPlayer <= swordEffectiveStartAngle) {
+                                    inSweptArc = true;
+                                }
+                            }
                         }
-                        const swordEffectiveAngleWidth = Math.PI / 12;
-                        if (angleDifference <= swordEffectiveAngleWidth / 2) {
+
+                        if (inSweptArc) {
                             target.takeDamage(this.stats.damage, this);
                             this.lastSwordDamageTime = this.swordSwingTimer;
                         }
                     }
                 }
             }
+        }
 
-            if (this.swordSwingTimer >= this.swordSwingDuration) {
-                this.isSwingingSword = false; // 结束挥剑
+        // 特殊技能CD和警告触发
+        if (!this.isStunned() && 
+            this.specialAbilityTimer >= (this.type.specialAbilityCooldown || 10.0) && // 使用常量中的冷却或默认值
+            !this.isPerformingSpecial && 
+            !this.isWarningForSpecialAttack) {
+            
+            this.isWarningForSpecialAttack = true;
+            this.specialAttackWarningTimer = 0;
+            // 重置特殊技能主计时器，防止警告一结束又立刻满足CD条件再次触发警告
+            // 实际的 specialAbilityTimer 重置应该在技能完全结束后
+        }
+
+        // 特殊技能警告处理
+        if (this.isWarningForSpecialAttack) {
+            this.specialAttackWarningTimer += dt;
+            if (this.specialAttackWarningTimer >= this.specialAttackWarningDuration) {
+                this.isWarningForSpecialAttack = false;
+                this.specialAbilityTimer = 0; // 在警告结束、准备发动技能时重置特殊技能主计时器
+                this.performSpecialAbility(target); // 这个方法将根据Boss类型分派
+                // isPerformingSpecial 应该在 performSpecialAbility 内部根据技能类型设置
             }
         }
 
-        // 更新普通攻击计时器 (例如挥剑)
-        if (!this.isStunned()) {
-            this.attackTimer -= dt;
-            if (this.attackTimer <= 0) {
-                if (!this.isSwingingSword) { // 只有在不挥剑时才开始新的挥剑
-                    this.performAttack(target); // 对于骷髅王，会调用 performMeleeAttack
+        // 特殊技能效果更新 / 持续性特殊技能处理
+        if (this.isPerformingSpecial) {
+            if (this.type.name === "幽灵领主" && this.type.projectileInfo) {
+                const projInfo = this.type.projectileInfo;
+                if (this.ghostLordCurrentWave < projInfo.specialAttackWaves) {
+                    this.ghostLordSpecialAttackWaveTimer += dt;
+                    if (this.ghostLordSpecialAttackWaveTimer >= projInfo.specialAttackWaveDelay) {
+                        this.ghostLordSpecialAttackWaveTimer = 0;
+                        this.ghostLordCurrentWave++;
+                        if (this.ghostLordCurrentWave < projInfo.specialAttackWaves) {
+                            // 发射下一波弹幕
+                            const projectilesPerWave = projInfo.projectilesPerWaveSpecial || projInfo.countSpecialSingleWave || 8;
+                            const angleIncrement = (Math.PI * 2) / projectilesPerWave;
+                            const projectileEmoji = projInfo.emojiSpecial || projInfo.emoji; // 使用特殊攻击 emoji，如果未定义则用普通
+                            const projectileSize = projInfo.sizeFactorSpecial ? projInfo.sizeFactorSpecial * this.size : (GAME_FONT_SIZE * 0.8);
+
+                            for (let i = 0; i < projectilesPerWave; i++) {
+                                const angle = angleIncrement * i + (this.ghostLordCurrentWave * angleIncrement / 2); // 每波稍微错开角度
+                                const vx = Math.cos(angle) * projInfo.speed;
+                                const vy = Math.sin(angle) * projInfo.speed;
+                                const damage = this.stats.damage * (projInfo.damageFactor || 1.0);
+                                
+                                enemyProjectiles.push(new EnemyProjectile(this.x, this.y, vx, vy, damage, this, projectileEmoji, projectileSize));
+                            }
+                        } else {
+                            // 所有波次完成
+                            this.isPerformingSpecial = false; 
+                        }
+                    }
+                } else {
+                     // 如果波数逻辑意外未将isPerformingSpecial设为false
+                    this.isPerformingSpecial = false;
                 }
-                // 无论是否开始新挥剑，都重置计时器，以安排下一次尝试
-                this.attackTimer = this.attackCooldown;
             }
-        }
-
-        // 更新特殊攻击计时器和逻辑 (例如地震)
-        if (!this.isStunned()) {
-            if (this.isWarningForSpecialAttack) {
-                this.specialAttackWarningTimer += dt;
-                if (this.specialAttackWarningTimer >= this.specialAttackWarningDuration) {
-                    this.isWarningForSpecialAttack = false;
-                    this.performSpecialAbility(target); // 特殊攻击可以与挥剑同时发生
-                    this.specialAbilityTimer = this.specialAbilityCooldown; // 重置特殊攻击主冷却
+            // 如果是骷髅王或其他需要持续更新特殊技能效果的Boss
+            else if (this.type.name === "骷髅王") {
+                let allEffectsDone = true;
+                this.specialAbilityEffects.forEach(effect => {
+                    effect.update(dt, target, this); // 传递Boss自身给effect.update
+                    if (!effect.isGarbage) {
+                        allEffectsDone = false;
+                    }
+                });
+                this.specialAbilityEffects = this.specialAbilityEffects.filter(effect => !effect.isGarbage);
+                if (allEffectsDone) {
+                    this.isPerformingSpecial = false;
                 }
             } else {
-                this.specialAbilityTimer -= dt;
-                if (this.specialAbilityTimer <= 0) {
-                    this.isWarningForSpecialAttack = true;
-                    this.specialAttackWarningTimer = 0;
-                }
+                // 对于没有持续效果的特殊技能，performSpecialAbility 执行后应直接设置 isPerformingSpecial = false
+                // 或者有一个默认的计时器
             }
         }
+        
+        // 检查Boss与玩家的碰撞 (近战伤害) - 这个由Enemy基类处理
+        // if (this.checkCollision(target) && this.type.attackPattern === 'melee') {
+        //    this.attack(target); // Enemy基类的attack方法
+        // }
     }
 
     /**
@@ -654,22 +745,40 @@ class BossEnemy extends Enemy {
      * @param {Player} target - 目标玩家
      */
     performMeleeAttack(target) {
-        if (!target || this.isSwingingSword || !this.isActive) return; // 如果正在挥剑、没有目标或Boss不活动，则不执行
+        if (this.isStunned()) return;
 
-        console.log(`Boss ${this.name} initiating sword swing towards target.`);
-        this.isSwingingSword = true;
-        this.swordSwingTimer = 0;
-        this.lastSwordDamageTime = -1; // 重置上次伤害时间，允许新挥剑立即造成伤害
+        if (this.type.name === "骷髅王") {
+            // 骷髅王挥剑逻辑 (已存在)
+            if (!this.isSwingingSword) {
+                this.isSwingingSword = true;
+                this.swordSwingTimer = 0;
+                this.lastSwordDamageTime = -this.swordDamageCooldown; // 允许第一次立即判定
+                // 根据玩家方向调整初始角度 (简单实现：大致朝向玩家)
+                const angleToPlayer = Math.atan2(target.y - this.y, target.x - this.x);
+                this.initialSwordAngle = angleToPlayer - this.swordArc / 2;
+                this.swordAngle = this.initialSwordAngle;
+            }
+        } else if (this.type.name === "幽灵领主") {
+            // 幽灵领主普通攻击：发射一圈弹幕
+            if (this.type.projectileInfo) {
+                const projInfo = this.type.projectileInfo;
+                const count = projInfo.countNormal || 8;
+                const angleIncrement = (Math.PI * 2) / count;
+                const damage = this.stats.damage * (projInfo.damageFactor || 1.0);
+                const projectileSize = projInfo.sizeFactorNormal ? projInfo.sizeFactorNormal * this.size : (GAME_FONT_SIZE * 0.8);
 
-        // 计算初始挥剑角度，大致朝向目标玩家
-        // 剑将从目标的一侧扫向另一侧
-        const dx = target.x - this.x;
-        const dy = target.y - this.y;
-        const angleToTarget = Math.atan2(dy, dx);
-        
-        // 挥剑从目标左侧 (逆时针 swordArc/2) 开始，扫过 swordArc 角度
-        this.initialSwordAngle = normalizeAngle(angleToTarget - this.swordArc / 2);
-        this.swordAngle = this.initialSwordAngle; // 初始设置，将在update中动态变化
+                for (let i = 0; i < count; i++) {
+                    const angle = angleIncrement * i;
+                    const vx = Math.cos(angle) * projInfo.speed;
+                    const vy = Math.sin(angle) * projInfo.speed;
+                    enemyProjectiles.push(new EnemyProjectile(this.x, this.y, vx, vy, damage, this, projInfo.emoji, projectileSize)); 
+                }
+            }
+        } else {
+            // 默认或其他Boss的普通攻击 (如果需要)
+            // 例如，可以尝试调用父类的 attack 方法，如果它们有近战碰撞伤害
+            // super.attack(target); // 如果Boss也期望有碰撞伤害的话
+        }
     }
 
     /**
@@ -911,32 +1020,39 @@ class BossEnemy extends Enemy {
      * @param {Player} target - 目标玩家
      */
     performSpecialAbility(target) {
-        // 根据攻击模式执行不同特殊能力
-        switch (this.attackPattern) {
-            case 'melee':
-                // 近战特殊能力：地震
+        if (this.isStunned()) return;
+
+        if (this.type.name === "骷髅王") {
+            // 骷髅王特殊攻击：地震 (已存在部分逻辑)
+            this.isPerformingSpecial = true;
+            this.specialAbilityEffects = []; // 清空旧效果
                 this.performEarthquake(target);
-                break;
+        } else if (this.type.name === "幽灵领主") {
+            // 幽灵领主特殊攻击：分波发射密集弹幕
+            if (this.type.projectileInfo) {
+                this.isPerformingSpecial = true;
+                this.ghostLordCurrentWave = 0;
+                this.ghostLordSpecialAttackWaveTimer = 0;
+                
+                // 发射第一波
+                const projInfo = this.type.projectileInfo;
+                const projectilesPerWave = projInfo.projectilesPerWaveSpecial || projInfo.countSpecialSingleWave || 8;
+                const angleIncrement = (Math.PI * 2) / projectilesPerWave;
+                const projectileEmoji = projInfo.emojiSpecial || projInfo.emoji; // 使用特殊攻击 emoji
+                const projectileSize = projInfo.sizeFactorSpecial ? projInfo.sizeFactorSpecial * this.size : (GAME_FONT_SIZE * 0.8);
 
-            case 'ranged':
-                // 远程特殊能力：弹幕
-                this.performBarrage(target);
-                break;
-
-            case 'aoe':
-                // 范围特殊能力：毒云
-                this.performPoisonCloud(target);
-                break;
-
-            case 'summon':
-                // 召唤特殊能力：精英召唤
-                this.performEliteSummon(target);
-                break;
-
-            default:
-                // 默认特殊能力：地震
-                this.performEarthquake(target);
-                break;
+                for (let i = 0; i < projectilesPerWave; i++) {
+                    const angle = angleIncrement * i; // 第一波从0度开始
+                    const vx = Math.cos(angle) * projInfo.speed;
+                    const vy = Math.sin(angle) * projInfo.speed;
+                    const damage = this.stats.damage * (projInfo.damageFactor || 1.0);
+                    enemyProjectiles.push(new EnemyProjectile(this.x, this.y, vx, vy, damage, this, projectileEmoji, projectileSize));
+                }
+                // 后续波次由 update 方法中的 isPerformingSpecial 逻辑处理
+            }
+        } else {
+            // 默认或其他Boss的特殊攻击
+            this.isPerformingSpecial = false; // 如果没有特定实现，确保重置状态
         }
     }
 
@@ -945,15 +1061,15 @@ class BossEnemy extends Enemy {
      * @param {Player} target - 目标玩家
      */
     performEarthquake(target) {
-        console.log(`Boss ${this.name} performing Earthquake! Warning duration was: ${this.specialAttackWarningDuration}`);
+        console.log(`Boss ${this.type.name} performing Earthquake! Warning duration was: ${this.specialAttackWarningDuration}`);
         // 创建地震效果
         const effect = {
             x: this.x,
             y: this.y,
             radius: 0,
-            maxRadius: this.bossType.earthquakeRadius || 280, // 使用 bossType 配置或默认值
-            damage: this.stats.damage * (this.bossType.earthquakeDamageMultiplier || 1.8), // Boss类型可配置伤害倍率
-            expandDuration: this.bossType.earthquakeDuration || 2.0, // Boss类型可配置持续时间
+            maxRadius: this.type.earthquakeRadius || 280, // 使用 type 配置或默认值
+            damage: this.stats.damage * (this.type.earthquakeDamageMultiplier || 1.8), // Boss类型可配置伤害倍率
+            expandDuration: this.type.earthquakeDuration || 2.0, // Boss类型可配置持续时间
             timer: 0,
             boss: this,
             hitTargets: new Set(),
@@ -1003,7 +1119,7 @@ class BossEnemy extends Enemy {
                 if (target && target.isActive && !target.isGarbage && !this.hitTargets.has(target)) {
                     const playerDx = target.x - this.x;
                     const playerDy = target.y - this.y;
-                    const playerDistSq = playerDx * playerDx + playerDy * playerDy;
+                const playerDistSq = playerDx * playerDx + playerDy * playerDy;
                     if (playerDistSq <= this.radius * this.radius) {
                         target.takeDamage(this.damage, this.boss);
                         this.hitTargets.add(target);
@@ -1424,7 +1540,7 @@ class BossEnemy extends Enemy {
         // 调用父类的绘制方法 (绘制Boss本身和血条等)
         super.draw(ctx);
         // 绘制挥动的剑 (如果正在挥剑)
-        if (this.isSwingingSword && this.isActive) {
+        if (this.isSwingingSword && this.isActive && this.type.name === "骷髅王") { // 明确指定骷髅王
             const swordScreenPos = cameraManager.worldToScreen(this.x, this.y);
             ctx.save();
             ctx.translate(swordScreenPos.x, swordScreenPos.y);
@@ -1478,7 +1594,7 @@ class BossEnemy extends Enemy {
      */
     drawBossHealthBar(ctx, x, y) {
         // 设置生命条尺寸和位置
-        const barWidth = 100;
+        const barWidth = this.size * 1.5; // 修改：使宽度与 Boss 大小成比例
         const barHeight = 10;
         const barX = x - barWidth / 2;
         const barY = y - this.size / 1.4 - barHeight;
@@ -1502,9 +1618,16 @@ class BossEnemy extends Enemy {
 
         // 绘制Boss名称
         ctx.font = '14px Arial';
-        ctx.fillStyle = 'white';
         ctx.textAlign = 'center';
-        ctx.fillText(this.name, x, barY - 5);
+        
+        // 描边
+        ctx.strokeStyle = 'red'; // 修改：将描边颜色改为红色
+        ctx.lineWidth = 2.5; // 描边宽度
+        ctx.strokeText(this.type.name, x, barY - 5);
+        
+        // 主要文字
+        ctx.fillStyle = 'white';
+        ctx.fillText(this.type.name, x, barY - 5);
     }
 }
 
