@@ -445,7 +445,7 @@ class Chest extends GameObject {
         
         this.isOpen = true; 
         console.log("宝箱已打开！准备触发多次升级...");
-        
+
         // 创建打开特效
         // this.createOpenEffect(); // 移除打开时的特效
 
@@ -664,7 +664,7 @@ class Chest extends GameObject {
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(this.emoji, screenPos.x, screenPos.y);
-            
+
             ctx.restore(); 
 
         } catch (e) {

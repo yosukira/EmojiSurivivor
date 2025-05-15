@@ -351,46 +351,47 @@ class Enemy extends Character {
         // 如果敌人不活动或已标记为垃圾，不绘制
         if (!this.isActive || this.isGarbage) return;
         
-        // 保存状态
-        ctx.save();
+        ctx.save(); // 最外层保存
+        ctx.globalAlpha = 1.0; // 确保 Enemy 绘制开始时不透明
         
-        // 获取屏幕坐标
         const screenPos = cameraManager.worldToScreen(this.x, this.y);
         
-        // 如果被眩晕，改变颜色或添加效果
+        // 如果被眩晕，改变颜色或添加效果 (可以考虑移到 super.draw 内部或 Character.draw 处理)
         if (this.isStunned()) {
             ctx.filter = 'opacity(0.6) drop-shadow(0 0 5px yellow)';
         }
         
-        // 调用父类绘制方法绘制基础 Emoji
-        super.draw(ctx); // 传递 screenPos (假设父类 draw 接受)
+        // 调用父类绘制方法绘制基础 Emoji 和状态效果图标
+        super.draw(ctx); 
         
-        // 绘制燃烧效果
-        if (this.statusEffects.burn) {
+        // 绘制燃烧效果 (特定于 Enemy)
+        if (this.statusEffects.burn && this.isActive) { // 确保 isActive
             const burnSize = this.size * 0.4;
-            const burnX = screenPos.x;
-            const burnY = screenPos.y - this.size * 0.6; // 在头上显示
+            // const burnX = screenPos.x; // screenPos 应该在 super.draw 后仍然有效，但最好重新获取或传递
+            // const burnY = screenPos.y - this.size * 0.6;
+            // 为了避免 super.draw() 中 restore 的影响，重新获取 screenPos
+            const currentScreenPos = cameraManager.worldToScreen(this.x, this.y); 
             ctx.font = `${burnSize}px 'Segoe UI Emoji', Arial`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText('🔥', burnX + Math.random()*4-2, burnY + Math.random()*4-2); // 加点抖动
+            // 确保燃烧效果也不透明，除非有意为之
+            // ctx.globalAlpha = 1.0; // 如果 super.draw() 的 restore 把 alpha 搞乱了
+            ctx.fillText('🔥', currentScreenPos.x + Math.random()*4-2, currentScreenPos.y - this.size * 0.6 + Math.random()*4-2);
+             // 之前还有一个燃烧图标的绘制，合并或选择一个
+            // ctx.fillText('🔥', screenPos.x + this.size * 0.35, screenPos.y - this.size * 0.35);
         }
         
-        // 恢复状态
-        ctx.restore();
-        
-        // 绘制生命条
-        if (this.isBoss && !(this instanceof BossEnemy)) {
-            this.drawHealthBar(ctx);
+        // 绘制生命条 (特定于 Enemy 或 BossEnemy)
+        // if (this.isBoss && !(this instanceof BossEnemy)) { // 这个条件似乎是为非Boss的"精英怪"准备的
+        //     this.drawHealthBar(ctx);
+        // }
+        // BossEnemy 会自己调用 drawBossHealthBar
+        // 普通 Enemy 如果也需要血条，可以在这里加，或者修改 Character.drawHealthBar
+        if (!(this instanceof BossEnemy) && this.health < this.maxHealth) { // 给非Boss且受过伤的敌人绘制血条
+            this.drawHealthBar(ctx); // 假设 drawHealthBar 已存在于 Enemy 或 Character
         }
 
-        // 如果有燃烧效果，绘制火焰图标
-        if (this.statusEffects.burn && this.isActive) {
-            ctx.font = `${this.size * 0.5}px 'Segoe UI Emoji', Arial`;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('🔥', screenPos.x + this.size * 0.35, screenPos.y - this.size * 0.35); // 调整位置，使其在血条附近或右上角
-        }
+        ctx.restore(); // 恢复到 Enemy.draw 最开始的状态
     }
 
     /**
@@ -447,28 +448,42 @@ class Enemy extends Character {
      * @param {number} amount - 伤害量
      * @param {GameObject} source - 伤害来源
      * @param {boolean} isBurnDamage - 是否是燃烧伤害（可选）
+     * @param {boolean} isAuraDamage - 是否是光环伤害（可选）
      * @returns {boolean} 是否死亡
      */
-    takeDamage(amount, source, isBurnDamage = false) { // 添加 isBurnDamage 参数
-        // 如果已标记为垃圾，不受伤害
+    takeDamage(amount, source, isBurnDamage = false, isAuraDamage = false) { 
         if (this.isGarbage) return false;
 
-        // 计算护甲减伤 (燃烧伤害可能忽略护甲，根据需要决定)
-        const armor = 0; // 假设燃烧忽略护甲
-        const actualDamage = isBurnDamage ? amount : Math.max(1, amount - armor);
+        let actualDamage = amount;
+        // 燃烧和光环伤害目前不计算护甲或最小伤害调整
+        // 普通攻击计算护甲，且伤害至少为1
+        if (!isBurnDamage && !isAuraDamage) {
+            const armor = this.getStat('armor') || 0; // 确保有 armor 属性或默认为0
+            actualDamage = Math.max(1, amount - armor);
+        } else {
+            actualDamage = amount; // 允许燃烧和光环造成小于1的伤害
+        }
 
-        // 减少生命值
         this.health -= actualDamage;
 
-        // 创建伤害数字 (区分燃烧伤害和直接伤害)
-        const damageColor = isBurnDamage ? 'orange' : 'white'; // 燃烧伤害用橙色
-        const damageText = actualDamage.toFixed(isBurnDamage ? 1 : 0); // 燃烧伤害显示小数
-        spawnDamageNumber(this.x, this.y - this.size / 2, damageText, damageColor); // 传递颜色
-        // 注意：这里没有传递颜色，spawnDamageNumber 目前是固定红/白，需要修改它或在此处直接创建
+        // 伤害数字的颜色和文本
+        let damageColor = 'white'; // 默认普通攻击
+        if (isBurnDamage) damageColor = 'orange';
+        // if (isAuraDamage) damageColor = 'purple'; // 紫色可能与经验宝石冲突，暂用默认或特定颜色
 
-        // 检查是否死亡
+        let damageText = actualDamage.toFixed(0);
+        if (isBurnDamage) damageText = actualDamage.toFixed(1);
+        if (isAuraDamage) damageText = actualDamage.toFixed(2); // 光环伤害显示更精确的小数
+
+        // 对于非常小的光环伤害，可以选择不显示，或者累计后再显示
+        // 目前，如果 actualDamage * dt 非常小，它可能仍然会显示为0.00
+        // 如果是光环伤害，并且伤害量很小 (例如小于0.01)，则不显示伤害数字
+        if (!isAuraDamage || Math.abs(actualDamage) >= 0.01) {
+             spawnDamageNumber(this.x, this.y - this.size / 2, damageText, damageColor); 
+        }
+
         if (this.health <= 0) {
-            this.onDeath(source);
+            this.onDeath(source); // killer 应该是 source
             return true;
         }
         return false;
@@ -527,7 +542,7 @@ class BossEnemy extends Enemy {
         this.swordArc = Math.PI * 0.8;
         this.swordDamageCooldown = 0.3; // 每次挥剑造成伤害的最小间隔
         this.lastSwordDamageTime = 0;
-
+        
         // 特殊攻击警告相关 (通用)
         this.isWarningForSpecialAttack = false;
         this.specialAttackWarningDuration = this.type.specialAttackWarningDuration || 1.0;
@@ -538,6 +553,29 @@ class BossEnemy extends Enemy {
             this.ghostLordSpecialAttackWaveTimer = 0;
             this.ghostLordCurrentWave = 0;
         }
+
+        // --- 巨型僵尸 (GiantZombie) 特定属性 ---
+        if (this.type.name === "巨型僵尸") {
+            this.poisonAuraRadius = this.size * 2.0; 
+            // this.poisonAuraDamagePerSecond = 5; // 旧的每秒伤害值
+            this.poisonAuraDamageAmount = 3; // 每次伤害量
+            this.poisonAuraDamageInterval = 1.0; // 伤害间隔（秒）
+            this.poisonAuraDamageTimer = 0; // 伤害计时器
+
+            this.poisonAuraSlowFactor = 0.5; 
+            this.toxicPoolWarningTime = this.type.toxicPoolWarningTime || 1.5; 
+            this.toxicPoolDuration = this.type.toxicPoolDuration || 5.0; // 特殊攻击：毒池持续时间
+            this.toxicPoolDamagePerSecond = this.type.toxicPoolDamagePerSecond || 10; // 特殊攻击：毒池每秒伤害
+            this.toxicPoolRadius = this.type.toxicPoolRadius || this.size * 0.8; // 特殊攻击：单个毒池半径
+            this.toxicPoolCount = this.type.toxicPoolCount || 3; // 特殊攻击：毒池数量
+            // 特殊攻击：毒池生成位置在 Boss 毒环外，且在一定范围内
+            this.toxicPoolMinSpawnRadius = this.poisonAuraRadius * 1.2; 
+            this.toxicPoolMaxSpawnRadius = this.poisonAuraRadius * 2.5;
+            
+            this.pendingToxicPools = []; // 用于存储特殊攻击警告阶段的毒池信息
+            this.specialAbilityTimer = 6.0; // 开场即可释放特殊技能
+        }
+        // --- 结束 巨型僵尸 特定属性 ---
     }
 
     update(dt, target) { // target 就是 player
@@ -550,80 +588,83 @@ class BossEnemy extends Enemy {
         // 计时器更新
         this.specialAbilityTimer += dt;
 
-        // 普通攻击逻辑 (使用 this.stats.attackInterval 作为冷却)
-        if (!this.isStunned() && !this.isPerformingSpecial && !this.isWarningForSpecialAttack) {
-            this.meleeAttackTimer += dt;
-            if (this.meleeAttackTimer >= this.stats.attackInterval) {
-                this.performMeleeAttack(target); 
-                this.meleeAttackTimer = 0;
-            }
-        }
+        // --- 巨型僵尸：移除普通攻击 & 处理被动毒环 ---
+        if (this.type.name === "巨型僵尸") {
+            // 1. 移除普通攻击逻辑 (已完成)
+            // 2. 被动毒环效果
+            if (target && target.isActive && !target.isGarbage) {
+                const dx = target.x - this.x;
+                const dy = target.y - this.y;
+                const distSq = dx * dx + dy * dy;
 
-        // 更新骷髅王挥剑动画与伤害判定 (如果正在挥剑)
-        if (this.isSwingingSword && this.type.name === "骷髅王") {
-            this.swordSwingTimer += dt;
-            const swingProgress = this.swordSwingTimer / this.swordSwingDuration;
+                if (distSq <= this.poisonAuraRadius * this.poisonAuraRadius) {
+                    // 减速效果 (持续施加)
+                    if (typeof target.applyStatusEffect === 'function') {
+                        target.applyStatusEffect('slow', { 
+                            factor: this.poisonAuraSlowFactor, 
+                            duration: 0.5, 
+                            source: this 
+                        });
+                    }
 
-            if (swingProgress >= 1) {
-                this.isSwingingSword = false;
-                // this.swordSwingTimer will be reset by performMeleeAttack next time
-            } else {
-                // 更新剑的角度以实现挥动效果
-                this.swordAngle = this.initialSwordAngle + swingProgress * this.swordArc;
-
-                // 剑的伤害判定逻辑
-                if (target && target.isActive && !target.isGarbage && 
-                    (this.swordSwingTimer - this.lastSwordDamageTime >= this.swordDamageCooldown)) {
-                    
-                    const dx = target.x - this.x;
-                    const dy = target.y - this.y;
-                    const distSq = dx * dx + dy * dy;
-
-                    // 检查玩家是否在剑的攻击范围内
-                    if (distSq <= this.swordReach * this.swordReach) {
-                        const angleToPlayer = normalizeAngle(Math.atan2(dy, dx));
-                        
-                        // 判定玩家是否在当前剑挥过的扇形区域内
-                        // swordAngle 是剑当前的朝向，initialSwordAngle 是起始朝向
-                        let swordEffectiveStartAngle = normalizeAngle(this.initialSwordAngle);
-                        let swordEffectiveCurrentAngle = normalizeAngle(this.swordAngle);
-                        
-                        let inSweptArc = false;
-                        // 处理正向挥动 (swordArc > 0)
-                        if (this.swordArc >= 0) { 
-                            if (swordEffectiveStartAngle <= swordEffectiveCurrentAngle) {
-                                if (angleToPlayer >= swordEffectiveStartAngle && angleToPlayer <= swordEffectiveCurrentAngle) {
-                                    inSweptArc = true;
-                                }
-                            } else { // 弧线跨过0/2PI点
-                                if (angleToPlayer >= swordEffectiveStartAngle || angleToPlayer <= swordEffectiveCurrentAngle) {
-                                    inSweptArc = true;
-                                }
-                            }
-                        } else { // 处理反向挥动 (swordArc < 0), 尽管当前 swordArc 是正数
-                            if (swordEffectiveCurrentAngle <= swordEffectiveStartAngle) {
-                                if (angleToPlayer >= swordEffectiveCurrentAngle && angleToPlayer <= swordEffectiveStartAngle) {
-                                    inSweptArc = true;
-                                }
-                            } else { // 弧线跨过0/2PI点
-                                if (angleToPlayer >= swordEffectiveCurrentAngle || angleToPlayer <= swordEffectiveStartAngle) {
-                                    inSweptArc = true;
-                                }
-                            }
-                        }
-
-                        if (inSweptArc) {
-                            target.takeDamage(this.stats.damage, this);
-                            this.lastSwordDamageTime = this.swordSwingTimer;
-                        }
+                    // 周期性伤害
+                    this.poisonAuraDamageTimer += dt;
+                    if (this.poisonAuraDamageTimer >= this.poisonAuraDamageInterval) {
+                        target.takeDamage(this.poisonAuraDamageAmount, this, false, true); // isAuraDamage = true
+                        this.poisonAuraDamageTimer -= this.poisonAuraDamageInterval;
                     }
                 }
+            }
+        } else { // 其他Boss的普通攻击逻辑
+            if (!this.isStunned() && !this.isPerformingSpecial && !this.isWarningForSpecialAttack) {
+                this.meleeAttackTimer += dt;
+                if (this.meleeAttackTimer >= this.stats.attackInterval) {
+                    this.performMeleeAttack(target); 
+                    this.meleeAttackTimer = 0;
+                }
+            }
+        }
+        // --- 结束 巨型僵尸 修改 ---
+
+        // 新增骷髅王挥剑动画和伤害逻辑
+        if (this.type.name === "骷髅王" && this.isSwingingSword) {
+            this.swordSwingTimer += dt;
+            const swingProgress = Math.min(1, this.swordSwingTimer / this.swordSwingDuration); // 确保不超过1
+
+            // 更新剑的角度
+            this.swordAngle = this.initialSwordAngle + this.swordArc * swingProgress;
+
+            // 伤害判定 (在挥剑的有效弧度内，且满足冷却)
+            if (this.swordSwingTimer > this.lastSwordDamageTime + this.swordDamageCooldown && target && target.isActive && !target.isGarbage) {
+                const segments = 5; // 将剑分成几段检测
+                for (let i = 1; i <= segments; i++) { //从剑柄后一点开始到剑尖
+                    const segmentProgress = i / segments;
+                    const checkReach = this.swordReach * segmentProgress;
+                    
+                    const swordCheckX = this.x + Math.cos(this.swordAngle) * checkReach;
+                    const swordCheckY = this.y + Math.sin(this.swordAngle) * checkReach;
+
+                    const dx = target.x - swordCheckX;
+                    const dy = target.y - swordCheckY;
+                    const collisionRadiusSq = (target.size / 2 + 5) * (target.size / 2 + 5); // 5代表剑刃的半宽度
+
+                    if (dx * dx + dy * dy <= collisionRadiusSq) {
+                        target.takeDamage(this.stats.damage, this);
+                        this.lastSwordDamageTime = this.swordSwingTimer; 
+                        break; // 一旦命中，本次挥剑的该次伤害判定结束
+                    }
+                }
+            }
+
+            if (this.swordSwingTimer >= this.swordSwingDuration) {
+                this.isSwingingSword = false;
+                this.swordSwingTimer = 0; // 重置计时器
             }
         }
 
         // 特殊技能CD和警告触发
         if (!this.isStunned() && 
-            this.specialAbilityTimer >= (this.type.specialAbilityCooldown || 10.0) && // 使用常量中的冷却或默认值
+            this.specialAbilityTimer >= (this.type.specialAbilityCooldown || (this.type.name === "巨型僵尸" ? 6.0 : 10.0)) && // 巨型僵尸CD改为6秒
             !this.isPerformingSpecial && 
             !this.isWarningForSpecialAttack) {
             
@@ -631,17 +672,44 @@ class BossEnemy extends Enemy {
             this.specialAttackWarningTimer = 0;
             // 重置特殊技能主计时器，防止警告一结束又立刻满足CD条件再次触发警告
             // 实际的 specialAbilityTimer 重置应该在技能完全结束后
+            
+            // --- 巨型僵尸：准备特殊攻击的毒池位置 ---
+            if (this.type.name === "巨型僵尸") {
+                this.pendingToxicPools = []; // 清空旧的
+                for (let i = 0; i < this.toxicPoolCount; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const distance = this.toxicPoolMinSpawnRadius + Math.random() * (this.toxicPoolMaxSpawnRadius - this.toxicPoolMinSpawnRadius);
+                    const poolX = this.x + Math.cos(angle) * distance;
+                    const poolY = this.y + Math.sin(angle) * distance;
+                    this.pendingToxicPools.push({ x: poolX, y: poolY, warningProgress: 0 });
+        }
+            }
+            // --- 结束 巨型僵尸 修改 ---
         }
 
         // 特殊技能警告处理
         if (this.isWarningForSpecialAttack) {
             this.specialAttackWarningTimer += dt;
-            if (this.specialAttackWarningTimer >= this.specialAttackWarningDuration) {
-                this.isWarningForSpecialAttack = false;
-                this.specialAbilityTimer = 0; // 在警告结束、准备发动技能时重置特殊技能主计时器
-                this.performSpecialAbility(target); // 这个方法将根据Boss类型分派
-                // isPerformingSpecial 应该在 performSpecialAbility 内部根据技能类型设置
+            // --- 巨型僵尸：更新毒池警告进度 ---
+            if (this.type.name === "巨型僵尸") {
+                const warningDuration = this.toxicPoolWarningTime; // 使用巨型僵尸自己的警告时间
+                 this.pendingToxicPools.forEach(pool => {
+                    pool.warningProgress = Math.min(1, this.specialAttackWarningTimer / warningDuration);
+                });
+                if (this.specialAttackWarningTimer >= warningDuration) {
+                    this.isWarningForSpecialAttack = false;
+                    this.specialAbilityTimer = 0; 
+            this.performSpecialAbility(target);
+                }
+            } else { // 其他Boss的警告逻辑
+                 const warningDuration = this.specialAttackWarningDuration;
+                 if (this.specialAttackWarningTimer >= warningDuration) {
+                    this.isWarningForSpecialAttack = false;
+                    this.specialAbilityTimer = 0; 
+                    this.performSpecialAbility(target);
+                }
             }
+            // --- 结束 巨型僵尸 修改 ---
         }
 
         // 特殊技能效果更新 / 持续性特殊技能处理
@@ -667,7 +735,7 @@ class BossEnemy extends Enemy {
                                 const damage = this.stats.damage * (projInfo.damageFactor || 1.0);
                                 
                                 enemyProjectiles.push(new EnemyProjectile(this.x, this.y, vx, vy, damage, this, projectileEmoji, projectileSize));
-                            }
+        }
                         } else {
                             // 所有波次完成
                             this.isPerformingSpecial = false; 
@@ -690,6 +758,20 @@ class BossEnemy extends Enemy {
                 this.specialAbilityEffects = this.specialAbilityEffects.filter(effect => !effect.isGarbage);
                 if (allEffectsDone) {
                     this.isPerformingSpecial = false;
+                }
+            } else if (this.type.name === "巨型僵尸") {
+                let allEffectsDone = true;
+                this.specialAbilityEffects.forEach(effect => {
+                    if (effect && typeof effect.update === 'function') { // 确保 effect 和 update 方法存在
+                        effect.update(dt, target, this); 
+                        if (!effect.isGarbage) {
+                            allEffectsDone = false;
+                        }
+                    }
+                });
+                this.specialAbilityEffects = this.specialAbilityEffects.filter(effect => effect && !effect.isGarbage); // 过滤掉 null 或已回收的
+                if (allEffectsDone) {
+                    this.isPerformingSpecial = false; 
                 }
             } else {
                 // 对于没有持续效果的特殊技能，performSpecialAbility 执行后应直接设置 isPerformingSpecial = false
@@ -1050,6 +1132,116 @@ class BossEnemy extends Enemy {
                 }
                 // 后续波次由 update 方法中的 isPerformingSpecial 逻辑处理
             }
+        } else if (this.type.name === "巨型僵尸") {
+            this.isPerformingSpecial = true;
+            this.specialAbilityEffects = []; // 清空可能残留的旧效果
+            
+            this.pendingToxicPools.forEach(poolInfo => {
+                const toxicPoolEffect = {
+                    x: poolInfo.x,
+                    y: poolInfo.y,
+                    radius: this.toxicPoolRadius,
+                    damagePerSecond: this.toxicPoolDamagePerSecond,
+                    duration: this.toxicPoolDuration,
+                    timer: 0,
+                    damageTickTimer: 0,
+                    damageTickInterval: 0.5, // 每0.5秒造成一次伤害
+                    boss: this,
+                    isGarbage: false,
+                    hitTargetsThisTick: new Set(), // 用于跟踪本伤害间隔内已击中的目标
+
+                    update: function(dt, playerTarget) { // playerTarget 是主 update 传来的 target
+                        this.timer += dt;
+                        if (this.timer >= this.duration) {
+                            this.isGarbage = true;
+                            return;
+                        }
+
+                        this.damageTickTimer += dt;
+                        if (this.damageTickTimer >= this.damageTickInterval) {
+                            this.damageTickTimer -= this.damageTickInterval; // 或者 this.damageTickTimer = 0;
+                            this.hitTargetsThisTick.clear(); // 每个伤害间隔开始时清空
+
+                            if (playerTarget && playerTarget.isActive && !playerTarget.isGarbage) {
+                                const dx = playerTarget.x - this.x;
+                                const dy = playerTarget.y - this.y;
+                                const distSq = dx * dx + dy * dy;
+                                if (distSq <= this.radius * this.radius) {
+                                    if (!this.hitTargetsThisTick.has(playerTarget)) {
+                                        playerTarget.takeDamage(this.damagePerSecond * this.damageTickInterval, this.boss, false, true); // isAuraDamage = true
+                                        this.hitTargetsThisTick.add(playerTarget);
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    draw: function(ctx) {
+                        // console.log("[ToxicPoolEffect.draw] Called. isGarbage:", this.isGarbage, "timer:", this.timer, "duration:", this.duration);
+                        if (this.isGarbage) return;
+                        const screenPos = cameraManager.worldToScreen(this.x, this.y);
+                        const effectProgress = this.timer / this.duration;
+                        
+                        // --- 临时调试绘制：使用高可见度颜色 --- 
+                        // const debugAlpha = 0.8;
+                        // ctx.fillStyle = `rgba(255, 0, 255, ${debugAlpha})`; //亮粉色
+                        // ctx.beginPath();
+                        // ctx.arc(screenPos.x, screenPos.y, this.radius * cameraManager.zoom, 0, Math.PI * 2);
+                        // ctx.fill();
+                        // console.log("[ToxicPoolEffect.draw] DEBUG DRAW with Magenta. Radius:", this.radius * cameraManager.zoom, "Pos:", screenPos);
+                        // --- 临时调试绘制结束 ---
+                        
+                        // 正式绘制逻辑 (优化后)
+                        ctx.save();
+                        const baseRadius = this.radius * cameraManager.zoom;
+                        // const pulseFactor = 0.8 + 0.2 * Math.sin(this.timer * Math.PI * 4); // 移除半径脉动
+                        const currentRadius = baseRadius; // 使用固定半径
+
+                        // 主体颜色和效果
+                        const gradient = ctx.createRadialGradient(screenPos.x, screenPos.y, 0, screenPos.x, screenPos.y, currentRadius);
+                        const alpha = 0.5 + 0.2 * Math.sin(this.timer * Math.PI * 2); // 透明度脉动 0.3 - 0.7
+                        
+                        gradient.addColorStop(0, `rgba(0, 180, 50, ${alpha * 0.5})`);      // 中心较亮绿色
+                        gradient.addColorStop(0.6, `rgba(0, 130, 30, ${alpha})`);     // 主体深绿色
+                        gradient.addColorStop(1, `rgba(0, 80, 10, ${alpha * 0.7})`);       // 边缘更深
+
+                        ctx.fillStyle = gradient;
+                        ctx.beginPath();
+                        ctx.arc(screenPos.x, screenPos.y, currentRadius, 0, Math.PI * 2);
+                        ctx.fill();
+
+                        // 添加明确的边界
+                        ctx.strokeStyle = `rgba(0, 60, 0, ${Math.min(1, alpha * 1.5)})`; // 深绿色，比填充色更实一些的边框, alpha不超过1
+                        ctx.lineWidth = 2 * cameraManager.zoom; // 边框宽度
+                        ctx.stroke(); // 绘制边界
+
+                        // 向上飘动的毒气泡
+                        const numBubbles = 5;
+                        for (let i = 0; i < numBubbles; i++) {
+                            // 根据计时器和索引为每个气泡生成伪随机但一致的偏移
+                            const bubbleSeed = i + Math.floor(this.timer * 2); 
+                            const offsetX = ( (bubbleSeed * 53) % 100 / 50 - 1) * currentRadius * 0.7; // X偏移在半径的 +/- 70% 内
+                            // Y偏移随时间向上，并有初始随机高度，循环出现
+                            const verticalSpeed = 50 + ( (bubbleSeed * 31) % 20 ); // 气泡上升速度
+                            const initialYOffset = ( (bubbleSeed * 71) % 100 / 100) * currentRadius; // 初始Y随机性
+                            const currentYOffset = (initialYOffset + this.timer * verticalSpeed) % (currentRadius * 2) - currentRadius; // 在毒圈内循环
+                            
+                            const bubbleRadius = (2 + ((bubbleSeed * 13) % 3)) * cameraManager.zoom;
+                            const bubbleAlpha = alpha * (0.8 - Math.abs(currentYOffset) / currentRadius * 0.5); // 越往边缘/上下越透明
+
+                            if (bubbleAlpha > 0.1) {
+                                ctx.fillStyle = `rgba(50, 200, 80, ${bubbleAlpha})`;
+                                ctx.beginPath();
+                                ctx.arc(screenPos.x + offsetX, screenPos.y + currentYOffset, bubbleRadius, 0, Math.PI * 2);
+                                ctx.fill();
+                            }
+                        }
+                        ctx.restore();
+                    }
+                };
+                this.specialAbilityEffects.push(toxicPoolEffect);
+            });
+            this.pendingToxicPools = []; // 清空已生成的
+            
         } else {
             // 默认或其他Boss的特殊攻击
             this.isPerformingSpecial = false; // 如果没有特定实现，确保重置状态
@@ -1226,7 +1418,7 @@ class BossEnemy extends Enemy {
                 });
             }
         };
-        
+
         // 在创建效果时初始化裂纹
         effect.initCracks();
         visualEffects.push(effect);
@@ -1519,71 +1711,154 @@ class BossEnemy extends Enemy {
      * @param {CanvasRenderingContext2D} ctx - 画布上下文
      */
     draw(ctx) {
-        // 如果正在执行AOE攻击且有特效，则绘制特效
-        if (this.isPerformingAOE && this.aoeEffect && this.aoeEffect.isActive) {
-            // 暂时不绘制 AOE 攻击范围圆圈，以避免遮挡血条或根据用户反馈移除
-            /*
-            const screenPos = cameraManager.worldToScreen(this.aoeEffect.x, this.aoeEffect.y);
-            let alpha = 0.3; // 之前是 0.5，降低了
-            if (this.aoeEffect.timer < this.aoeEffect.expandDuration) {
-                alpha = (this.aoeEffect.timer / this.aoeEffect.expandDuration) * 0.3;
-            } else {
-                const t = (this.aoeEffect.timer - this.aoeEffect.expandDuration) / this.aoeEffect.holdDuration;
-                alpha = 0.3 - 0.2 * Math.sin(t * Math.PI * 10); 
-            }
-            ctx.fillStyle = `rgba(255, 0, 0, ${alpha})`;
-            ctx.beginPath();
-            ctx.arc(screenPos.x, screenPos.y, this.aoeEffect.currentRadius, 0, Math.PI * 2);
-            ctx.fill();
-            */
-        }
-        // 调用父类的绘制方法 (绘制Boss本身和血条等)
+        ctx.save(); // 最外层保存
+        ctx.globalAlpha = 1.0; // 确保 BossEnemy 绘制开始时不透明
+
+        // isPerformingAOE 和 aoeEffect 的逻辑似乎已被移除或整合
+        // super.draw(ctx) 会调用 Character.draw, 然后 Enemy.draw, 
+        // 这会绘制基础Emoji, 状态图标, 燃烧效果, 和普通敌人血条 (如果适用)
         super.draw(ctx);
-        // 绘制挥动的剑 (如果正在挥剑)
-        if (this.isSwingingSword && this.isActive && this.type.name === "骷髅王") { // 明确指定骷髅王
-            const swordScreenPos = cameraManager.worldToScreen(this.x, this.y);
+
+        // --- Boss 特有的绘制逻辑 ---
+        const screenPos = cameraManager.worldToScreen(this.x, this.y); // 重新获取，因为super.draw可能restore了
+
+        // 骷髅王挥剑
+        if (this.type.name === "骷髅王" && this.isSwingingSword && this.isActive) { 
+            const swordScreenPos = screenPos; // 使用上面获取的 screenPos
             ctx.save();
             ctx.translate(swordScreenPos.x, swordScreenPos.y);
-            ctx.rotate(this.swordAngle); // 使用当前计算的挥剑角度
-            
-            // 剑的绘制参数
+            ctx.rotate(this.swordAngle); 
             const swordEmoji = EMOJI.SWORD || '🗡️';
-            const swordDisplaySize = this.size * 1.1; // 修改: 剑本身视觉大小, 从 1.2 改为 1.1
-            const swordOffset = this.size * 0.2;   // 保持剑柄偏移量
-
+            const swordDisplaySize = this.size * 1.1; 
+            const swordOffset = this.size * 0.2;   
             ctx.font = `${swordDisplaySize}px 'Segoe UI Emoji', Arial`;
             ctx.textAlign = 'left'; 
             ctx.textBaseline = 'middle';
-            ctx.fillText(swordEmoji, swordOffset, 0); // 绘制剑，使其从偏移点向右伸出
-            
+            // 确保剑本身不透明，除非特殊效果
+            // ctx.globalAlpha = 1.0; // 如果 translate/rotate 影响了 alpha
+            ctx.fillText(swordEmoji, swordOffset, 0); 
             ctx.restore();
         }
 
-        // 特殊攻击警告效果：在Boss身上绘制闪烁的黄色叠加层
+        // 特殊攻击警告效果
         if (this.isWarningForSpecialAttack && this.isActive) {
-            const screenPos = cameraManager.worldToScreen(this.x, this.y);
-            const warningBlinkInterval = 0.20; // 闪烁间隔 (秒)
+            const warningScreenPos = screenPos;
+            const warningBlinkInterval = 0.20; 
             const isWarningVisibleThisFrame = (this.specialAttackWarningTimer % warningBlinkInterval) < (warningBlinkInterval / 2);
-
             if (isWarningVisibleThisFrame) {
                 ctx.save();
-                ctx.globalAlpha = 0.5; // 半透明
+                ctx.globalAlpha = 0.5; // 特殊攻击警告有意设为半透明
                 ctx.fillStyle = 'yellow';
-                // 绘制一个覆盖 Boss Emoji 的圆形或使用 Boss 的 emoji 本身再次绘制并着色
-                // 简单起见，绘制一个黄色圆圈覆盖
                 const warningIndicatorSize = this.size * 0.7;
                 ctx.beginPath();
-                ctx.arc(screenPos.x, screenPos.y, warningIndicatorSize, 0, Math.PI * 2);
+                ctx.arc(warningScreenPos.x, warningScreenPos.y, warningIndicatorSize, 0, Math.PI * 2);
                 ctx.fill();
-                ctx.restore();
+                ctx.restore(); // 恢复到警告前的 alpha (应该是1.0，因为顶层设置了)
             }
         }
 
-        // 显式调用Boss特有的血条绘制方法 (如果 super.draw 没有很好地处理它)
-        // 或者确保 Character.draw 或 Enemy.draw 中有合适的血条绘制逻辑
-        // 当前 BossEnemy 有自己的 drawBossHealthBar，在 Character.draw 之后调用是合适的
-        const screenPos = cameraManager.worldToScreen(this.x, this.y);
-        this.drawBossHealthBar(ctx, screenPos.x, screenPos.y); // 确保Boss血条总是绘制
+        // Boss 血条 (BossEnemy 特有)
+            this.drawBossHealthBar(ctx, screenPos.x, screenPos.y);
+
+        // 绘制当前激活的特殊技能效果 (如巨型僵尸的毒池)
+        if (this.isPerformingSpecial && this.specialAbilityEffects.length > 0) {
+            this.specialAbilityEffects.forEach(effect => {
+                if (effect && typeof effect.draw === 'function' && !effect.isGarbage) {
+                    // 假设 effect.draw 内部会正确管理自己的 alpha (save/restore)
+                    effect.draw(ctx);
+                }
+            });
+        }
+
+        // 巨型僵尸的被动毒环和特殊攻击（红圈）警告
+        if (this.type.name === "巨型僵尸" && this.isActive && !this.isGarbage) {
+            const zombieScreenPos = screenPos;
+            const auraScreenRadius = this.poisonAuraRadius * cameraManager.zoom;
+            const auraTime = gameTime; // For animations
+            ctx.save(); // 为巨型僵尸的特效创建一个新的 save/restore 块
+            
+            // --- Enhanced Passive Poison Aura Drawing ---
+            // 1. Base Aura with Gradient
+            const gradient = ctx.createRadialGradient(
+                zombieScreenPos.x, zombieScreenPos.y, auraScreenRadius * 0.1,
+                zombieScreenPos.x, zombieScreenPos.y, auraScreenRadius
+            );
+            const baseAuraAlpha = 0.20;
+            gradient.addColorStop(0, `rgba(0, 150, 50, ${baseAuraAlpha * 0.5})`);
+            gradient.addColorStop(0.7, `rgba(0, 128, 0, ${baseAuraAlpha})`);
+            gradient.addColorStop(1, `rgba(0, 100, 0, ${baseAuraAlpha * 0.3})`);
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(zombieScreenPos.x, zombieScreenPos.y, auraScreenRadius, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 2. Explicit Border for the Aura
+            ctx.strokeStyle = `rgba(0, 255, 0, ${baseAuraAlpha * 2.0})`; // Brighter green, more opaque
+            ctx.lineWidth = 2.5 * cameraManager.zoom; // Thicker border
+            ctx.stroke(); // Draw the border
+
+            // 3. Rotating Lines (previously 2)
+            const numLines = 5;
+            const lineLength = auraScreenRadius * 0.85;
+            ctx.strokeStyle = `rgba(0, 200, 0, ${baseAuraAlpha * 1.5})`; // Kept as is or slightly adjust
+            ctx.lineWidth = 1.5 * cameraManager.zoom;
+            for (let i = 0; i < numLines; i++) {
+                const angle = (auraTime * 0.2 + (Math.PI * 2 / numLines) * i) % (Math.PI * 2);
+                ctx.beginPath();
+                ctx.moveTo(zombieScreenPos.x, zombieScreenPos.y);
+                ctx.lineTo(
+                    zombieScreenPos.x + Math.cos(angle) * lineLength,
+                    zombieScreenPos.y + Math.sin(angle) * lineLength
+                );
+                ctx.stroke();
+            }
+
+            // 4. Simple Particles (previously 3)
+            const numParticles = 15;
+            const particleBaseSize = 2 * cameraManager.zoom;
+            for (let i = 0; i < numParticles; i++) {
+                // Consistent random-like placement for each particle based on index and time
+                const particleTimeSeed = auraTime * 0.3 + i * 0.5;
+                const angle = (particleTimeSeed * 0.7 + (i * 2.5)) % (Math.PI * 2);
+                // Particles move in and out radially
+                const distance = auraScreenRadius * (0.2 + (Math.sin(particleTimeSeed) * 0.5 + 0.5) * 0.7); 
+                const particleX = zombieScreenPos.x + Math.cos(angle) * distance;
+                const particleY = zombieScreenPos.y + Math.sin(angle) * distance;
+                
+                const particleAlpha = baseAuraAlpha * (0.5 + Math.sin(particleTimeSeed * 1.2) * 0.5);
+                const particleSize = particleBaseSize * (0.7 + Math.sin(particleTimeSeed * 0.8) * 0.3);
+
+                if (particleAlpha > 0.05 && particleSize > 0.5) {
+                    ctx.fillStyle = `rgba(50, 220, 50, ${particleAlpha})`;
+                    ctx.beginPath();
+                    ctx.arc(particleX, particleY, particleSize, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+            // --- End of Enhanced Aura Drawing ---
+
+            // ... (特殊攻击的毒池警告绘制代码 - 假设它内部管理 alpha)
+            if (this.isWarningForSpecialAttack && this.pendingToxicPools.length > 0) {
+                 this.pendingToxicPools.forEach(pool => {
+                    const poolScreenPos = cameraManager.worldToScreen(pool.x, pool.y);
+                    const warningRadius = this.toxicPoolRadius * cameraManager.zoom * pool.warningProgress; 
+                    const currentWarningAlpha = 0.2 + pool.warningProgress * 0.4; 
+                    ctx.fillStyle = `rgba(100, 0, 0, ${currentWarningAlpha})`; 
+                    ctx.beginPath();
+                    ctx.arc(poolScreenPos.x, poolScreenPos.y, warningRadius, 0, Math.PI * 2);
+                    ctx.fill();
+                    if (pool.warningProgress > 0.3) {
+                       ctx.strokeStyle = `rgba(255, 50, 50, ${currentWarningAlpha * 1.5})`;
+                       ctx.lineWidth = 2 * cameraManager.zoom;
+                       ctx.beginPath();
+                       ctx.arc(poolScreenPos.x, poolScreenPos.y, warningRadius, 0, Math.PI*2);
+                       ctx.stroke();
+                    }
+                });
+            }
+            ctx.restore(); // 恢复到巨型僵尸特效之前的状态
+        }
+        ctx.restore(); // 恢复到 BossEnemy.draw 最开始的状态
     }
 
     /**

@@ -213,7 +213,7 @@ const bossManager = {
                 // 随机选择一个Boss并存储
                 this.pendingBossType = availableBosses[Math.floor(Math.random() * availableBosses.length)];
                 this.showBossWarning(this.pendingBossType.name); // 用选定的Boss名字显示警告
-                this.showingWarning = true;
+            this.showingWarning = true;
             } else {
                 // 如果没有可用的Boss（理论上不应发生，除非BOSS_TYPES为空或minTime都过高）
                 // 简单地推迟下一次检查，或者可以记录一个错误
@@ -449,7 +449,7 @@ function update(dt) {
             if (enemies[i] instanceof BossEnemy) {
                 enemies[i].update(dt, player); // <--- 确保 BossEnemy 的 update 也接收 player
             } else {
-                enemies[i].update(dt);
+            enemies[i].update(dt);
             }
         }
     }
@@ -1119,10 +1119,10 @@ function presentLevelUpOptions() {
                 try {
                     // 执行选项操作
                     console.log("Upgrade button clicked. Action:", option.text);
-                    if (typeof option.action === 'function') {
-                        option.action();
-                    }
-                    levelUpScreenElement.classList.add('hidden');
+                        if (typeof option.action === 'function') {
+                    option.action();
+                        }
+                        levelUpScreenElement.classList.add('hidden');
                     console.log("Hiding level up screen. Setting isPaused=false, isLevelUp=false.");
                     isPaused = false;
                     isLevelUp = false; 
@@ -1136,7 +1136,7 @@ function presentLevelUpOptions() {
 
                 } catch (error) {
                     console.error("升级选项执行错误:", error);
-                    levelUpScreenElement.classList.add('hidden');
+                        levelUpScreenElement.classList.add('hidden');
                     console.log("Error in upgrade action. Setting isPaused=false, isLevelUp=false.");
                     isPaused = false;
                     isLevelUp = false;
@@ -1378,7 +1378,7 @@ class EnemyProjectile {
         
         // 生命周期
         this.lifetime = 0;
-        this.duration = 3.0; 
+        this.duration = 3.0;
         
         // 活动状态
         this.isActive = true;
@@ -1500,9 +1500,9 @@ class EnemyProjectile {
         } else {
             // 默认绘制：紫色圆形
             ctx.fillStyle = 'purple'; 
-            ctx.beginPath();
-            ctx.arc(screenPos.x, screenPos.y, this.size / 2, 0, Math.PI * 2);
-            ctx.fill();
+        ctx.beginPath();
+        ctx.arc(screenPos.x, screenPos.y, this.size / 2, 0, Math.PI * 2);
+        ctx.fill();
         }
         
         // 移除轨迹绘制，如果使用emoji则轨迹可能不合适

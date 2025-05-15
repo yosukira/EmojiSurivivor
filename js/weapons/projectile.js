@@ -135,8 +135,30 @@ class Projectile extends GameObject {
         // 如果投射物不活动或已标记为垃圾，不绘制
         if (!this.isActive || this.isGarbage) return;
 
-        // 调用父类绘制方法
-        super.draw(ctx);
+        ctx.save(); // 保存状态
+        ctx.globalAlpha = 1.0; // 确保投射物绘制时不透明
+
+        // 调用父类(GameObject)的绘制方法来绘制基础 emoji
+        // super.draw(ctx); 
+        // GameObject.draw 内部没有 save/restore，所以如果在这里调用 super.draw, 
+        // 它会使用我们刚设置的 globalAlpha = 1.0，这是好的。
+        // 但是，为了更清晰地控制，我们可以直接复制代码或者重写绘制逻辑。
+        // 鉴于 Projectile 可能有特殊绘制（如岚刀的闪电），我们最好在这里完全控制绘制。
+
+        const screenPos = cameraManager.worldToScreen(this.x, this.y);
+
+        if (this.drawEffect) {
+            // 如果有特殊绘制效果 (例如岚刀的闪电)，则调用它
+            this.drawEffect(ctx, screenPos);
+        } else {
+            // 默认绘制：绘制 emoji
+            ctx.font = `${this.size}px 'Segoe UI Emoji', Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(this.emoji, screenPos.x, screenPos.y);
+        }
+        
+        ctx.restore(); // 恢复状态
     }
 
     /**

@@ -313,36 +313,47 @@ class Player extends Character {
      * 受到伤害
      * @param {number} amount - 伤害量
      * @param {GameObject} source - 伤害来源
+     * @param {boolean} isBurnDamage - 是否是燃烧伤害（可选，主要用于敌人区分）
+     * @param {boolean} isAuraDamage - 是否是光环伤害（可选）
      * @returns {boolean} 是否死亡
      */
-    takeDamage(amount, source) {
+    takeDamage(amount, source, isBurnDamage = false, isAuraDamage = false) {
         // 如果处于无敌状态，不受伤害
-        if (this.invincibleTime > 0) return;
+        if (this.invincibleTime > 0 && !isAuraDamage && !isBurnDamage) return false; // 光环和燃烧伤害无视普通无敌
 
-        // 计算护甲减伤
-        const armor = this.getStat('armor');
-        const actualDamage = Math.max(1, amount - armor);
+        let actualDamage;
+        if (isAuraDamage || isBurnDamage) {
+            actualDamage = amount; // 光环和燃烧伤害直接应用，不计算护甲，允许小于1
+        } else {
+            const armor = this.getStat('armor');
+            actualDamage = Math.max(1, amount - armor); // 普通攻击计算护甲，最低为1
+        }
 
         // 减少生命值
         this.health -= actualDamage;
 
-        // 显示玩家受到的伤害数字 (不同颜色和大小)
-        const damageTakenColor = 'rgb(255, 165, 0)'; // 橙色
-        const damageTakenSize = GAME_FONT_SIZE * 0.9; // 稍大一点
+        // 显示玩家受到的伤害数字
+        const damageTakenColor = isAuraDamage ? 'rgba(128,0,128,0.7)' : (isBurnDamage ? 'orange' : 'rgb(255, 165, 0)'); // 光环用紫色，燃烧用橙色
+        const damageTakenSize = GAME_FONT_SIZE * 0.9;
+        // 光环伤害显示两位小数，燃烧一位，其他整数
+        const damageText = isAuraDamage ? `-${actualDamage.toFixed(2)}` : (isBurnDamage ? `-${actualDamage.toFixed(1)}` : `-${actualDamage.toFixed(0)}`);
         
-        // 在 Player 类中直接创建和管理伤害数字
-        let damageNumber = null;
-        if (inactiveDamageNumbers.length > 0) {
-            damageNumber = inactiveDamageNumbers.pop();
-            damageNumber.init(this.x, this.y - this.size / 2, `-${actualDamage.toFixed(1)}`, damageTakenSize, damageTakenColor, 0.7);
-        } else {
-            damageNumber = new DamageNumber(this.x, this.y - this.size / 2, `-${actualDamage.toFixed(1)}`, damageTakenSize, damageTakenColor, 0.7);
+        // 对于非常小的光环伤害，可以选择不显示
+        if (!isAuraDamage || Math.abs(actualDamage) >= 0.01) {
+            let damageNumberObj = null;
+            if (inactiveDamageNumbers.length > 0) {
+                damageNumberObj = inactiveDamageNumbers.pop();
+                damageNumberObj.init(this.x, this.y - this.size / 2, damageText, damageTakenSize, damageTakenColor, 0.7);
+            } else {
+                damageNumberObj = new DamageNumber(this.x, this.y - this.size / 2, damageText, damageTakenSize, damageTakenColor, 0.7);
+            }
+            damageNumbers.push(damageNumberObj);
         }
-        damageNumbers.push(damageNumber);
 
-
-        // 设置短暂的无敌时间
-        this.invincibleTime = 0.5;
+        // 设置短暂的无敌时间 (非光环/燃烧伤害)
+        if (!isAuraDamage && !isBurnDamage) {
+            this.invincibleTime = 0.5;
+        }
 
         // 检查是否死亡
         if (this.health <= 0) {
@@ -466,77 +477,56 @@ class Player extends Character {
         // 如果玩家不活动或已标记为垃圾，不绘制
         if (!this.isActive || this.isGarbage) return;
 
-        // 绘制拾取范围 (如果需要)
-        // this.drawPickupRadius(ctx);
+        ctx.save(); // 最外层保存状态
+        ctx.globalAlpha = 1.0; // 确保玩家绘制开始时不透明
 
-        // 保存当前context状态
-        ctx.save();
-        
-        // 获取屏幕坐标
         const screenPos = cameraManager.worldToScreen(this.x, this.y);
-        
-        // 确保绘制不透明
-        ctx.globalAlpha = 1.0;
-        
-        // 如果有无敌时间，使其闪烁
-        if (this.invincibleTime > 0) {
-            const blinkRate = 10;
-            if (Math.sin(this.invincibleTime * blinkRate) > 0) {
-                ctx.globalAlpha = 0.7;
-            }
+        const drawSize = this.size; 
+
+        // 白色边框的逻辑已被注释掉，按用户要求移除
+        /*
+        if (this.statusEffects.slow) {
+            // ... border drawing code ...
         }
+        */
 
-        // 绘制玩家图片（如果已加载）
-        if (playerImage && playerImage.complete && playerImage.naturalWidth > 0) {
-            const drawX = screenPos.x - this.size / 2;
-            const drawY = screenPos.y - this.size / 2;
-            
-            // --- 添加白色描边 --- 
-            const outlineOffset = 2; // 描边宽度
-            ctx.globalAlpha = ctx.globalAlpha * 0.8; // 描边可以稍微透明一点
-            
-            // 存储原始 composite operation
-            const originalCompositeOperation = ctx.globalCompositeOperation;
-            // 设置 composite operation 以便白色描边在图片下方
-            // 这需要浏览器支持，如果效果不理想可以注释掉这两行
-            // ctx.globalCompositeOperation = 'destination-over'; 
-            
-            // 绘制白色描边（通过偏移绘制）
-            ctx.drawImage(playerImage, drawX - outlineOffset, drawY, this.size, this.size); // 左
-            ctx.drawImage(playerImage, drawX + outlineOffset, drawY, this.size, this.size); // 右
-            ctx.drawImage(playerImage, drawX, drawY - outlineOffset, this.size, this.size); // 上
-            ctx.drawImage(playerImage, drawX, drawY + outlineOffset, this.size, this.size); // 下
-            // 可选：对角线描边，使轮廓更平滑
-            ctx.drawImage(playerImage, drawX - outlineOffset, drawY - outlineOffset, this.size, this.size); 
-            ctx.drawImage(playerImage, drawX + outlineOffset, drawY - outlineOffset, this.size, this.size);
-            ctx.drawImage(playerImage, drawX - outlineOffset, drawY + outlineOffset, this.size, this.size);
-            ctx.drawImage(playerImage, drawX + outlineOffset, drawY + outlineOffset, this.size, this.size);
-
-            // --- 白色描边结束 ---
-            
-            // 恢复 alpha 和 composite operation
-            ctx.globalAlpha = ctx.globalAlpha / 0.8; // 恢复原始 alpha
-            // ctx.globalCompositeOperation = originalCompositeOperation; // 恢复
-
-            // 绘制原始图片
-            ctx.drawImage(playerImage, drawX, drawY, this.size, this.size);
-
+        // 绘制玩家 (图片或 Emoji)
+        if (playerImage && playerImage.complete && playerImage.naturalHeight !== 0) {
+            // 无敌闪烁的 save/restore 已在内部处理 alpha
+            ctx.save();
+            if (this.invincibleTime > 0) {
+                const blinkRate = 10;
+                if (Math.sin(Date.now() / 100 * blinkRate * 2) > 0) { 
+                    ctx.globalAlpha = 0.5; // 内部修改 alpha
+                }
+            }
+            ctx.drawImage(playerImage, 
+                          screenPos.x - drawSize / 2, 
+                          screenPos.y - drawSize / 2, 
+                          drawSize, 
+                          drawSize);
+            ctx.restore(); // 恢复到此 save 之前的状态 (可能是 globalAlpha = 1.0)
         } else {
-            // 图片加载失败或未完成，则回退到绘制 Emoji
-            ctx.font = `${this.size}px 'Segoe UI Emoji', Arial`;
+            // 图片加载失败或未加载时，回退到绘制 Emoji
+            ctx.save();
+            if (this.invincibleTime > 0) {
+                const blinkRate = 10;
+                 if (Math.sin(Date.now() / 100 * blinkRate * 2) > 0) {
+                    ctx.globalAlpha = 0.5; // 内部修改 alpha
+                }
+            }
+            ctx.font = `${drawSize}px 'Segoe UI Emoji', Arial`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(this.emoji, screenPos.x, screenPos.y);
+            ctx.restore(); // 恢复到此 save 之前的状态
         }
         
-        // 恢复context状态
-        ctx.restore();
+        // 绘制状态效果 (Character.draw 已经处理了状态效果的 save/restore 和 alpha)
+        // 所以这里不需要再次 save/restore 或设置 alpha
+        this.drawStatusEffects(ctx); 
 
-        // 绘制血条 (调用父类或 GameObject 的方法，如果需要)
-        // super.drawHealthBar(ctx); // 假设有这个方法
-
-        // 绘制状态效果 (调用父类 Character 的方法)
-        this.drawStatusEffects(ctx);
+        ctx.restore(); // 恢复到 Player.draw 最开始保存的状态
     }
 
     /**
