@@ -73,6 +73,7 @@ const enemyManager = {
     currentSpawnInterval: 3.5, // 初始生成间隔，增加为3.5秒
     BASE_SPAWN_INTERVAL: 2.0,
     difficultyTimer: 0,
+    maxEnemyCap: MAX_ENEMIES_ON_SCREEN, // 使用常量
 
     update(dt, gameTime, player) {
         // 更新生成计时器
@@ -81,15 +82,15 @@ const enemyManager = {
         // 更新难度计时器
         this.difficultyTimer += dt;
 
-        // 每30秒增加难度
-        if (this.difficultyTimer >= 30) {
-            // 随着时间推移逐渐减少生成间隔，但不低于0.8秒
-            this.currentSpawnInterval = Math.max(0.8, this.currentSpawnInterval * 0.92);
+        // 每20秒增加难度 (原30秒)
+        if (this.difficultyTimer >= 20) {
+            // 随着时间推移逐渐减少生成间隔，但不低于0.5秒 (原0.8, 原削减率0.92)
+            this.currentSpawnInterval = Math.max(0.5, this.currentSpawnInterval * 0.90);
             this.difficultyTimer = 0;
         }
 
-        // 如果计时器超过生成间隔，生成敌人
-        if (this.spawnTimer >= this.currentSpawnInterval) {
+        // 如果计时器超过生成间隔，并且当前敌人数量未达上限，则生成敌人
+        if (this.spawnTimer >= this.currentSpawnInterval && enemies.length < this.maxEnemyCap) {
             // 生成敌人
             this.spawnEnemies(gameTime, player);
 
@@ -110,20 +111,32 @@ const enemyManager = {
         
         // 计算总权重
         const totalWeight = availableEnemies.reduce((sum, enemy) => sum + enemy.weight, 0);
+        if (totalWeight === 0) return; // 防止没有可用敌人时出错
         
-        // 根据游戏时间计算生成数量，初始较少，随时间增加
-        const initialSpawnCount = 3; // 游戏开始时生成的敌人数量
-        const maxSpawnCount = 10;    // 最大生成数量
-        const timeToMaxSpawn = 300;  // 多少秒后达到最大生成数量
-        
-        // 计算当前应该生成的敌人数量
-        const spawnCount = Math.min(
-            initialSpawnCount + Math.floor((gameTime / timeToMaxSpawn) * (maxSpawnCount - initialSpawnCount)),
-            maxSpawnCount
-        );
+        // 根据游戏时间计算生成数量
+        const initialSpawnCount = 3;  // 初始
+        const midGameTime = 180;      // 3分钟进入中期
+        const midGameSpawnCount = 8;  // 中期单次生成数量
+        const lateGameTime = 480;     // 8分钟进入后期
+        const lateGameSpawnCount = 15; // 后期单次生成数量
+        const maxTotalEnemies = MAX_ENEMIES_ON_SCREEN; // 使用常量，例如 60
+
+        let spawnCountThisWave;
+        if (gameTime < midGameTime) { // 0-3 分钟
+            const progress = gameTime / midGameTime;
+            spawnCountThisWave = Math.floor(initialSpawnCount + progress * (midGameSpawnCount - initialSpawnCount));
+        } else if (gameTime < lateGameTime) { // 3-8 分钟
+            const progress = (gameTime - midGameTime) / (lateGameTime - midGameTime);
+            spawnCountThisWave = Math.floor(midGameSpawnCount + progress * (lateGameSpawnCount - midGameSpawnCount));
+        } else { // 8分钟以后
+            spawnCountThisWave = lateGameSpawnCount;
+        }
+        // 确保不会因为一次生成过多而超过总数上限（虽然 update 中已检查，这里再保险一下）
+        spawnCountThisWave = Math.min(spawnCountThisWave, maxTotalEnemies - enemies.length);
+        if (spawnCountThisWave <= 0) return; // 如果已满或计算为0，则不生成
         
         // 生成敌人
-        for (let i = 0; i < spawnCount; i++) {
+        for (let i = 0; i < spawnCountThisWave; i++) {
             // 随机选择生成边缘 (0:上, 1:右, 2:下, 3:左)
             const edge = Math.floor(Math.random() * 4);
             let x, y;

@@ -22,6 +22,25 @@ class Enemy extends Character {
                 xp: ENEMY_BASE_STATS.xp * (type.xpMult || 1)
             }
         );
+
+        // Time-based scaling for health and damage
+        const minutesPassed = gameTime / 60;
+        // Health: Starts scaling after 2 mins, caps at +150% (2.5x total) around 12 mins
+        let healthScalingFactor = 1.0;
+        if (minutesPassed > 2) {
+            healthScalingFactor += Math.min((minutesPassed - 2) * 0.15, 1.5); // 0.15 per min after 2 mins, up to +150%
+        }
+        // Damage: Starts scaling after 3 mins, caps at +100% (2x total) around 13 mins
+        let damageScalingFactor = 1.0;
+        if (minutesPassed > 3) {
+            damageScalingFactor += Math.min((minutesPassed - 3) * 0.10, 1.0); // 0.10 per min after 3 mins, up to +100%
+        }
+
+        this.stats.health *= healthScalingFactor;
+        this.stats.damage *= damageScalingFactor;
+        this.health = this.stats.health; // Update current health to scaled max health
+        this.maxHealth = this.stats.health; // Ensure maxHealth is also updated
+
         // 敌人类型
         this.type = type;
         // 目标
@@ -119,11 +138,6 @@ class Enemy extends Character {
         const dx = this.target.x - this.x;
         const dy = this.target.y - this.y;
         const distSq = dx * dx + dy * dy;
-        
-        // 检查玩家是否在屏幕内或附近 - 只有在范围内才追击和攻击
-        if (distSq > ENEMY_ATTACK_RANGE * ENEMY_ATTACK_RANGE) {
-            return;
-        }
         
         // 如果是远程敌人且在攻击范围内，保持距离
         if (this.isRanged && distSq <= this.attackRange * this.attackRange) {
@@ -502,20 +516,41 @@ class BossEnemy extends Enemy {
      * @param {Object} bossType - Boss类型
      */
     constructor(x, y, bossType) {
-        // 计算Boss基础属性
-        const bossStats = { ...ENEMY_BASE_STATS }; // 基础敌人属性
-        bossStats.health = (bossType.healthBase || ENEMY_BASE_STATS.health * 5) * (bossType.healthMult || 1); // Boss有更高的基础生命
-        bossStats.speed = (bossType.speedBase || ENEMY_BASE_STATS.speed) * (bossType.speedMult || 1);
-        bossStats.damage = (bossType.damageBase || ENEMY_BASE_STATS.damage * 2) * (bossType.damageMult || 1);
-        bossStats.xp = (bossType.xpBase || ENEMY_BASE_STATS.xp * 10) * (bossType.xpMult || 1);
-        bossStats.attackInterval = bossType.attackCooldown || 1.5; // Boss普通攻击间隔
+        // 计算Boss基础属性 (initial calculation before super call)
+        const initialBossStats = { ...ENEMY_BASE_STATS };
+        initialBossStats.health = (bossType.healthBase || ENEMY_BASE_STATS.health * BOSS_BASE_HEALTH_MULTIPLIER) * (bossType.healthMult || 1);
+        initialBossStats.speed = (bossType.speedBase || ENEMY_BASE_STATS.speed) * (bossType.speedMult || 1);
+        initialBossStats.damage = (bossType.damageBase || ENEMY_BASE_STATS.damage * BOSS_BASE_DAMAGE_MULTIPLIER) * (bossType.damageMult || 1);
+        initialBossStats.xp = (bossType.xpBase || ENEMY_BASE_STATS.xp * 10) * (bossType.xpMult || 1);
+        initialBossStats.attackInterval = bossType.attackCooldown || 1.5;
 
-        super(x, y, bossType); // 调用Enemy构造函数，它会使用bossType的emoji等
+        // Call super with a temporary type object that doesn't include multipliers yet for base Enemy constructor,
+        // as we will apply scaling after this. The base Enemy constructor already applies type.healthMult etc.
+        // So, we pass a simplified type for the super constructor to avoid double multiplication initially.
+        const simplifiedSuperType = { ...bossType, healthMult: 1, speedMult: 1, damageMult: 1, xpMult: 1 };        
+        super(x, y, simplifiedSuperType); 
 
-        // 覆盖 Character 基类中设置的 stats，使用上面计算的 bossStats
-        this.stats = bossStats;
+        // Now, directly assign the pre-calculated initialBossStats (which already has boss-specific multipliers)
+        this.stats = { ...initialBossStats }; // Use a copy
+
+        // Time-based scaling for Bosses (more aggressive or starts earlier)
+        const minutesPassed = gameTime / 60;
+        // Health: Starts scaling after 1 min, caps at +200% (3x total) around 11 mins
+        let bossHealthScaling = 1.0;
+        if (minutesPassed > 1) {
+            bossHealthScaling += Math.min((minutesPassed - 1) * 0.20, 2.0); // 0.20 per min after 1 min, up to +200%
+        }
+        // Damage: Starts scaling after 2 mins, caps at +150% (2.5x total) around 12 mins
+        let bossDamageScaling = 1.0;
+        if (minutesPassed > 2) {
+            bossDamageScaling += Math.min((minutesPassed - 2) * 0.15, 1.5); // 0.15 per min after 2 mins, up to +150%
+        }
+
+        this.stats.health *= bossHealthScaling;
+        this.stats.damage *= bossDamageScaling;
+        
         this.health = this.stats.health;
-        this.maxHealth = this.stats.health; // 确保maxHealth也设置了
+        this.maxHealth = this.stats.health; 
 
         // Boss特定属性
         this.type = bossType; // 确保 this.type 是 bossType 对象

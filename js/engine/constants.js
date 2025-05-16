@@ -31,13 +31,13 @@ const PLAYER_DEFAULT_STATS = {
     critDamage: 1.5,
 };
 
-// 敌人基础属性
-const ENEMY_BASE_STATS = {
-    health: 8,
-    speed: 50,
-    damage: 6,
-    xp: 2
-};
+// // 敌人基础属性 (This is a duplicate and will be commented out)
+// const ENEMY_BASE_STATS = {
+//     health: 8,
+//     speed: 50,
+//     damage: 6,
+//     xp: 2
+// };
 
 // ENEMY_TYPES definition removed, js/constants.js will be the source of truth
 

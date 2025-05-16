@@ -39,13 +39,13 @@ const LEVEL_XP_REQUIREMENTS = [
 ];
 
 // Boss生成间隔（秒）
-const BOSS_INTERVAL = 60 // 100秒，调整Boss出现频率
+// const BOSS_INTERVAL = 60 // 100秒，调整Boss出现频率 (将使用下面的新值)
 
 // Boss基础生命值乘数
-const BOSS_BASE_HEALTH_MULTIPLIER = 8; // 降低Boss生命值
+// const BOSS_BASE_HEALTH_MULTIPLIER = 8; // 降低Boss生命值 (将使用下面的新值)
 
 // Boss基础伤害乘数
-const BOSS_BASE_DAMAGE_MULTIPLIER = 1.5; // 降低Boss伤害
+// const BOSS_BASE_DAMAGE_MULTIPLIER = 1.5; // 降低Boss伤害 (将使用下面的新值)
 
 // 玩家默认属性
 const PLAYER_DEFAULT_STATS = {
@@ -64,19 +64,28 @@ const PLAYER_DEFAULT_STATS = {
     maxPassives: 10
 };
 
-// 敌人基础属性
+// 基础敌人属性
 const ENEMY_BASE_STATS = {
-    health: 18,  // 提高基础生命值
-    speed: 75,   // 略微提高基础速度
-    damage: 10,   // 提高基础伤害
-    xp: 2
+    health: 30,
+    speed: 70,      // 基础移动速度
+    damage: 8,     // 基础伤害
+    xp: 5          // 基础经验值
 };
 
+// Boss 基础属性乘数 (基于 ENEMY_BASE_STATS)
+const BOSS_BASE_HEALTH_MULTIPLIER = 7.0; 
+const BOSS_BASE_DAMAGE_MULTIPLIER = 2.5; 
+
+// 其他游戏设定
+const MAX_ENEMIES_ON_SCREEN = 500; // 屏幕上允许的最大敌人数量
+const BOSS_INTERVAL = 180; // Boss出现间隔时间（秒）
+// SPAWN_PADDING 和 ENEMY_ATTACK_RANGE 已在下面定义，将检查并使用新值如果不同
+
 // 敌人生成边界距离 - 确保敌人从屏幕外生成
-const SPAWN_PADDING = 250;  // 增加生成距离，确保敌人从屏幕外生成
+const SPAWN_PADDING = 50;  // (原为 250)
 
 // 敌人攻击屏幕范围限制
-const ENEMY_ATTACK_RANGE = GAME_WIDTH * 1.2; // 敌人只能攻击屏幕内和屏幕边缘附近的玩家
+const ENEMY_ATTACK_RANGE = 800; // (原为 GAME_WIDTH * 1.2)
 
 /**
  * 生成Boss
