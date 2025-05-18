@@ -13,9 +13,9 @@ class BubbleProjectile extends Projectile {
      * @param {number} x - X坐标
      * @param {number} y - Y坐标
      * @param {number} size - 大小
-     * @param {number} vx - X速度
-     * @param {number} vy - Y速度
-     * @param {number} damage - 伤害
+     * @param {number} vx - X方向速度
+     * @param {number} vy - Y方向速度
+     * @param {number} damage - 伤害值
      * @param {number} duration - 持续时间
      * @param {Object} ownerStats - 拥有者属性
      * @param {number} trapDuration - 困敌时间
@@ -42,6 +42,10 @@ class BubbleProjectile extends Projectile {
         this.maxOscillationDist = 5;  // 最大振荡距离
         this.prevOscX = 0;
         this.prevOscY = 0;
+        
+        // 安全设置：强制销毁计时器
+        this.forceDestroyTimer = 0;
+        this.maxExistTime = 15; // 泡泡存在的最大时间（秒）
     }
 
     /**
@@ -54,6 +58,14 @@ class BubbleProjectile extends Projectile {
         
         // 更新振荡效果
         this.oscillation += dt * this.oscillationSpeed;
+        
+        // 安全检查：强制销毁计时器
+        this.forceDestroyTimer += dt;
+        if (this.forceDestroyTimer >= this.maxExistTime) {
+            console.log("泡泡强制销毁：超过最大存在时间");
+            this.burst();
+            return;
+        }
         
         // 设置一个强制最大生命周期，确保泡泡永远不会无限存在
         const MAX_LIFETIME = 10; // 10秒的绝对最大生命周期
@@ -80,6 +92,15 @@ class BubbleProjectile extends Projectile {
             // 如果生命周期结束，泡泡爆炸
             if (this.lifetime >= this.duration) {
                 this.burst();
+                return;
+            }
+            
+            // 边界检查：如果泡泡位置离开了有效区域，强制销毁
+            const worldSize = Math.max(GAME_WIDTH, GAME_HEIGHT);
+            if (Math.abs(this.x) > worldSize * 2 || Math.abs(this.y) > worldSize * 2) {
+                console.log("泡泡强制销毁：超出边界");
+                this.isGarbage = true;
+                this.isActive = false;
                 return;
             }
         } else {
@@ -120,6 +141,19 @@ class BubbleProjectile extends Projectile {
             // 自然减速
             this.vx *= 0.99;
             this.vy *= 0.99;
+            
+            // 速度太低时判定为静止，避免泡泡卡住
+            const minSpeed = 5;
+            if (Math.abs(this.vx) < minSpeed && Math.abs(this.vy) < minSpeed) {
+                this.staticTimer = (this.staticTimer || 0) + dt;
+                // 如果静止时间过长，爆炸
+                if (this.staticTimer > 2) {
+                    this.burst();
+                    return;
+                }
+            } else {
+                this.staticTimer = 0;
+            }
             
             // 更新生命周期
             this.lifetime += dt;
@@ -190,8 +224,8 @@ class BubbleProjectile extends Projectile {
      * 泡泡爆炸
      */
     burst() {
-        // 如果已经在爆炸，不重复触发
-        if (this.isBursting) return;
+        // 如果已经在爆炸或已经是垃圾，不重复触发
+        if (this.isBursting || this.isGarbage) return;
         
         // 标记为正在爆炸
         this.isBursting = true;
@@ -217,17 +251,6 @@ class BubbleProjectile extends Projectile {
         if (this.splitOnBurst && this.owner) {
             this.createSplitBubbles();
         }
-        
-        // 设置一个短暂的计时器，之后清除泡泡
-        this.burstTimer = 0;
-        
-        // 确保在一定时间后一定会被清除
-        setTimeout(() => {
-            if (!this.isGarbage) {
-                this.isGarbage = true;
-                this.isActive = false;
-            }
-        }, this.burstDelay * 1000 + 100); // 比正常爆炸时间稍长一点，确保清除
     }
 
     /**

@@ -572,6 +572,75 @@ if (typeof VineSeedWeapon === 'undefined') {
                 duration: 5 + (this.level - 1) * 0.5
             };
         }
+        
+        /**
+         * 更新武器状态
+         * @param {number} dt - 时间增量
+         * @param {Player} owner - 拥有者
+         */
+        update(dt, owner) {
+            // 如果没有统计信息，计算统计信息
+            if (!this.stats) {
+                this.calculateStats();
+            }
+            
+            // 增加冷却计时器
+            this.cooldownTimer += dt;
+            
+            // 如果冷却结束，发射藤蔓
+            if (this.cooldownTimer >= this.stats.cooldown) {
+                // 重置冷却计时器
+                this.cooldownTimer = 0;
+                
+                // 发射藤蔓攻击
+                this.castVine(owner);
+            }
+        }
+        
+        /**
+         * 发射藤蔓攻击
+         * @param {Player} owner - 拥有者
+         */
+        castVine(owner) {
+            // 获取基础伤害乘数
+            const damageMultiplier = owner.getStat ? owner.getStat('damageMultiplier') : 1;
+            const finalDamage = this.stats.damage * damageMultiplier;
+            
+            // 获取范围乘数
+            const areaMultiplier = owner.getStat ? owner.getStat('areaMultiplier') : 1;
+            const finalRadius = this.stats.radius * areaMultiplier;
+            
+            // 获取持续时间乘数
+            const durationMultiplier = owner.getStat ? owner.getStat('durationMultiplier') : 1;
+            const finalDuration = this.stats.duration * durationMultiplier;
+            
+            // 寻找目标位置
+            for (let i = 0; i < this.stats.count; i++) {
+                // 寻找随机敌人
+                let targetEnemy = owner.findRandomEnemy(400);
+                
+                if (targetEnemy) {
+                    // 如果找到敌人，在敌人位置创建藤蔓
+                    if (typeof VineHazard === 'function') {
+                        const vine = new VineHazard(
+                            targetEnemy.x,
+                            targetEnemy.y,
+                            finalRadius,
+                            finalDamage,
+                            0.5, // 攻击间隔
+                            this.stats.slowFactor,
+                            finalDuration,
+                            owner
+                        );
+                        
+                        // 添加到全局数组
+                        if (typeof hazards !== 'undefined') {
+                            hazards.push(vine);
+                        }
+                    }
+                }
+            }
+        }
 
         getInitialDescription() {
             return "种植藤蔓，减速并伤害范围内敌人。";
@@ -609,6 +678,74 @@ if (typeof LaserPrismWeapon === 'undefined') {
                 piercing: this.level >= 5
             };
         }
+        
+        /**
+         * 更新武器状态
+         * @param {number} dt - 时间增量
+         * @param {Player} owner - 拥有者
+         */
+        update(dt, owner) {
+            // 如果没有统计信息，计算统计信息
+            if (!this.stats) {
+                this.calculateStats();
+            }
+            
+            // 增加冷却计时器
+            this.cooldownTimer += dt;
+            
+            // 如果冷却结束，发射激光
+            if (this.cooldownTimer >= this.stats.cooldown) {
+                // 重置冷却计时器
+                this.cooldownTimer = 0;
+                
+                // 发射激光攻击
+                this.fireLaser(owner);
+            }
+        }
+        
+        /**
+         * 发射激光攻击
+         * @param {Player} owner - 拥有者
+         */
+        fireLaser(owner) {
+            // 获取基础伤害乘数
+            const damageMultiplier = owner.getStat ? owner.getStat('damageMultiplier') : 1;
+            const finalDamage = this.stats.damage * damageMultiplier;
+            
+            // 获取持续时间乘数
+            const durationMultiplier = owner.getStat ? owner.getStat('durationMultiplier') : 1;
+            const finalDuration = this.stats.duration * durationMultiplier;
+            
+            // 计算激光方向，均匀分布
+            const beamCount = this.stats.count;
+            const angleStep = Math.PI * 2 / beamCount;
+            
+            for (let i = 0; i < beamCount; i++) {
+                const angle = angleStep * i;
+                const dirX = Math.cos(angle);
+                const dirY = Math.sin(angle);
+                
+                // 使用LaserBeamAttack类创建激光
+                if (typeof LaserBeamAttack === 'function') {
+                    const beam = new LaserBeamAttack(
+                        owner,
+                        dirX,
+                        dirY,
+                        300, // 激光长度
+                        this.stats.beamWidth,
+                        finalDamage,
+                        finalDuration,
+                        2.0, // 旋转速度
+                        this.stats.piercing // 是否穿透
+                    );
+                    
+                    // 添加到投射物数组
+                    if (typeof projectiles !== 'undefined') {
+                        projectiles.push(beam);
+                    }
+                }
+            }
+        }
 
         getInitialDescription() {
             return "发射激光光束，造成持续伤害。";
@@ -644,8 +781,114 @@ if (typeof PoisonVialWeapon === 'undefined') {
                 poisonDamage: 3 + (this.level - 1) * 1,
                 poisonDuration: 3 + (this.level - 1) * 0.3,
                 area: 60 + (this.level - 1) * 5,
+                projectileSpeed: 250 + (this.level - 1) * 10,
                 toxicCloud: this.level >= 7
             };
+        }
+        
+        /**
+         * 更新武器状态
+         * @param {number} dt - 时间增量
+         * @param {Player} owner - 拥有者
+         */
+        update(dt, owner) {
+            // 如果没有统计信息，计算统计信息
+            if (!this.stats) {
+                this.calculateStats();
+            }
+            
+            // 增加冷却计时器
+            this.cooldownTimer += dt;
+            
+            // 如果冷却结束，投掷毒瓶
+            if (this.cooldownTimer >= this.stats.cooldown) {
+                // 重置冷却计时器
+                this.cooldownTimer = 0;
+                
+                // 投掷毒瓶
+                this.throwPoisonVial(owner);
+            }
+        }
+        
+        /**
+         * 投掷毒瓶
+         * @param {Player} owner - 拥有者
+         */
+        throwPoisonVial(owner) {
+            // 获取基础伤害乘数
+            const damageMultiplier = owner.getStat ? owner.getStat('damageMultiplier') : 1;
+            const finalDamage = this.stats.damage * damageMultiplier;
+            const finalPoisonDamage = this.stats.poisonDamage * damageMultiplier;
+            
+            // 获取范围乘数
+            const areaMultiplier = owner.getStat ? owner.getStat('areaMultiplier') : 1;
+            const finalArea = this.stats.area * areaMultiplier;
+            
+            // 获取持续时间乘数
+            const durationMultiplier = owner.getStat ? owner.getStat('durationMultiplier') : 1;
+            const finalPoisonDuration = this.stats.poisonDuration * durationMultiplier;
+            
+            // 获取投射物速度乘数
+            const projSpeedMultiplier = owner.getStat ? owner.getStat('projectileSpeedMultiplier') : 1;
+            const finalSpeed = this.stats.projectileSpeed * projSpeedMultiplier;
+            
+            // 对每个毒瓶
+            for (let i = 0; i < this.stats.count; i++) {
+                // 寻找目标
+                const target = owner.findRandomEnemy(400);
+                
+                // 确定方向
+                let dirX, dirY;
+                
+                if (target) {
+                    // 计算方向
+                    const dx = target.x - owner.x;
+                    const dy = target.y - owner.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (dist > 0) {
+                        dirX = dx / dist;
+                        dirY = dy / dist;
+                    } else {
+                        // 随机方向
+                        const angle = Math.random() * Math.PI * 2;
+                        dirX = Math.cos(angle);
+                        dirY = Math.sin(angle);
+                    }
+                } else {
+                    // 随机方向
+                    const angle = Math.random() * Math.PI * 2;
+                    dirX = Math.cos(angle);
+                    dirY = Math.sin(angle);
+                }
+                
+                // 计算速度
+                const vx = dirX * finalSpeed;
+                const vy = dirY * finalSpeed;
+                
+                // 创建毒瓶投射物
+                if (typeof PoisonVialProjectile === 'function') {
+                    const vial = new PoisonVialProjectile(
+                        owner.x,
+                        owner.y,
+                        24, // 大小
+                        vx,
+                        vy,
+                        finalDamage,
+                        4.0, // 存在时间
+                        damageMultiplier,
+                        finalArea,
+                        finalPoisonDamage,
+                        finalPoisonDuration,
+                        this.stats.toxicCloud
+                    );
+                    
+                    // 添加到投射物数组
+                    if (typeof projectiles !== 'undefined') {
+                        projectiles.push(vial);
+                    }
+                }
+            }
         }
 
         getInitialDescription() {
@@ -681,10 +924,102 @@ if (typeof FrostStaffWeapon === 'undefined') {
                 count: 1 + Math.floor((this.level - 1) / 2),
                 freezeDuration: 1.0 + (this.level - 1) * 0.1,
                 slowFactor: 0.5 + (this.level - 1) * 0.05,
-                projectileSpeed: 300,
+                projectileSpeed: 300 + (this.level - 1) * 10,
                 pierce: 1 + Math.floor((this.level - 1) / 3),
                 split: this.level >= 7
             };
+        }
+        
+        /**
+         * 更新武器状态
+         * @param {number} dt - 时间增量
+         * @param {Player} owner - 拥有者
+         */
+        update(dt, owner) {
+            // 如果没有统计信息，计算统计信息
+            if (!this.stats) {
+                this.calculateStats();
+            }
+            
+            // 增加冷却计时器
+            this.cooldownTimer += dt;
+            
+            // 如果冷却结束，发射冰晶
+            if (this.cooldownTimer >= this.stats.cooldown) {
+                // 重置冷却计时器
+                this.cooldownTimer = 0;
+                
+                // 发射冰晶
+                this.shootFrostCrystal(owner);
+            }
+        }
+        
+        /**
+         * 发射冰晶
+         * @param {Player} owner - 拥有者
+         */
+        shootFrostCrystal(owner) {
+            // 获取基础伤害乘数
+            const damageMultiplier = owner.getStat ? owner.getStat('damageMultiplier') : 1;
+            const finalDamage = this.stats.damage * damageMultiplier;
+            
+            // 获取持续时间乘数
+            const durationMultiplier = owner.getStat ? owner.getStat('durationMultiplier') : 1;
+            const finalFreezeDuration = this.stats.freezeDuration * durationMultiplier;
+            
+            // 获取投射物速度乘数
+            const projSpeedMultiplier = owner.getStat ? owner.getStat('projectileSpeedMultiplier') : 1;
+            const finalSpeed = this.stats.projectileSpeed * projSpeedMultiplier;
+            
+            // 平均分布发射角度
+            const angleBase = Math.PI / 4; // 45度扇形角度
+            const angleStep = this.stats.count > 1 ? angleBase / (this.stats.count - 1) : 0;
+            
+            // 使用玩家的最后移动方向作为基准
+            const lastDir = owner.lastMoveDirection || { x: 0, y: 1 };
+            const baseAngle = Math.atan2(lastDir.y, lastDir.x);
+            
+            for (let i = 0; i < this.stats.count; i++) {
+                // 计算角度偏移
+                let offsetAngle;
+                if (this.stats.count === 1) {
+                    offsetAngle = 0;
+                } else {
+                    offsetAngle = -angleBase / 2 + angleStep * i;
+                }
+                
+                // 最终角度
+                const finalAngle = baseAngle + offsetAngle;
+                
+                // 计算方向和速度
+                const dirX = Math.cos(finalAngle);
+                const dirY = Math.sin(finalAngle);
+                const vx = dirX * finalSpeed;
+                const vy = dirY * finalSpeed;
+                
+                // 创建冰晶投射物
+                if (typeof FrostCrystalProjectile === 'function') {
+                    const crystal = new FrostCrystalProjectile(
+                        owner.x,
+                        owner.y,
+                        28, // 大小
+                        vx,
+                        vy,
+                        finalDamage,
+                        this.stats.pierce,
+                        4.0, // 存在时间
+                        damageMultiplier,
+                        finalFreezeDuration,
+                        this.stats.slowFactor,
+                        this.stats.split
+                    );
+                    
+                    // 添加到投射物数组
+                    if (typeof projectiles !== 'undefined') {
+                        projectiles.push(crystal);
+                    }
+                }
+            }
         }
 
         getInitialDescription() {

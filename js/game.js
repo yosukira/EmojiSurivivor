@@ -613,79 +613,121 @@ function draw() {
         // 使用离屏画布进行绘制
         offscreenCtx.fillStyle = '#1a4d2e';
         offscreenCtx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-        // 绘制经验宝石
-        for (let i = 0; i < xpGems.length; i++) {
-            if (!xpGems[i].isGarbage && xpGems[i].isActive) {
-                xpGems[i].draw(offscreenCtx);
-            }
-        }
-
-        // 绘制世界物体
+        
+        // 按照图层顺序从底到顶绘制：
+        // 1. 世界背景物体
+        // 2. 经验宝石
+        // 3. 危险区域/持续性效果
+        // 4. 投射物和特效
+        // 5. 敌人和玩家（最顶层）
+        
+        // 绘制世界物体 (最底层)
         for (let i = 0; i < worldObjects.length; i++) {
             if (!worldObjects[i].isGarbage && worldObjects[i].isActive) {
                 worldObjects[i].draw(offscreenCtx);
             }
         }
 
-        // 绘制敌人
-        for (let i = 0; i < enemies.length; i++) {
-            if (!enemies[i].isGarbage && enemies[i].isActive) {
-                enemies[i].draw(offscreenCtx);
-            }
-        }
-
-        // 绘制投射物
-        for (let i = 0; i < projectiles.length; i++) {
-            if (!projectiles[i].isGarbage && projectiles[i].isActive) {
-                projectiles[i].draw(offscreenCtx);
+        // 绘制经验宝石 (第二层)
+        for (let i = 0; i < xpGems.length; i++) {
+            if (!xpGems[i].isGarbage && xpGems[i].isActive) {
+                xpGems[i].draw(offscreenCtx);
             }
         }
         
-        // 绘制敌人投射物
+        // 绘制持续性危害物 (第三层)
+        for (let i = 0; i < hazards.length; i++) {
+            if (!hazards[i].isGarbage) {
+                // 调整持续性危害的透明度，确保不会完全遮挡玩家和敌人
+                offscreenCtx.save();
+                offscreenCtx.globalAlpha = 0.85; // 降低透明度以确保可见性
+                hazards[i].draw(offscreenCtx);
+                offscreenCtx.restore();
+            }
+        }
+
+        // 绘制投射物 (第四层)
+        for (let i = 0; i < projectiles.length; i++) {
+            if (!projectiles[i].isGarbage && projectiles[i].isActive) {
+                // 调整投射物透明度，确保不会完全遮挡玩家和敌人
+                offscreenCtx.save();
+                offscreenCtx.globalAlpha = 0.9; // 稍微降低透明度
+                projectiles[i].draw(offscreenCtx);
+                offscreenCtx.restore();
+            }
+        }
+        
+        // 绘制敌人投射物 (第四层)
         for (let i = 0; i < enemyProjectiles.length; i++) {
             if (!enemyProjectiles[i].isGarbage && enemyProjectiles[i].isActive) {
+                // 调整投射物透明度
+                offscreenCtx.save();
+                offscreenCtx.globalAlpha = 0.9; // 稍微降低透明度
                 enemyProjectiles[i].draw(offscreenCtx);
+                offscreenCtx.restore();
+            }
+        }
+        
+        // 绘制视觉特效 (与投射物同层)
+        for (let i = 0; i < visualEffects.length; i++) {
+            if (!visualEffects[i].isGarbage) {
+                // 调整特效透明度
+                offscreenCtx.save();
+                offscreenCtx.globalAlpha = 0.85; // 降低透明度
+                visualEffects[i].draw(offscreenCtx);
+                offscreenCtx.restore();
             }
         }
 
-        // 绘制玩家和武器效果
+        // 绘制武器效果 (与投射物同层)
         if (player && !player.isGarbage && player.isActive) {
-            // 绘制武器效果
             for (let i = 0; i < player.weapons.length; i++) {
                 const weapon = player.weapons[i];
+                // 如果武器有特殊光环效果，绘制它们
+                offscreenCtx.save();
+                offscreenCtx.globalAlpha = 0.85; // 降低武器效果透明度
                 if (weapon.drawAura) weapon.drawAura(offscreenCtx, player);
                 if (weapon.drawHitboxes) weapon.drawHitboxes(offscreenCtx);
+                offscreenCtx.restore();
             }
-
-            // 绘制玩家
-            player.draw(offscreenCtx);
         }
-
-        // 新增：绘制活动的幽灵 (在玩家之后，特效之前绘制，确保层级关系)
+        
+        // 绘制活动的幽灵 (与敌人同层但优先级更低)
         for (let i = 0; i < activeGhosts.length; i++) {
             if (activeGhosts[i] && !activeGhosts[i].isGarbage && activeGhosts[i].isActive) {
                 activeGhosts[i].draw(offscreenCtx);
             }
         }
 
-        // 绘制视觉特效
-        for (let i = 0; i < visualEffects.length; i++) {
-            if (!visualEffects[i].isGarbage) {
-                visualEffects[i].draw(offscreenCtx);
+        // 绘制敌人 (最顶层之一)
+        for (let i = 0; i < enemies.length; i++) {
+            if (!enemies[i].isGarbage && enemies[i].isActive) {
+                // 特殊处理Boss，使其更加明显
+                if (enemies[i].isBoss) {
+                    offscreenCtx.save();
+                    offscreenCtx.globalAlpha = 1.0; // 保持Boss完全不透明
+                    enemies[i].draw(offscreenCtx);
+                    offscreenCtx.restore();
+                } else {
+                    // 普通敌人
+                    enemies[i].draw(offscreenCtx);
+                }
             }
         }
+        
+        // 绘制玩家 (最顶层)
+        if (player && !player.isGarbage && player.isActive) {
+            // 确保玩家始终可见
+            offscreenCtx.save();
+            offscreenCtx.globalAlpha = 1.0; // 保持玩家完全不透明
+            player.draw(offscreenCtx);
+            offscreenCtx.restore();
+        }
 
-        // 绘制伤害数字
+        // 绘制伤害数字 (最顶层之一)
         for (let i = 0; i < damageNumbers.length; i++) {
             if (!damageNumbers[i].isGarbage && damageNumbers[i].isActive) {
                 damageNumbers[i].draw(offscreenCtx);
-            }
-        }
-
-        // 绘制持续性危害物
-        for (let i = 0; i < hazards.length; i++) {
-            if (!hazards[i].isGarbage) {
-                hazards[i].draw(offscreenCtx);
             }
         }
 

@@ -342,7 +342,8 @@ class Spinach extends PassiveItem {
      * @returns {Object} - 增益
      */
     getBonuses() {
-        let damageBonus = (this.level - 1) * 0.1; // 每级增加10%伤害
+        // 每级增加10%伤害，以乘法形式提供
+        let damageBonus = (this.level - 1) * 0.1; 
         
         // 10级特殊效果：额外增加15%伤害和5%暴击率
         if (this.level === 10) {

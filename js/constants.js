@@ -141,7 +141,7 @@ const BOSS_TYPES = [
     {
         name: "骷髅王",
         emoji: EMOJI.BOSS_SKELETON,
-        healthMult: 2.5,
+        healthMult: 2.0,
         speedMult: 0.8,
         damageMult: 1.0,
         xpMult: 1.0,
@@ -157,7 +157,7 @@ const BOSS_TYPES = [
     {
         name: "幽灵领主",
         emoji: EMOJI.BOSS_GHOST,
-        healthMult: 2.0,
+        healthMult: 1.6,
         speedMult: 1.2,
         damageMult: 0.9,
         xpMult: 1.2,
@@ -184,7 +184,7 @@ const BOSS_TYPES = [
     {
         name: "巨型僵尸",
         emoji: EMOJI.BOSS_ZOMBIE,
-        healthMult: 5.0,
+        healthMult: 4.0,
         speedMult: 0.6,
         damageMult: 1.8,
         xpMult: 5.0,
@@ -195,7 +195,7 @@ const BOSS_TYPES = [
     {
         name: "恶魔领主",
         emoji: EMOJI.BOSS_DEMON,
-        healthMult: 3.0,
+        healthMult: 2.5,
         speedMult: 1.0,
         damageMult: 1.1,
         xpMult: 2.0,
@@ -206,7 +206,7 @@ const BOSS_TYPES = [
     {
         name: "远古巨龙",
         emoji: EMOJI.BOSS_DRAGON,
-        healthMult: 4.0,
+        healthMult: 3.2,
         speedMult: 0.7,
         damageMult: 1.5,
         xpMult: 2.5,
