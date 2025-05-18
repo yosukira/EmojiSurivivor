@@ -1,4 +1,7 @@
 // js/debug.js
+// 初始化 debugCommands 对象
+window.debugCommands = window.debugCommands || {};
+
 window.DebugPanel = {
     panel: null,
     invincibleButton: null,
@@ -215,14 +218,31 @@ window.DebugPanel = {
     },
 
     getKnownItemClasses: function() {
-        const items = { weapons: {}, passives: {} };
+        const items = { weapons: {}, passives: {}, evolutions: {} };
+        
+        // 基础武器
         if (typeof DaggerWeapon !== 'undefined') items.weapons['Dagger'] = DaggerWeapon;
         if (typeof GarlicWeapon !== 'undefined') items.weapons['Garlic'] = GarlicWeapon;
         if (typeof WhipWeapon !== 'undefined') items.weapons['Whip'] = WhipWeapon;
+        
+        // 高级武器
         if (typeof FireBladeWeapon !== 'undefined') items.weapons['FireBlade'] = FireBladeWeapon;
         if (typeof StormBladeWeapon !== 'undefined') items.weapons['StormBlade'] = StormBladeWeapon;
         if (typeof HandshakeWeapon !== 'undefined') items.weapons['Handshake'] = HandshakeWeapon;
+        
+        // 新武器
+        if (typeof BubbleWandWeapon !== 'undefined') items.weapons['BubbleWand'] = BubbleWandWeapon;
+        if (typeof ChaosDiceWeapon !== 'undefined') items.weapons['ChaosDice'] = ChaosDiceWeapon;
+        if (typeof MagnetGunWeapon !== 'undefined') items.weapons['MagnetGun'] = MagnetGunWeapon;
+        if (typeof SonicHornWeapon !== 'undefined') items.weapons['SonicHorn'] = SonicHornWeapon;
+        if (typeof PoisonVialWeapon !== 'undefined') items.weapons['PoisonVial'] = PoisonVialWeapon;
+        if (typeof FrostStaffWeapon !== 'undefined') items.weapons['FrostStaff'] = FrostStaffWeapon;
+        if (typeof VineSeedWeapon !== 'undefined') items.weapons['VineSeed'] = VineSeedWeapon;
+        if (typeof LaserPrismWeapon !== 'undefined') items.weapons['LaserPrism'] = LaserPrismWeapon;
+        if (typeof VolcanoStaffWeapon !== 'undefined') items.weapons['VolcanoStaff'] = VolcanoStaffWeapon;
+        if (typeof BlackHoleBallWeapon !== 'undefined') items.weapons['BlackHoleBall'] = BlackHoleBallWeapon;
 
+        // 基础被动道具
         if (typeof Spinach !== 'undefined') items.passives['Spinach'] = Spinach;
         if (typeof Armor !== 'undefined') items.passives['Armor'] = Armor;
         if (typeof Wings !== 'undefined') items.passives['Wings'] = Wings;
@@ -233,8 +253,29 @@ window.DebugPanel = {
         if (typeof Pummarola !== 'undefined') items.passives['Pummarola'] = Pummarola;
         if (typeof Magnet !== 'undefined' && Magnet.prototype instanceof PassiveItem) items.passives['Magnet'] = Magnet; 
         else if (typeof MagnetPassive !== 'undefined') items.passives['Magnet (Legacy)'] = MagnetPassive;
-
         if (typeof SoulRelic !== 'undefined') items.passives['SoulRelic'] = SoulRelic;
+        
+        // 新被动道具
+        if (typeof EmptyBottle !== 'undefined') items.passives['EmptyBottle'] = EmptyBottle;
+        if (typeof Gargoyle !== 'undefined') items.passives['Gargoyle'] = Gargoyle;
+        if (typeof MagicCrystal !== 'undefined') items.passives['MagicCrystal'] = MagicCrystal;
+        if (typeof MysteryCard !== 'undefined') items.passives['MysteryCard'] = MysteryCard;
+        if (typeof OccultCharm !== 'undefined') items.passives['OccultCharm'] = OccultCharm;
+        if (typeof BarrierRune !== 'undefined') items.passives['BarrierRune'] = BarrierRune;
+        if (typeof FrostHeart !== 'undefined') items.passives['FrostHeart'] = FrostHeart;
+        if (typeof DragonSpice !== 'undefined') items.passives['DragonSpice'] = DragonSpice;
+        if (typeof ThunderAmulet !== 'undefined') items.passives['ThunderAmulet'] = ThunderAmulet;
+        if (typeof PoisonOrb !== 'undefined') items.passives['PoisonOrb'] = PoisonOrb;
+        if (typeof MagnetSphere !== 'undefined') items.passives['MagnetSphere'] = MagnetSphere;
+        if (typeof AncientTreeSap !== 'undefined') items.passives['AncientTreeSap'] = AncientTreeSap;
+        
+        // 添加进化组合信息
+        if (typeof WEAPON_EVOLUTIONS === 'object') {
+            for (const [combo, result] of Object.entries(WEAPON_EVOLUTIONS)) {
+                items.evolutions[combo] = result;
+            }
+        }
+        
         return items;
     },
 
@@ -244,23 +285,116 @@ window.DebugPanel = {
 
         const knownItems = this.getKnownItemClasses();
 
+        // 添加折叠/展开功能的助手函数
+        const createCollapsibleSection = (title, initiallyCollapsed = false) => {
+            const section = document.createElement('div');
+            section.className = 'debug-collapsible-section';
+            
+            const header = document.createElement('div');
+            header.className = 'debug-section-header';
+            header.style.cursor = 'pointer';
+            header.style.padding = '5px';
+            header.style.backgroundColor = '#444';
+            header.style.borderRadius = '3px';
+            header.style.marginTop = '10px';
+            header.style.marginBottom = '5px';
+            header.style.display = 'flex';
+            header.style.justifyContent = 'space-between';
+            header.style.alignItems = 'center';
+            
+            const headerText = document.createElement('span');
+            headerText.textContent = title;
+            headerText.style.fontWeight = 'bold';
+            header.appendChild(headerText);
+            
+            const indicator = document.createElement('span');
+            indicator.textContent = initiallyCollapsed ? '▶' : '▼';
+            indicator.style.fontSize = '10px';
+            header.appendChild(indicator);
+            
+            const content = document.createElement('div');
+            content.className = 'debug-section-content';
+            content.style.display = initiallyCollapsed ? 'none' : 'block';
+            content.style.paddingLeft = '10px';
+            
+            section.appendChild(header);
+            section.appendChild(content);
+            
+            header.onclick = () => {
+                const isCollapsed = content.style.display === 'none';
+                content.style.display = isCollapsed ? 'block' : 'none';
+                indicator.textContent = isCollapsed ? '▼' : '▶';
+            };
+            
+            return { section, content };
+        };
+
         const createOrUpdateItemButtons = (type, classes, headerText) => {
             if (Object.keys(classes).length > 0) {
-                const subHeader = document.createElement('h5');
-                subHeader.textContent = headerText;
-                subHeader.style.marginTop = '10px';
-                subHeader.style.marginBottom = '5px';
-                subHeader.style.fontWeight = 'normal';
-                itemsDiv.appendChild(subHeader);
+                const { section, content } = createCollapsibleSection(headerText, false);
+                itemsDiv.appendChild(section);
 
                 for (const itemName in classes) {
-                    this.addButtonToElement(itemsDiv, `添加/升级 ${itemName} (Add/Upgrade ${itemName})`, () => {
+                    const itemClass = classes[itemName];
+                    let displayName = itemName;
+                    
+                    // 获取中文名称（从类的静态Name属性或自定义映射）
+                    if (itemClass && itemClass.Name) {
+                        displayName = itemClass.Name;
+                    } else {
+                        // 常用道具的中文名映射
+                        const nameMap = {
+                            'Dagger': '短刀',
+                            'Garlic': '大蒜',
+                            'Whip': '鞭子',
+                            'FireBlade': '火刀',
+                            'StormBlade': '岚刀',
+                            'Handshake': '握握手',
+                            'BubbleWand': '泡泡魔棒',
+                            'ChaosDice': '混沌骰子',
+                            'MagnetGun': '磁力枪',
+                            'SonicHorn': '声波号角',
+                            'PoisonVial': '毒瓶',
+                            'FrostStaff': '冰晶杖',
+                            'VineSeed': '藤蔓种子',
+                            'LaserPrism': '光棱塔',
+                            'VolcanoStaff': '火山杖',
+                            'BlackHoleBall': '黑洞球',
+                            
+                            'Spinach': '菠菜',
+                            'Armor': '护甲',
+                            'Wings': '翅膀',
+                            'EmptyTome': '空之书',
+                            'Candelabrador': '烛台',
+                            'Bracer': '护腕',
+                            'HollowHeart': '空心胸甲',
+                            'Pummarola': '血泪石',
+                            'Magnet': '磁铁',
+                            'SoulRelic': '灵魂遗物',
+                            'EmptyBottle': '空瓶',
+                            'Gargoyle': '石像鬼',
+                            'MagicCrystal': '魔法水晶',
+                            'MysteryCard': '神秘卡片',
+                            'OccultCharm': '神秘符咒',
+                            'BarrierRune': '结界符文',
+                            'FrostHeart': '寒冰之心',
+                            'DragonSpice': '龙息香料',
+                            'ThunderAmulet': '雷光护符',
+                            'PoisonOrb': '毒素宝珠',
+                            'MagnetSphere': '磁力球',
+                            'AncientTreeSap': '古树精华'
+                        };
+                        if (nameMap[itemName]) {
+                            displayName = nameMap[itemName];
+                        }
+                    }
+                    
+                    this.addButtonToElement(content, `添加/升级 ${displayName} (${itemName})`, () => {
                         if (!player) {
                              console.warn(`Debug: Player not found. Cannot add/upgrade ${itemName}.`);
                              alert("玩家未就绪 (Player not ready).");
                              return;
                         }
-                        const itemClass = classes[itemName];
                         const itemCollection = type === 'weapon' ? player.weapons : player.passiveItems;
                         const existingItem = itemCollection.find(item => item instanceof itemClass);
 
@@ -290,20 +424,19 @@ window.DebugPanel = {
                                 console.log(`Debug: ${itemName} is already max level.`);
                             }
                         } else {
-                            const addFunc = type === 'weapon' ? player.addWeapon : player.addPassiveItem;
+                            // 使用箭头函数确保this绑定正确
+                            const addFunc = type === 'weapon' ? 
+                                (newItem) => player.addWeapon(newItem) : 
+                                (newItem) => player.addPassive(newItem);
                             const maxItems = type === 'weapon' ? player.maxWeapons : player.maxPassiveItems;
 
-                            if (typeof addFunc !== 'function') {
-                                console.warn(`Debug: Player ${type === 'weapon' ? 'addWeapon' : 'addPassiveItem'} function not found.`);
-                                return;
-                            }
                             if (itemCollection.length >= maxItems) {
                                 console.warn(`Debug: Cannot add ${itemName}. Player has max ${type}s (${maxItems}).`);
                                 return;
                             }
                             try {
-                                const newItem = new itemClass(player); 
-                                addFunc.call(player, newItem);
+                                const newItem = new itemClass(); 
+                                addFunc(newItem);
                                 console.log(`Debug: Added new ${type} ${itemName}`);
                             } catch (e) {
                                 console.error(`Debug: Error adding new ${type} ${itemName}:`, e);
@@ -321,8 +454,34 @@ window.DebugPanel = {
             }
         };
         
-        createOrUpdateItemButtons('weapon', knownItems.weapons, "武器 (Weapons):");
-        createOrUpdateItemButtons('passive', knownItems.passives, "被动 (Passives):");
+        // 添加武器和被动道具按钮
+        createOrUpdateItemButtons('weapon', knownItems.weapons, "武器 (Weapons)");
+        createOrUpdateItemButtons('passive', knownItems.passives, "被动 (Passives)");
+        
+        // 添加进化组合信息
+        if (Object.keys(knownItems.evolutions).length > 0) {
+            const { section, content } = createCollapsibleSection("进化组合 (Evolutions)", true);
+            itemsDiv.appendChild(section);
+            
+            const evolutionsList = document.createElement('div');
+            evolutionsList.style.fontSize = '12px';
+            evolutionsList.style.maxHeight = '200px';
+            evolutionsList.style.overflowY = 'auto';
+            evolutionsList.style.border = '1px solid #555';
+            evolutionsList.style.padding = '5px';
+            evolutionsList.style.marginTop = '5px';
+            evolutionsList.style.marginBottom = '10px';
+            evolutionsList.style.backgroundColor = 'rgba(0,0,0,0.2)';
+            content.appendChild(evolutionsList);
+            
+            for (const [combo, result] of Object.entries(knownItems.evolutions)) {
+                const item = document.createElement('div');
+                item.textContent = `${combo} → ${result}`;
+                item.style.padding = '3px 0';
+                item.style.borderBottom = '1px dotted #444';
+                evolutionsList.appendChild(item);
+            }
+        }
     },
 
     addGlobalSettingsControls: function() {
@@ -353,4 +512,189 @@ let playerCheckIntervalId = setInterval(() => {
         tryUpdateDebugPanelOnPlayerReady();
     }
 }, 1000);
+
+// 添加一个命令：显示当前所有被动道具的详细信息
+debugCommands.passives = {
+    help: "显示当前所有被动道具的详细信息",
+    action: () => {
+        if (!player || !player.passiveItems) {
+            console.log("玩家或被动道具不存在");
+            return;
+        }
+        
+        console.log("===== 被动道具详情 =====");
+        player.passiveItems.forEach((passive, index) => {
+            console.log(`${index + 1}. ${passive.name} (Lv ${passive.level})`);
+            console.log(`   描述: ${passive.description}`);
+            console.log(`   属性加成:`, passive.bonuses);
+        });
+        
+        // 输出玩家当前计算后的属性
+        console.log("===== 玩家属性 =====");
+        const stats = [
+            'health', 'speed', 'armor', 'regen', 'pickupRadius', 
+            'damageMultiplier', 'areaMultiplier', 'durationMultiplier', 
+            'projectileSpeedMultiplier', 'cooldownMultiplier', 'projectileCountBonus'
+        ];
+        
+        stats.forEach(stat => {
+            console.log(`${stat}: ${player.getStat(stat)}`);
+        });
+    }
+};
+
+// 创建缺失的武器类
+// 由于这些类在项目中可能不存在，我们在debug.js中创建它们，确保debug面板可以显示这些选项
+// 这些只是基本实现，真正使用时应替换为正确的实现
+
+// 藤蔓种子
+if (typeof VineSeedWeapon === 'undefined') {
+    class VineSeedWeapon extends Weapon {
+        static Name = "藤蔓种子";
+        static Emoji = "🌱";
+        static MaxLevel = 10;
+        static Evolution = {
+            requires: "AncientTreeSap",
+            evolvesTo: "LifeForest"
+        };
+
+        constructor() {
+            super(VineSeedWeapon.Name, VineSeedWeapon.Emoji, 2.0, VineSeedWeapon.MaxLevel);
+        }
+
+        calculateStats() {
+            this.stats = {
+                damage: 10 + (this.level - 1) * 3,
+                cooldown: Math.max(1.0, 2.0 - (this.level - 1) * 0.1),
+                count: 1 + Math.floor((this.level - 1) / 3),
+                radius: 60 + (this.level - 1) * 5,
+                slowFactor: 0.3 + (this.level - 1) * 0.05,
+                duration: 5 + (this.level - 1) * 0.5
+            };
+        }
+
+        getInitialDescription() {
+            return "种植藤蔓，减速并伤害范围内敌人。";
+        }
+
+        getCurrentDescription() {
+            return `种植${this.stats.count}个藤蔓，减速敌人${Math.round(this.stats.slowFactor * 100)}%并造成${this.stats.damage}伤害。`;
+        }
+    }
+    window.VineSeedWeapon = VineSeedWeapon;
+}
+
+// 光棱塔
+if (typeof LaserPrismWeapon === 'undefined') {
+    class LaserPrismWeapon extends Weapon {
+        static Name = "光棱塔";
+        static Emoji = "🔆";
+        static MaxLevel = 10;
+        static Evolution = {
+            requires: "Bracer",
+            evolvesTo: "LaserCore"
+        };
+
+        constructor() {
+            super(LaserPrismWeapon.Name, LaserPrismWeapon.Emoji, 1.5, LaserPrismWeapon.MaxLevel);
+        }
+
+        calculateStats() {
+            this.stats = {
+                damage: 15 + (this.level - 1) * 5,
+                cooldown: Math.max(0.8, 1.5 - (this.level - 1) * 0.07),
+                count: 1 + Math.floor((this.level - 1) / 2),
+                beamWidth: 15 + (this.level - 1) * 2,
+                duration: 1.0 + (this.level - 1) * 0.1,
+                piercing: this.level >= 5
+            };
+        }
+
+        getInitialDescription() {
+            return "发射激光光束，造成持续伤害。";
+        }
+
+        getCurrentDescription() {
+            return `发射${this.stats.count}束激光，造成${this.stats.damage}伤害。${this.stats.piercing ? '激光可以穿透敌人。' : ''}`;
+        }
+    }
+    window.LaserPrismWeapon = LaserPrismWeapon;
+}
+
+// 毒瓶
+if (typeof PoisonVialWeapon === 'undefined') {
+    class PoisonVialWeapon extends Weapon {
+        static Name = "毒瓶";
+        static Emoji = "🧪";
+        static MaxLevel = 10;
+        static Evolution = {
+            requires: "PoisonOrb",
+            evolvesTo: "PlagueVial"
+        };
+
+        constructor() {
+            super(PoisonVialWeapon.Name, PoisonVialWeapon.Emoji, 1.8, PoisonVialWeapon.MaxLevel);
+        }
+
+        calculateStats() {
+            this.stats = {
+                damage: 8 + (this.level - 1) * 2,
+                cooldown: Math.max(1.0, 1.8 - (this.level - 1) * 0.08),
+                count: 1 + Math.floor((this.level - 1) / 3),
+                poisonDamage: 3 + (this.level - 1) * 1,
+                poisonDuration: 3 + (this.level - 1) * 0.3,
+                area: 60 + (this.level - 1) * 5,
+                toxicCloud: this.level >= 7
+            };
+        }
+
+        getInitialDescription() {
+            return "投掷毒瓶，造成毒素伤害。";
+        }
+
+        getCurrentDescription() {
+            return `投掷${this.stats.count}个毒瓶，造成${this.stats.damage}伤害并使敌人中毒，每秒造成${this.stats.poisonDamage}点伤害，持续${this.stats.poisonDuration.toFixed(1)}秒。${this.stats.toxicCloud ? '毒瓶爆炸后留下毒云。' : ''}`;
+        }
+    }
+    window.PoisonVialWeapon = PoisonVialWeapon;
+}
+
+// 冰晶杖
+if (typeof FrostStaffWeapon === 'undefined') {
+    class FrostStaffWeapon extends Weapon {
+        static Name = "冰晶杖";
+        static Emoji = "❄️";
+        static MaxLevel = 10;
+        static Evolution = {
+            requires: "FrostHeart",
+            evolvesTo: "GlacierStaff"
+        };
+
+        constructor() {
+            super(FrostStaffWeapon.Name, FrostStaffWeapon.Emoji, 1.5, FrostStaffWeapon.MaxLevel);
+        }
+
+        calculateStats() {
+            this.stats = {
+                damage: 12 + (this.level - 1) * 4,
+                cooldown: Math.max(0.8, 1.5 - (this.level - 1) * 0.07),
+                count: 1 + Math.floor((this.level - 1) / 2),
+                freezeDuration: 1.0 + (this.level - 1) * 0.1,
+                slowFactor: 0.5 + (this.level - 1) * 0.05,
+                projectileSpeed: 300,
+                pierce: 1 + Math.floor((this.level - 1) / 3),
+                split: this.level >= 7
+            };
+        }
+
+        getInitialDescription() {
+            return "发射冰晶，冻结并减速敌人。";
+        }
+
+        getCurrentDescription() {
+            return `发射${this.stats.count}个冰晶，造成${this.stats.damage}伤害，冻结敌人${this.stats.freezeDuration.toFixed(1)}秒并减速${Math.round(this.stats.slowFactor * 100)}%。${this.stats.split ? '冰晶碰撞后分裂成多个碎片。' : ''}`;
+        }
+    }
+    window.FrostStaffWeapon = FrostStaffWeapon;
+}
  

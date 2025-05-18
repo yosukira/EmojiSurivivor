@@ -106,5 +106,28 @@ const cameraManager = {
             obj.y + obj.size / 2 > 0 &&
             obj.y - obj.size / 2 < GAME_HEIGHT
         );
+    },
+
+    /**
+     * 检查给定世界坐标是否在相机视图内（可带缓冲）
+     * @param {number} worldX - 世界X坐标
+     * @param {number} worldY - 世界Y坐标
+     * @param {number} [buffer=0] - 边缘缓冲，也可以理解为物体的一半大小
+     * @returns {boolean} 是否在视图内
+     */
+    isPositionInView(worldX, worldY, buffer = 0) {
+        // 相机视图的边界
+        const viewLeft = this.x - GAME_WIDTH / 2 / this.zoom;
+        const viewRight = this.x + GAME_WIDTH / 2 / this.zoom;
+        const viewTop = this.y - GAME_HEIGHT / 2 / this.zoom;
+        const viewBottom = this.y + GAME_HEIGHT / 2 / this.zoom;
+
+        // 检查点是否在视图边界内（考虑缓冲区）
+        return (
+            worldX + buffer > viewLeft &&
+            worldX - buffer < viewRight &&
+            worldY + buffer > viewTop &&
+            worldY - buffer < viewBottom
+        );
     }
 };

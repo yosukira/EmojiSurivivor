@@ -59,6 +59,8 @@ let worldObjects = [];
 let visualEffects = [];
 let damageNumbers = [];
 let activeGhosts = []; // 新增：用于存储活动的幽灵
+let hazards = []; // 新增：用于存储持续性危害物，如藤蔓、火山等
+let particles = []; // 粒子效果
 
 // 对象池
 let inactiveProjectiles = [];
@@ -140,24 +142,26 @@ const enemyManager = {
             // 随机选择生成边缘 (0:上, 1:右, 2:下, 3:左)
             const edge = Math.floor(Math.random() * 4);
             let x, y;
-            const spawnDist = SPAWN_PADDING; // 使用常量 SPAWN_PADDING
+
+            const forcedMinSpawnDistance = 100; // 强制最小生成距离
+            const currentSpawnOffset = Math.max(SPAWN_PADDING, forcedMinSpawnDistance);
 
             switch (edge) {
                 case 0: // 上边缘
-                    x = viewCenterX - halfWidth - spawnDist + Math.random() * (GAME_WIDTH + 2 * spawnDist);
-                    y = viewCenterY - halfHeight - spawnDist;
+                    x = viewCenterX - halfWidth - currentSpawnOffset + Math.random() * (GAME_WIDTH + 2 * currentSpawnOffset);
+                    y = viewCenterY - halfHeight - currentSpawnOffset;
                     break;
                 case 1: // 右边缘
-                    x = viewCenterX + halfWidth + spawnDist;
-                    y = viewCenterY - halfHeight - spawnDist + Math.random() * (GAME_HEIGHT + 2 * spawnDist);
+                    x = viewCenterX + halfWidth + currentSpawnOffset;
+                    y = viewCenterY - halfHeight - currentSpawnOffset + Math.random() * (GAME_HEIGHT + 2 * currentSpawnOffset);
                     break;
                 case 2: // 下边缘
-                    x = viewCenterX - halfWidth - spawnDist + Math.random() * (GAME_WIDTH + 2 * spawnDist);
-                    y = viewCenterY + halfHeight + spawnDist;
+                    x = viewCenterX - halfWidth - currentSpawnOffset + Math.random() * (GAME_WIDTH + 2 * currentSpawnOffset);
+                    y = viewCenterY + halfHeight + currentSpawnOffset;
                     break;
                 case 3: // 左边缘
-                    x = viewCenterX - halfWidth - spawnDist;
-                    y = viewCenterY - halfHeight - spawnDist + Math.random() * (GAME_HEIGHT + 2 * spawnDist);
+                    x = viewCenterX - halfWidth - currentSpawnOffset;
+                    y = viewCenterY - halfHeight - currentSpawnOffset + Math.random() * (GAME_HEIGHT + 2 * currentSpawnOffset);
                     break;
             }
             
@@ -520,6 +524,13 @@ function update(dt) {
         }
     }
 
+    // 新增：更新持续性危害物（藤蔓、火山等）
+    for (let i = 0; i < hazards.length; i++) {
+        if (hazards[i] && !hazards[i].isGarbage) {
+            hazards[i].update(dt);
+        }
+    }
+
     // 对象池回收
     // 倒序遍历以安全地使用 splice
     for (let i = projectiles.length - 1; i >= 0; i--) {
@@ -546,6 +557,7 @@ function update(dt) {
     xpGems = xpGems.filter(g => !g.isGarbage);
     worldObjects = worldObjects.filter(o => !o.isGarbage);
     visualEffects = visualEffects.filter(e => !e.isGarbage);
+    hazards = hazards.filter(h => !h.isGarbage); // 清理持续性危害物
 
     // 清理管理器
     enemyManager.cleanup();
@@ -670,6 +682,13 @@ function draw() {
             }
         }
 
+        // 绘制持续性危害物
+        for (let i = 0; i < hazards.length; i++) {
+            if (!hazards[i].isGarbage) {
+                hazards[i].draw(offscreenCtx);
+            }
+        }
+
         // 将离屏画布内容复制到显示画布
         ctx.drawImage(offscreenCanvas, 0, 0);
 
@@ -686,21 +705,40 @@ function draw() {
  * @param {number} timestamp - 时间戳
  */
 function gameLoop(timestamp) {
-    if (isGameOver) {
-        if (animationFrameId) {
-            cancelAnimationFrame(animationFrameId);
-            animationFrameId = null;
-        }
+    if (!isGameRunning || isGameOver) return;
+    
+    // 如果暂停或正在升级，不更新游戏状态
+    if (isPaused || isLevelUp) {
+        // 保持动画循环
+        animationFrameId = requestAnimationFrame(gameLoop);
         return;
     }
-    animationFrameId = requestAnimationFrame(gameLoop);
-    // 计算时间增量，限制最大值以避免大延迟后的跳跃
-    deltaTime = Math.min((timestamp - lastTime) / 1000, 0.1);
+    
+    // 计算帧时间
+    if (lastTime === 0) {
+        lastTime = timestamp;
+    }
+    
+    deltaTime = (timestamp - lastTime) / 1000; // 转换为秒
     lastTime = timestamp;
+
+    // 限制最大帧时间，防止跨帧过大
+    deltaTime = Math.min(deltaTime, 0.1);
+
+    // 增加游戏时间
+    gameTime += deltaTime;
+    
     // 更新游戏状态
     update(deltaTime);
-    // 渲染游戏
+    
+    // 绘制游戏
     draw();
+    
+    // 清理标记为垃圾的对象
+    cleanupGameObjects();
+    
+    // 继续游戏循环
+    animationFrameId = requestAnimationFrame(gameLoop);
 }
 
 /**
@@ -718,10 +756,11 @@ function formatTime(seconds) {
  * 更新UI
  */
 function updateUI() {
-    if (!player) return;
-
     try {
-        // 获取UI元素
+        // 如果玩家不存在或UI元素不存在，不更新
+        if (!player) return;
+
+        // 检查UI元素是否存在
         const healthValueUI = document.getElementById('healthValue');
         const maxHealthValueUI = document.getElementById('maxHealthValue');
         const healthBarUI = document.getElementById('healthBar');
@@ -733,8 +772,6 @@ function updateUI() {
         const killCountValueUI = document.getElementById('killCountValue');
         const weaponIconsUI = document.getElementById('weaponIcons');
         const passiveIconsUI = document.getElementById('passiveIcons');
-        
-        // 新增：获取左下角属性UI元素
         const statDamageUI = document.getElementById('statDamage');
         const statProjSpeedUI = document.getElementById('statProjSpeed');
         const statCooldownUI = document.getElementById('statCooldown');
@@ -746,17 +783,36 @@ function updateUI() {
         const statMoveSpeedUI = document.getElementById('statMoveSpeed');
         const statPickupUI = document.getElementById('statPickup');
 
+        // 安全获取属性函数
+        const getSafeStat = (name, defaultValue = 0) => {
+            try {
+                if (typeof player.getStat === 'function') {
+                    return player.getStat(name);
+                } else if (player.stats && player.stats[name] !== undefined) {
+                    return player.stats[name];
+                } else {
+                    return defaultValue;
+                }
+            } catch (e) {
+                console.warn(`获取属性${name}时出错:`, e);
+                return defaultValue;
+            }
+        };
+
         // 更新生命值
-        if (healthValueUI) healthValueUI.textContent = Math.ceil(player.health);
-        if (maxHealthValueUI) maxHealthValueUI.textContent = Math.ceil(player.getStat('health'));
-        if (healthBarUI) healthBarUI.style.width = `${Math.max(0, (player.health / player.getStat('health'))) * 100}%`;
+        if (healthValueUI) healthValueUI.textContent = Math.ceil(player.health || 0);
+        
+        // 获取最大生命值时添加错误处理
+        const maxHealth = getSafeStat('health', 100);
+        if (maxHealthValueUI) maxHealthValueUI.textContent = Math.ceil(maxHealth);
+        if (healthBarUI) healthBarUI.style.width = `${Math.max(0, ((player.health || 0) / maxHealth)) * 100}%`;
 
         // 更新等级和经验
-        if (levelValueUI) levelValueUI.textContent = player.level;
+        if (levelValueUI) levelValueUI.textContent = player.level || 1;
         if (player.level < MAX_LEVEL) {
-            if (xpValueUI) xpValueUI.textContent = player.xp;
-            if (xpNextLevelValueUI) xpNextLevelValueUI.textContent = player.xpToNextLevel;
-            if (xpBarUI) xpBarUI.style.width = `${(player.xp / player.xpToNextLevel) * 100}%`;
+            if (xpValueUI) xpValueUI.textContent = player.xp || 0;
+            if (xpNextLevelValueUI) xpNextLevelValueUI.textContent = player.xpToNextLevel || 0;
+            if (xpBarUI) xpBarUI.style.width = `${Math.max(0, Math.min(100, ((player.xp || 0) / (player.xpToNextLevel || 1)) * 100))}%`;
         } else {
             if (xpValueUI) xpValueUI.textContent = "MAX";
             if (xpNextLevelValueUI) xpNextLevelValueUI.textContent = "";
@@ -768,29 +824,29 @@ function updateUI() {
         if (killCountValueUI) killCountValueUI.textContent = killCount;
 
         // 更新武器和被动物品图标
-        if (weaponIconsUI) {
+        if (weaponIconsUI && player.weapons && Array.isArray(player.weapons)) {
             weaponIconsUI.innerHTML = player.weapons.map(w =>
-                `<span class="uiIcon" title="${w.name}">${w.emoji}<span class="uiItemLevel">Lv${w.level}</span></span>`
+                w ? `<span class="uiIcon" title="${w.name || ''}">${w.emoji || '?'}<span class="uiItemLevel">Lv${w.level || 1}</span></span>` : ''
             ).join(' ');
         }
 
-        if (passiveIconsUI) {
+        if (passiveIconsUI && player.passiveItems && Array.isArray(player.passiveItems)) {
             passiveIconsUI.innerHTML = player.passiveItems.map(p =>
-                `<span class="uiIcon" title="${p.name}">${p.emoji}<span class="uiItemLevel">Lv${p.level}</span></span>`
+                p ? `<span class="uiIcon" title="${p.name || ''}">${p.emoji || '?'}<span class="uiItemLevel">Lv${p.level || 1}</span></span>` : ''
             ).join(' ');
         }
         
         // 新增：更新左下角属性值
-        if (statDamageUI) statDamageUI.textContent = player.getStat('damageMultiplier').toFixed(2);
-        if (statProjSpeedUI) statProjSpeedUI.textContent = player.getStat('projectileSpeedMultiplier').toFixed(2);
-        if (statCooldownUI) statCooldownUI.textContent = player.getStat('cooldownMultiplier').toFixed(2);
-        if (statAreaUI) statAreaUI.textContent = player.getStat('areaMultiplier').toFixed(2);
-        if (statDurationUI) statDurationUI.textContent = player.getStat('durationMultiplier').toFixed(2);
-        if (statAmountUI) statAmountUI.textContent = player.getStat('projectileCountBonus').toString();
-        if (statArmorUI) statArmorUI.textContent = player.getStat('armor').toFixed(1);
-        if (statRegenUI) statRegenUI.textContent = player.getStat('regen').toFixed(1);
-        if (statMoveSpeedUI) statMoveSpeedUI.textContent = player.getStat('speed').toFixed(0);
-        if (statPickupUI) statPickupUI.textContent = player.getStat('pickupRadius').toFixed(0);
+        if (statDamageUI) statDamageUI.textContent = getSafeStat('damageMultiplier', 1).toFixed(2);
+        if (statProjSpeedUI) statProjSpeedUI.textContent = getSafeStat('projectileSpeedMultiplier', 1).toFixed(2);
+        if (statCooldownUI) statCooldownUI.textContent = getSafeStat('cooldownMultiplier', 1).toFixed(2);
+        if (statAreaUI) statAreaUI.textContent = getSafeStat('areaMultiplier', 1).toFixed(2);
+        if (statDurationUI) statDurationUI.textContent = getSafeStat('durationMultiplier', 1).toFixed(2);
+        if (statAmountUI) statAmountUI.textContent = getSafeStat('projectileCountBonus', 0).toString();
+        if (statArmorUI) statArmorUI.textContent = getSafeStat('armor', 0).toFixed(1);
+        if (statRegenUI) statRegenUI.textContent = getSafeStat('regen', 0).toFixed(1);
+        if (statMoveSpeedUI) statMoveSpeedUI.textContent = getSafeStat('speed', 170).toFixed(0);
+        if (statPickupUI) statPickupUI.textContent = getSafeStat('pickupRadius', 70).toFixed(0);
         
     } catch (error) {
         console.error("更新UI时出错:", error, "Player Stats:", JSON.stringify(player?.stats), "Calculated Stats:", JSON.stringify(player?.calculatedStats));
@@ -891,7 +947,7 @@ function getAvailableUpgrades(player) {
             let passiveUpgrades = null;
             if (typeof passive.getCurrentUpgradeOptions === 'function') {
                 passiveUpgrades = passive.getCurrentUpgradeOptions(player);
-            } else if (!passive.isMaxLevel && typeof passive.getUpgradeDescription === 'function') { // 确保 isMaxLevel 是方法
+            } else if (!passive.isMaxLevel() && typeof passive.getUpgradeDescription === 'function') { // 修改为方法调用
                  passiveUpgrades = [{
                     item: passive,
                     type: 'upgrade_passive',
@@ -1534,28 +1590,86 @@ class EnemyProjectile {
 }
 
 // 基础武器列表 - 确保类名与定义文件一致
-BASE_WEAPONS.length = 0; // 清空现有数组
-if (typeof DaggerWeapon !== 'undefined') BASE_WEAPONS.push(DaggerWeapon);
-if (typeof WhipWeapon !== 'undefined') BASE_WEAPONS.push(WhipWeapon);
-if (typeof GarlicWeapon !== 'undefined') BASE_WEAPONS.push(GarlicWeapon);
-// 添加高级武器
-if (typeof FireBladeWeapon !== 'undefined') BASE_WEAPONS.push(FireBladeWeapon); // 添加 燃烧刀
-if (typeof StormBladeWeapon !== 'undefined') BASE_WEAPONS.push(StormBladeWeapon); // 添加 岚刀
-if (typeof HandshakeWeapon !== 'undefined') BASE_WEAPONS.push(HandshakeWeapon); // 添加 握握手
+if (typeof BASE_WEAPONS === 'undefined') {
+    console.log('Creating BASE_WEAPONS array in game.js');
+    window.BASE_WEAPONS = [];
+}
+
+// 检查并确保必需的武器类已添加到武器列表中
+let weaponClasses = {
+    DaggerWeapon: false,
+    WhipWeapon: false,
+    GarlicWeapon: false,
+    FireBladeWeapon: false,
+    StormBladeWeapon: false,
+    HandshakeWeapon: false
+};
+
+// 检查现有武器列表
+if (BASE_WEAPONS.length > 0) {
+    console.log('Existing BASE_WEAPONS from weapons files:', BASE_WEAPONS.map(w => w.name));
+    
+    // 标记已存在的武器类
+    BASE_WEAPONS.forEach(weaponClass => {
+        if (weaponClass.name in weaponClasses) {
+            weaponClasses[weaponClass.name] = true;
+        }
+    });
+}
+
+// 添加缺失的武器类
+Object.keys(weaponClasses).forEach(className => {
+    if (!weaponClasses[className] && typeof window[className] !== 'undefined') {
+        console.log(`Adding missing weapon class: ${className}`);
+        BASE_WEAPONS.push(window[className]);
+    } else if (!weaponClasses[className]) {
+        console.error(`${className} is undefined!`);
+    }
+});
+
+console.log('Final BASE_WEAPONS array:', BASE_WEAPONS.map(w => w.name));
 
 // 基础被动道具列表 - 确保类名与定义文件一致
-BASE_PASSIVES.length = 0; // 清空现有数组
-if (typeof Magnet !== 'undefined') BASE_PASSIVES.push(Magnet); // 修正: MagnetPassive -> Magnet
-if (typeof HollowHeart !== 'undefined') BASE_PASSIVES.push(HollowHeart); // 修正: HeartPassive -> HollowHeart
-if (typeof Pummarola !== 'undefined') BASE_PASSIVES.push(Pummarola); // 修正: TomatoPassive -> Pummarola
-if (typeof Spinach !== 'undefined') BASE_PASSIVES.push(Spinach); // 添加 Spinach
-if (typeof Armor !== 'undefined') BASE_PASSIVES.push(Armor); // 添加 Armor
-if (typeof Wings !== 'undefined') BASE_PASSIVES.push(Wings); // 添加 Wings
-if (typeof EmptyTome !== 'undefined') BASE_PASSIVES.push(EmptyTome); // 添加 EmptyTome
-if (typeof Candelabrador !== 'undefined') BASE_PASSIVES.push(Candelabrador); // 添加 Candelabrador
-if (typeof Bracer !== 'undefined') BASE_PASSIVES.push(Bracer); // 添加 Bracer
-// 新增：添加舍利子回魂
-if (typeof SoulRelic !== 'undefined') BASE_PASSIVES.push(SoulRelic);
+if (typeof BASE_PASSIVES === 'undefined') {
+    console.log('Creating BASE_PASSIVES array in game.js');
+    window.BASE_PASSIVES = [];
+}
+
+// 检查并确保必需的被动物品类已添加到列表中
+let passiveClasses = {
+    Magnet: false,
+    HollowHeart: false,
+    Pummarola: false,
+    Spinach: false,
+    Armor: false,
+    Wings: false,
+    EmptyTome: false,
+    Candelabrador: false,
+    Bracer: false,
+    SoulRelic: false
+};
+
+// 检查现有被动物品列表
+if (BASE_PASSIVES.length > 0) {
+    console.log('Existing BASE_PASSIVES from passiveItems.js:', BASE_PASSIVES.map(p => p.name));
+    
+    // 标记已存在的被动物品类
+    BASE_PASSIVES.forEach(passiveClass => {
+        if (passiveClass.name in passiveClasses) {
+            passiveClasses[passiveClass.name] = true;
+        }
+    });
+}
+
+// 添加缺失的被动物品类
+Object.keys(passiveClasses).forEach(className => {
+    if (!passiveClasses[className] && typeof window[className] !== 'undefined') {
+        console.log(`Adding missing passive class: ${className}`);
+        BASE_PASSIVES.push(window[className]);
+    }
+});
+
+console.log('Final BASE_PASSIVES array:', BASE_PASSIVES.map(p => p.name));
 
 function spawnRandomPickup(x, y) {
     const rand = Math.random();
@@ -1582,4 +1696,142 @@ function triggerScreenShake(intensity, duration) {
     screenShakeDuration = duration;
     screenShakeTimer = 0; // 重置计时器，使新震动立即生效并持续其完整时长
     // console.log(`Screen shake: intensity=${intensity.toFixed(2)}, duration=${duration.toFixed(2)}`);
+}
+
+/**
+ * 清理游戏对象
+ */
+function cleanupGameObjects() {
+    // 清理敌人
+    for (let i = enemies.length - 1; i >= 0; i--) {
+        if (enemies[i].isGarbage) {
+            enemies.splice(i, 1);
+        }
+    }
+    
+    // 清理经验宝石
+    for (let i = xpGems.length - 1; i >= 0; i--) {
+        if (xpGems[i].isGarbage) {
+            xpGems.splice(i, 1);
+        }
+    }
+    
+    // 清理世界物体
+    for (let i = worldObjects.length - 1; i >= 0; i--) {
+        if (worldObjects[i].isGarbage) {
+            worldObjects.splice(i, 1);
+        }
+    }
+    
+    // 清理伤害数字
+    for (let i = damageNumbers.length - 1; i >= 0; i--) {
+        if (damageNumbers[i].isGarbage) {
+            damageNumbers.splice(i, 1);
+        }
+    }
+    
+    // 清理视觉特效
+    for (let i = visualEffects.length - 1; i >= 0; i--) {
+        if (visualEffects[i].isGarbage) {
+            visualEffects.splice(i, 1);
+        }
+    }
+    
+    // 清理粒子效果
+    for (let i = particles.length - 1; i >= 0; i--) {
+        if (particles[i].isGarbage) {
+            particles.splice(i, 1);
+        }
+    }
+    
+    // 清理活动的幽灵
+    for (let i = activeGhosts.length - 1; i >= 0; i--) {
+        if (activeGhosts[i].isGarbage) {
+            activeGhosts.splice(i, 1);
+        }
+    }
+    
+    // 清理持续性危害物
+    for (let i = hazards.length - 1; i >= 0; i--) {
+        if (hazards[i].isGarbage) {
+            hazards.splice(i, 1);
+        }
+    }
+}
+
+/**
+ * 重置游戏状态
+ */
+function resetGame() {
+    // 重置游戏状态
+    isGameRunning = false;
+    isGameOver = false;
+    isPaused = false;
+    isLevelUp = false;
+    gameTime = 0;
+    lastTime = 0;
+    deltaTime = 0;
+    killCount = 0;
+    
+    // 重置对象数组
+    player = null;
+    enemies = [];
+    projectiles = [];
+    enemyProjectiles = [];
+    xpGems = [];
+    worldObjects = [];
+    visualEffects = [];
+    damageNumbers = [];
+    activeGhosts = [];
+    hazards = [];
+    particles = [];
+    
+    // 重置对象池
+    inactiveProjectiles = [];
+    inactiveDamageNumbers = [];
+    
+    // 重置按键状态
+    keys = {};
+    
+    // 重置相机
+    cameraManager.resetCamera();
+    
+    // 如果有动画帧，取消它
+    if (animationFrameId !== null) {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
+    }
+}
+
+/**
+ * 开始游戏
+ */
+function startGame() {
+    // 重置游戏状态
+    resetGame();
+    
+    // 隐藏开始屏幕
+    document.getElementById('startScreen').classList.add('hidden');
+    
+    // 创建玩家
+    player = new Player(400, 300);
+    
+    // 创建初始武器
+    const dagger = new DaggerWeapon();
+    player.addWeapon(dagger);
+    
+    // 设置游戏状态
+    isGameRunning = true;
+    isGameOver = false;
+    gameTime = 0;
+    
+    // 重置摄像机
+    cameraManager.following = player;
+    
+    // 启动游戏循环
+    lastTime = 0;
+    animationFrameId = requestAnimationFrame(gameLoop);
+    
+    // 更新UI
+    updateUI();
 }

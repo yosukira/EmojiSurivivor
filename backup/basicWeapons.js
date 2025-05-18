@@ -356,7 +356,7 @@ class GarlicWeapon extends Weapon {
      * @returns {string} 初始描述
      */
     getInitialDescription() {
-        return "在你周围产生一个伤害光环，持续伤害接触到的敌人。";
+        return "在你周围产生一个伤害光环，并减速敌人。";
     }
 }
 
@@ -383,8 +383,6 @@ class WhipWeapon extends Weapon {
         super(WhipWeapon.Name, WhipWeapon.Emoji, 1.5, WhipWeapon.MaxLevel);
         // 命中框
         this.hitboxes = [];
-        // 记录上次攻击方向（-1为左，1为右）
-        this.lastDirection = 1;
     }
 
     /**
@@ -393,8 +391,8 @@ class WhipWeapon extends Weapon {
     calculateStats() {
         this.stats = {
             damage: 15 + (this.level - 1) * 6, // 略微提高伤害成长
-            width: 30, // 减小宽度，使鞭子更细长
-            length: 160 + (this.level - 1) * 20, // 略微增加基础长度
+            width: 60, // 大幅缩减宽度，不随等级增长
+            length: 140 + (this.level - 1) * 20, // 略微增加基础长度
             cooldown: this.level === 10 ? 0.15 : Math.max(0.5, this.baseCooldown - (this.level - 1) * 0.10), // 10级极大加快攻击频率
             count: 1 + Math.floor(this.level / 4),
             duration: 0.3
@@ -417,19 +415,38 @@ class WhipWeapon extends Weapon {
         // 清除命中框
         this.hitboxes = [];
         
-        // 交替左右攻击
-        this.lastDirection = -this.lastDirection; // 切换方向
+        // 鞭子现在只能横向攻击，不再跟踪敌人
+        // 获取玩家朝向
+        const dirX = owner.lastMoveDirection.x;
+        const dirY = owner.lastMoveDirection.y;
         
-        // 固定左右方向的水平角度
-        const horizontalAngle = this.lastDirection > 0 ? 0 : Math.PI; // 0代表右侧，Math.PI代表左侧
+        // 如果玩家没有移动方向，默认向右攻击
+        const angle = (dirX === 0 && dirY === 0) ? 0 : Math.atan2(dirY, dirX);
         
-        // 如果有多个鞭子，计算每个鞭子的角度偏移
-        const angleStep = Math.PI / 20; // 很小的角度步长，确保都在水平方向
+        // 强制将角度映射到水平方向 (左右)
+        let horizontalAngle;
+        if (angle >= -Math.PI/4 && angle < Math.PI/4) {
+            // 右
+            horizontalAngle = 0;
+        } else if (angle >= Math.PI/4 && angle < 3*Math.PI/4) {
+            // 下
+            horizontalAngle = Math.PI/2;
+        } else if (angle >= 3*Math.PI/4 || angle < -3*Math.PI/4) {
+            // 左
+            horizontalAngle = Math.PI;
+        } else {
+            // 上
+            horizontalAngle = -Math.PI/2;
+        }
+        
+        // 计算角度间隔 (横向扇形分布)
+        const angleStep = Math.PI / 10; // 较小的角度步长
+        const startAngle = horizontalAngle - (angleStep * (count - 1) / 2);
         
         // 创建多个鞭子
         for (let i = 0; i < count; i++) {
-            // 基于主方向稍微偏移一点角度，保持在水平方向
-            const whipAngle = horizontalAngle + (i - Math.floor(count/2)) * angleStep;
+            // 计算角度
+            const whipAngle = startAngle + i * angleStep;
             // 创建鞭子
             this.createWhip(owner, whipAngle, damage, width, length, duration);
         }
@@ -506,82 +523,24 @@ class WhipWeapon extends Weapon {
             },
             draw: function(ctx) {
                 if (this.isGarbage) return;
-                
                 // 计算透明度
-                const alpha = 0.8 * (1 - this.lifetime / this.duration);
-                
-                // 获取屏幕坐标
-                const screenPos = cameraManager.worldToScreen(this.x, this.y);
-                
-                // 保存上下文
-                ctx.save();
-                
-                // 平移到玩家位置
-                ctx.translate(screenPos.x, screenPos.y);
-                
-                // 旋转
-                ctx.rotate(this.angle + Math.PI / 2);
-
-                // 使用更细的鞭子线条
-                ctx.strokeStyle = `rgba(240, 240, 240, ${alpha})`;
-                
-                // 调整lineWidth更细
-                const baseLineWidth = Math.max(1, this.width * cameraManager.zoom * 0.1);
-                const progress = this.lifetime / this.duration;
-                
-                // 更平滑的动画效果
-                const animProgress = progress < 0.5 ? progress * 2 : 1 - (progress - 0.5) * 2;
-                
-                // 向外延伸的动画效果
-                const animLength = this.length * animProgress;
-                
-                // 设置线宽
-                ctx.lineWidth = baseLineWidth;
-                
-                // 添加鞭子尖端小颗粒特效
-                const particleCount = 5;
-                const particleSize = baseLineWidth * 0.8;
-                
-                // 主要鞭子线条 - 使用曲线制造鞭子甩动效果
+                const alpha = 0.3 * (1 - this.lifetime / this.duration);
+                // 绘制命中框
+                ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
                 ctx.beginPath();
-                
-                // 从玩家位置开始
-                ctx.moveTo(0, 0);
-                
-                // 控制点参数，调整曲线形状
-                const controlPointDist = animLength * 0.8;
-                const controlY = this.length * 0.2 * Math.sin(progress * Math.PI);
-                
-                // 更细长的鞭子曲线
-                ctx.quadraticCurveTo(controlPointDist * 0.5, controlY, animLength, 0);
-                
+                // 获取屏幕坐标
+                const screenPos = cameraManager.worldToScreen(this.points[0].x, this.points[0].y);
+                ctx.moveTo(screenPos.x, screenPos.y);
+                for (let i = 1; i < this.points.length; i++) {
+                    const screenPos = cameraManager.worldToScreen(this.points[i].x, this.points[i].y);
+                    ctx.lineTo(screenPos.x, screenPos.y);
+                }
+                ctx.closePath();
+                ctx.fill();
+                // 绘制边框
+                ctx.strokeStyle = `rgba(200, 200, 200, ${alpha * 2})`;
+                ctx.lineWidth = 2;
                 ctx.stroke();
-                
-                // 添加尖端光效
-                if (animProgress > 0.7) {
-                    const tipAlpha = (animProgress - 0.7) * 3.3 * alpha;
-                    ctx.fillStyle = `rgba(255, 255, 255, ${tipAlpha})`;
-                    ctx.beginPath();
-                    ctx.arc(animLength, 0, particleSize * 2, 0, Math.PI * 2);
-                    ctx.fill();
-                }
-                
-                // 沿鞭子添加小颗粒
-                ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.8})`;
-                for (let i = 0; i < particleCount; i++) {
-                    const particlePos = (i + 1) / (particleCount + 1) * animLength;
-                    // 计算颗粒在曲线上的位置
-                    const t = (i + 1) / (particleCount + 1);
-                    const particleX = t * animLength;
-                    const particleY = (1 - t) * t * 4 * controlY;
-                    
-                    ctx.beginPath();
-                    ctx.arc(particleX, particleY, particleSize, 0, Math.PI * 2);
-                    ctx.fill();
-                }
-                
-                // 恢复上下文
-                ctx.restore();
             }
         };
         // 添加到命中框列表
@@ -607,79 +566,33 @@ class WhipWeapon extends Weapon {
             },
             draw: function(ctx) {
                 if (this.isGarbage) return;
-                
                 // 计算透明度
-                const alpha = 0.8 * (1 - this.lifetime / this.duration);
-                
+                const alpha = 0.6 * (1 - this.lifetime / this.duration); // 稍微降低基础透明度
                 // 获取屏幕坐标
                 const screenPos = cameraManager.worldToScreen(this.x, this.y);
-                
                 // 保存上下文
                 ctx.save();
-                
                 // 平移到玩家位置
                 ctx.translate(screenPos.x, screenPos.y);
-                
                 // 旋转
-                ctx.rotate(this.angle + Math.PI / 2);
+                ctx.rotate(this.angle + Math.PI / 2); // 旋转90度，使其与攻击方向垂直
 
-                // 使用更细的鞭子线条
-                ctx.strokeStyle = `rgba(240, 240, 240, ${alpha})`;
-                
-                // 调整lineWidth更细
-                const baseLineWidth = Math.max(1, this.width * cameraManager.zoom * 0.1);
+                // 绘制鞭子
+                ctx.strokeStyle = `rgba(220, 220, 220, ${alpha})`; // 鞭子颜色调为浅灰
+                // 调整 lineWidth 使其更细，并随动画变化
+                const baseLineWidth = Math.max(2, this.width * cameraManager.zoom * 0.15); // 更细的基础宽度
                 const progress = this.lifetime / this.duration;
-                
-                // 更平滑的动画效果
-                const animProgress = progress < 0.5 ? progress * 2 : 1 - (progress - 0.5) * 2;
-                
-                // 向外延伸的动画效果
-                const animLength = this.length * animProgress;
-                
-                // 设置线宽
-                ctx.lineWidth = baseLineWidth;
-                
-                // 添加鞭子尖端小颗粒特效
-                const particleCount = 5;
-                const particleSize = baseLineWidth * 0.8;
-                
-                // 主要鞭子线条 - 使用曲线制造鞭子甩动效果
+                // 鞭子宽度从中间向两端逐渐变细的效果
+                ctx.lineWidth = baseLineWidth * (1 - Math.abs(progress - 0.5) * 1.5);
+
                 ctx.beginPath();
-                
-                // 从玩家位置开始
-                ctx.moveTo(0, 0);
-                
-                // 控制点参数，调整曲线形状
-                const controlPointDist = animLength * 0.8;
-                const controlY = this.length * 0.2 * Math.sin(progress * Math.PI);
-                
-                // 更细长的鞭子曲线
-                ctx.quadraticCurveTo(controlPointDist * 0.5, controlY, animLength, 0);
-                
+                ctx.moveTo(-this.length / 2, 0);
+                // 使用更平滑的曲线，或者简单的直线
+                // ctx.lineTo(this.length / 2, 0); // 简单直线
+                // 贝塞尔曲线，使其有挥舞感
+                const controlY = this.length * 0.2 * Math.sin(progress * Math.PI); // 控制点Y随动画变化
+                ctx.quadraticCurveTo(0, controlY, this.length / 2, 0);
                 ctx.stroke();
-                
-                // 添加尖端光效
-                if (animProgress > 0.7) {
-                    const tipAlpha = (animProgress - 0.7) * 3.3 * alpha;
-                    ctx.fillStyle = `rgba(255, 255, 255, ${tipAlpha})`;
-                    ctx.beginPath();
-                    ctx.arc(animLength, 0, particleSize * 2, 0, Math.PI * 2);
-                    ctx.fill();
-                }
-                
-                // 沿鞭子添加小颗粒
-                ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.8})`;
-                for (let i = 0; i < particleCount; i++) {
-                    const particlePos = (i + 1) / (particleCount + 1) * animLength;
-                    // 计算颗粒在曲线上的位置
-                    const t = (i + 1) / (particleCount + 1);
-                    const particleX = t * animLength;
-                    const particleY = (1 - t) * t * 4 * controlY;
-                    
-                    ctx.beginPath();
-                    ctx.arc(particleX, particleY, particleSize, 0, Math.PI * 2);
-                    ctx.fill();
-                }
                 
                 // 恢复上下文
                 ctx.restore();
@@ -764,7 +677,7 @@ class WhipWeapon extends Weapon {
      * @returns {string} 初始描述
      */
     getInitialDescription() {
-        return "左右连续击打敌人，攻击范围长但窄。";
+        return "横扫敌人。";
     }
 }
 

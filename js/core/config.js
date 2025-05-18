@@ -60,8 +60,8 @@ const PLAYER_DEFAULT_STATS = {
     projectileSpeedMultiplier: 1.0,
     cooldownMultiplier: 1.0,
     projectileCountBonus: 0,
-    maxWeapons: 10,
-    maxPassives: 10
+    maxWeapons: 20,
+    maxPassives: 20
 };
 
 // 基础敌人属性
@@ -69,20 +69,20 @@ const ENEMY_BASE_STATS = {
     health: 30,
     speed: 70,      // 基础移动速度
     damage: 8,     // 基础伤害
-    xp: 5          // 基础经验值
+    xp: 2          // 基础经验值 (原为 5)
 };
 
 // Boss 基础属性乘数 (基于 ENEMY_BASE_STATS)
-const BOSS_BASE_HEALTH_MULTIPLIER = 7.0; 
+const BOSS_BASE_HEALTH_MULTIPLIER = 10; 
 const BOSS_BASE_DAMAGE_MULTIPLIER = 2.5; 
 
 // 其他游戏设定
 const MAX_ENEMIES_ON_SCREEN = 500; // 屏幕上允许的最大敌人数量
-const BOSS_INTERVAL = 180; // Boss出现间隔时间（秒）
+const BOSS_INTERVAL = 120; // Boss出现间隔时间（秒）
 // SPAWN_PADDING 和 ENEMY_ATTACK_RANGE 已在下面定义，将检查并使用新值如果不同
 
 // 敌人生成边界距离 - 确保敌人从屏幕外生成
-const SPAWN_PADDING = 50;  // (原为 250)
+const SPAWN_PADDING = 100;  // (原为 250)
 
 // 敌人攻击屏幕范围限制
 const ENEMY_ATTACK_RANGE = 800; // (原为 GAME_WIDTH * 1.2)
@@ -101,7 +101,7 @@ function spawnBoss(gameTime) {
 
     // 计算生成位置 - 确保从屏幕外生成
     const angle = Math.random() * Math.PI * 2;
-    const distance = SPAWN_PADDING + 100; // 额外增加距离，确保在屏幕外
+    const distance = SPAWN_PADDING + 300; // 额外增加距离，确保在屏幕外
     const x = player.x + Math.cos(angle) * distance;
     const y = player.y + Math.sin(angle) * distance;
 

@@ -523,7 +523,7 @@ class BossEnemy extends Enemy {
         initialBossStats.damage = (bossType.damageBase || ENEMY_BASE_STATS.damage * BOSS_BASE_DAMAGE_MULTIPLIER) * (bossType.damageMult || 1);
         initialBossStats.xp = (bossType.xpBase || ENEMY_BASE_STATS.xp * 10) * (bossType.xpMult || 1);
         initialBossStats.attackInterval = bossType.attackCooldown || 1.5;
-
+        
         // Call super with a temporary type object that doesn't include multipliers yet for base Enemy constructor,
         // as we will apply scaling after this. The base Enemy constructor already applies type.healthMult etc.
         // So, we pass a simplified type for the super constructor to avoid double multiplication initially.
@@ -551,7 +551,7 @@ class BossEnemy extends Enemy {
         
         this.health = this.stats.health;
         this.maxHealth = this.stats.health; 
-
+        
         // Boss特定属性
         this.type = bossType; // 确保 this.type 是 bossType 对象
         this.isBoss = true;
@@ -587,7 +587,7 @@ class BossEnemy extends Enemy {
         if (this.type.name === "幽灵领主") {
             this.ghostLordSpecialAttackWaveTimer = 0;
             this.ghostLordCurrentWave = 0;
-        }
+    }
 
         // --- 巨型僵尸 (GiantZombie) 特定属性 ---
         if (this.type.name === "巨型僵尸") {

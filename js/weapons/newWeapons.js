@@ -1,24 +1,29 @@
 /**
- * 火焰匕首武器类
- * 发射燃烧的匕首，可以点燃敌人
+ * EmojiSurvivor - 新武器
+ * 这个文件包含10种新武器的实现
  */
-class FireDaggerWeapon extends Weapon {
+
+/**
+ * 泡泡魔棒
+ * 发射缓慢漂浮的泡泡，困住敌人数秒
+ */
+class BubbleWandWeapon extends Weapon {
     /**
      * 静态属性
      */
-    static Name = "燃烧刀";
-    static Emoji = EMOJI.WEAPON_FIRE_DAGGER;
-    static MaxLevel = 8;
+    static Name = "泡泡魔棒";
+    static Emoji = "🧼";
+    static MaxLevel = 10;
     static Evolution = {
-        requires: "Candelabrador",
-        evolvesTo: "Inferno"
+        requires: "Magnet",
+        evolvesTo: "GravityBubble"
     };
 
     /**
      * 构造函数
      */
     constructor() {
-        super(FireDaggerWeapon.Name, FireDaggerWeapon.Emoji, 1.2, FireDaggerWeapon.MaxLevel);
+        super(BubbleWandWeapon.Name, BubbleWandWeapon.Emoji, 1.2, BubbleWandWeapon.MaxLevel);
     }
 
     /**
@@ -26,16 +31,13 @@ class FireDaggerWeapon extends Weapon {
      */
     calculateStats() {
         this.stats = {
-            damage: 15 + (this.level - 1) * 3,
-            projectileSpeed: 300 + (this.level - 1) * 15,
-            cooldown: Math.max(0.2, this.baseCooldown - (this.level - 1) * 0.1),
-            count: 1 + Math.floor((this.level - 1) / 3),
-            pierce: 1 + Math.floor(this.level / 3),
-            duration: 2.0,
-            burnDamage: 3 + (this.level - 1) * 0.5,
-            burnDuration: 2.0 + (this.level - 1) * 0.2,
-            burnTick: 0.5,
-            explosionRadius: 0 + (this.level >= 5 ? 50 : 0)
+            damage: 3 + (this.level - 1) * 2,  // 基础伤害较低
+            projectileSpeed: 150 + (this.level - 1) * 10,  // 速度缓慢
+            cooldown: Math.max(0.8, this.baseCooldown - (this.level - 1) * 0.07),
+            count: 1 + Math.floor((this.level - 1) / 2),  // 每2级增加一个泡泡
+            trapDuration: 2 + (this.level - 1) * 0.4,  // 困住敌人的时间
+            splitOnBurst: this.level === 10,  // 10级时泡泡爆炸分裂
+            duration: 3.5  // 泡泡存在时间
         };
     }
 
@@ -44,179 +46,246 @@ class FireDaggerWeapon extends Weapon {
      * @param {Player} owner - 拥有者
      */
     fire(owner) {
-        // 获取拥有者属性
+        if (!owner) return; // 确保owner存在
+        
         const ownerStats = this.getOwnerStats(owner);
-        
-        // 计算实际投射物数量（基础数量 + 加成）
-        const count = this.stats.count + (ownerStats.projectileCountBonus || 0);
+        const projectileCount = Math.min(this.stats.count + (ownerStats.projectileCountBonus || 0), 8); // 限制最大数量为8个
         const speed = this.stats.projectileSpeed * (ownerStats.projectileSpeedMultiplier || 1);
-        const damage = this.stats.damage;
-        const pierce = this.stats.pierce;
+        const damage = this.stats.damage * (ownerStats.damageMultiplier || 1);
         const duration = this.stats.duration * (ownerStats.durationMultiplier || 1);
-        const size = GAME_FONT_SIZE * (ownerStats.areaMultiplier || 1);
-        const burnDamage = this.stats.burnDamage;
-        const burnDuration = this.stats.burnDuration * (ownerStats.durationMultiplier || 1);
-        const explosionRadius = this.stats.explosionRadius * (ownerStats.areaMultiplier || 1);
+        const trapDuration = this.stats.trapDuration * (ownerStats.durationMultiplier || 1);
+        const size = GAME_FONT_SIZE * 1.2 * (ownerStats.areaMultiplier || 1);
+        const splitOnBurst = this.stats.splitOnBurst;
+
+        // 确保玩家有lastMoveDirection
+        if (!owner.lastMoveDirection) {
+            owner.lastMoveDirection = { x: 0, y: -1 }; // 默认向上
+        }
         
-        // 获取目标敌人
-        let target = owner.findNearestEnemy(GAME_WIDTH * 1.5) || {
-            x: owner.x + owner.lastMoveDirection.x * 100,
-            y: owner.y + owner.lastMoveDirection.y * 100
-        };
+        // 限制屏幕上泡泡总数
+        const currentBubbleCount = projectiles.filter(p => p instanceof BubbleProjectile).length;
+        if (currentBubbleCount > 100) return; // 如果已经有太多泡泡，不再发射新的
+
+        // 确定发射角度范围，倾向于在玩家前方扇形区域发射
+        const baseAngle = Math.atan2(owner.lastMoveDirection.y, owner.lastMoveDirection.x);
+        const angleSpread = Math.PI * 0.6; // 60度扇形范围
         
-        // 计算方向
-        const dx = target.x - owner.x;
-        const dy = target.y - owner.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const dirX = dist > 0 ? dx / dist : owner.lastMoveDirection.x;
-        const dirY = dist > 0 ? dy / dist : owner.lastMoveDirection.y;
-        
-        // 计算角度间隔
-        const angleStep = count > 1 ? (Math.PI / 18) : 0;
-        const startAngle = Math.atan2(dirY, dirX) - (angleStep * (count - 1) / 2);
-        
-        // 发射多个投射物
-        for (let i = 0; i < count; i++) {
-            // 计算角度
-            const angle = startAngle + i * angleStep;
-            const vx = Math.cos(angle) * speed;
-            const vy = Math.sin(angle) * speed;
+        // 随机方向发射泡泡
+        for (let i = 0; i < projectileCount; i++) {
+            // 计算发射角度，在玩家面向方向的扇形范围内
+            const randomAngle = baseAngle + (Math.random() - 0.5) * angleSpread;
             
-            // 使用对象池生成弹射物
-            const projectile = spawnProjectile(
-                owner.x, 
-                owner.y, 
-                EMOJI.PROJECTILE_FIRE, 
-                size, 
-                vx, 
-                vy, 
-                damage, 
-                pierce, 
-                duration, 
-                ownerStats
+            const dirX = Math.cos(randomAngle);
+            const dirY = Math.sin(randomAngle);
+            
+            // 添加一点随机性到速度
+            const speedVariation = 0.8 + Math.random() * 0.4; // 速度在80%-120%之间变化
+            const vx = dirX * speed * speedVariation;
+            const vy = dirY * speed * speedVariation;
+            
+            // 创建泡泡投射物，确保从玩家位置发射
+            const bubble = new BubbleProjectile(
+                owner.x, owner.y, size, vx, vy, damage, duration, 
+                ownerStats, trapDuration, splitOnBurst
             );
             
-            // 添加燃烧效果
-            if (projectile) {
-                // 设置状态效果
-                projectile.statusEffect = {
-                    type: 'burn',
-                    damage: burnDamage,
-                    duration: burnDuration,
-                    tick: 0.5
-                };
-                
-                // 设置爆炸半径
-                projectile.aoeRadius = explosionRadius;
-                
-                // 添加粒子效果
-                this.addFireParticles(projectile);
-            }
+            bubble.owner = owner;
+            projectiles.push(bubble);
         }
     }
 
     /**
-     * 添加火焰粒子效果
-     * @param {Projectile} projectile - 投射物
+     * 获取当前描述
      */
-    addFireParticles(projectile) {
-        // 添加更新钩子
-        const originalUpdate = projectile.update;
+    getCurrentDescription() {
+        return `发射${this.stats.count}个泡泡，困住敌人${this.stats.trapDuration.toFixed(1)}秒，造成${this.stats.damage}伤害。`;
+    }
+
+    /**
+     * 获取初始描述
+     */
+    getInitialDescription() {
+        return "发射魔法泡泡，困住敌人数秒并造成伤害。";
+    }
+}
+
+/**
+ * 混沌骰子
+ * 掷出一个骰子，随机触发六种效果之一：火焰、冰冻、雷电、击退、护盾或治疗
+ */
+class ChaosDiceWeapon extends Weapon {
+    /**
+     * 静态属性
+     */
+    static Name = "混沌骰子";
+    static Emoji = "🎲";
+    static MaxLevel = 10;
+    static Evolution = {
+        requires: "Book",
+        evolvesTo: "FateDice"
+    };
+
+    /**
+     * 构造函数
+     */
+    constructor() {
+        super(ChaosDiceWeapon.Name, ChaosDiceWeapon.Emoji, 1.5, ChaosDiceWeapon.MaxLevel);
         
-        projectile.update = function(dt) {
-            // 调用原始更新方法
-            originalUpdate.call(this, dt);
-            
-            // 添加火焰粒子
-            if (Math.random() < 0.3) {
-                const effect = {
-                    x: this.x,
-                    y: this.y,
-                    size: this.size * 0.4,
-                    lifetime: 0.3,
-                    timer: 0,
-                    isGarbage: false,
-                    
-                    update: function(dt) {
-                        this.timer += dt;
-                        if (this.timer >= this.lifetime) {
-                            this.isGarbage = true;
-                            return;
-                        }
-                    },
-                    
-                    draw: function(ctx) {
-                        if (this.isGarbage) return;
-                        
-                        const alpha = 1 - (this.timer / this.lifetime);
-                        const screenPos = cameraManager.worldToScreen(this.x, this.y);
-                        
-                        ctx.font = `${this.size}px 'Segoe UI Emoji', Arial`;
-                        ctx.textAlign = 'center';
-                        ctx.textBaseline = 'middle';
-                        ctx.globalAlpha = alpha;
-                        ctx.fillText('🔥', screenPos.x, screenPos.y);
-                        ctx.globalAlpha = 1.0;
-                    }
-                };
-                
-                visualEffects.push(effect);
-            }
+        // 可能的效果
+        this.effects = [
+            { id: "fire", name: "火焰" },    // 火焰
+            { id: "ice", name: "冰冻" },     // 冰冻
+            { id: "lightning", name: "雷电" }, // 雷电
+            { id: "knockback", name: "击退" }, // 击退
+            { id: "shield", name: "护盾" },  // 护盾
+            { id: "heal", name: "治疗" }     // 治疗
+        ];
+    }
+
+    /**
+     * 计算武器属性
+     */
+    calculateStats() {
+        this.stats = {
+            damage: 8 + (this.level - 1) * 3,  // 基础伤害
+            projectileSpeed: 250 + (this.level - 1) * 15,  // 投掷速度
+            cooldown: Math.max(0.65, 1.5 - (this.level - 1) * 0.08),  // 冷却时间
+            count: 1 + Math.floor((this.level - 1) / 3),  // 每3级额外投一个骰子
+            area: 70 + (this.level - 1) * 10,  // 影响范围
+            effectPower: 1 + (this.level - 1) * 0.15,  // 效果强度
+            dualEffect: this.level === 10,  // 10级时同时触发两种效果
+            duration: 2.5  // 骰子持续时间
         };
     }
 
     /**
-     * 获取升级描述
-     * @returns {string} 升级描述
+     * 发射武器
+     * @param {Player} owner - 拥有者
      */
-    getUpgradeDescription() {
-        let desc = `Lv${this.level + 1}: `;
+    fire(owner) {
+        const ownerStats = this.getOwnerStats(owner);
+        const projectileCount = this.stats.count + (ownerStats.projectileCountBonus || 0);
+        const speed = this.stats.projectileSpeed * (ownerStats.projectileSpeedMultiplier || 1);
+        const damage = this.stats.damage * (ownerStats.damageMultiplier || 1);
+        const duration = this.stats.duration * (ownerStats.durationMultiplier || 1);
+        const area = this.stats.area * (ownerStats.areaMultiplier || 1);
+        const effectPower = this.stats.effectPower;
+        const dualEffect = this.stats.dualEffect;
+        const size = GAME_FONT_SIZE * 1.2;
         
-        if (this.level % 3 === 0) {
-            desc += "+1 投射物。";
-        } else if (this.level % 3 === 1) {
-            desc += "+1 穿透。";
-        } else {
-            desc += "+伤害/燃烧效果。";
+        // 投掷多个骰子
+        enemies.forEach(enemy => {
+            if (projectiles.length >= projectileCount || !enemy || enemy.isGarbage || !enemy.isActive) return;
+            
+            // 计算方向
+            const dx = enemy.x - owner.x;
+            const dy = enemy.y - owner.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            // 如果敌人太远，跳过
+            if (dist > 600) return;
+            
+            // 计算方向
+            const dirX = dx / dist;
+            const dirY = dy / dist;
+            
+            // 添加随机性
+            const randomAngle = (Math.random() - 0.5) * Math.PI * 0.2;
+            const finalDirX = Math.cos(randomAngle) * dirX - Math.sin(randomAngle) * dirY;
+            const finalDirY = Math.sin(randomAngle) * dirX + Math.cos(randomAngle) * dirY;
+            
+            // 计算速度
+            const vx = finalDirX * speed;
+            const vy = finalDirY * speed;
+            
+            // 随机选择效果
+            const effect1 = this.effects[Math.floor(Math.random() * this.effects.length)];
+            
+            // 第二个效果不能与第一个相同
+            let effect2;
+            do {
+                effect2 = this.effects[Math.floor(Math.random() * this.effects.length)];
+            } while (effect2.id === effect1.id);
+            
+            // 创建骰子投射物
+            const dice = new ChaosDiceProjectile(
+                owner.x, owner.y, size, vx, vy, damage, duration,
+                ownerStats, area, effectPower, effect1, dualEffect ? effect2 : null
+            );
+            
+            dice.owner = owner;
+            projectiles.push(dice);
+        });
+        
+        // 如果没有找到合适的敌人目标，向随机方向投掷
+        if (projectiles.length === 0) {
+            for (let i = 0; i < projectileCount; i++) {
+                // 随机角度
+                const angle = Math.random() * Math.PI * 2;
+                const vx = Math.cos(angle) * speed;
+                const vy = Math.sin(angle) * speed;
+                
+                // 随机效果
+                const effect1 = this.effects[Math.floor(Math.random() * this.effects.length)];
+                
+                // 第二个效果不能与第一个相同
+                let effect2;
+                do {
+                    effect2 = this.effects[Math.floor(Math.random() * this.effects.length)];
+                } while (effect2.id === effect1.id);
+                
+                // 创建骰子投射物
+                const dice = new ChaosDiceProjectile(
+                    owner.x, owner.y, size, vx, vy, damage, duration,
+                    ownerStats, area, effectPower, effect1, dualEffect ? effect2 : null
+                );
+                
+                dice.owner = owner;
+                projectiles.push(dice);
+            }
         }
-        
-        if (this.level === 4) {
-            desc += " 获得爆炸效果!";
+    }
+
+    /**
+     * 获取当前描述
+     */
+    getCurrentDescription() {
+        let desc = `投掷${this.stats.count}个骰子，造成${this.stats.damage}伤害并在半径${this.stats.area}范围内触发随机效果。`;
+        if (this.stats.dualEffect) {
+            desc += " 每个骰子同时触发两种效果。";
         }
-        
         return desc;
     }
 
     /**
      * 获取初始描述
-     * @returns {string} 初始描述
      */
     getInitialDescription() {
-        return "发射燃烧的匕首，可以点燃敌人。";
+        return "投掷骰子，随机触发六种效果之一：火焰、冰冻、雷电、击退、护盾或治疗。";
     }
 }
 
 /**
- * 岚刀武器类
- * 发射闪电刀刃，可以连锁攻击敌人
+ * 磁力枪
+ * 发射磁力波，吸引敌人并造成范围伤害
  */
-class StormBladeWeapon extends Weapon {
+class MagnetGunWeapon extends Weapon {
     /**
      * 静态属性
      */
-    static Name = "岚刀";
-    static Emoji = EMOJI.WEAPON_STORM_BLADE;
-    static MaxLevel = 8;
+    static Name = "磁力枪";
+    static Emoji = "🧲";
+    static MaxLevel = 10;
     static Evolution = {
-        requires: "EmptyTome",
-        evolvesTo: "Lightning"
+        requires: "Whip",
+        evolvesTo: "GravityGun"
     };
 
     /**
      * 构造函数
      */
     constructor() {
-        super(StormBladeWeapon.Name, StormBladeWeapon.Emoji, 2.0, StormBladeWeapon.MaxLevel);
+        super(MagnetGunWeapon.Name, MagnetGunWeapon.Emoji, 1.2, MagnetGunWeapon.MaxLevel);
     }
 
     /**
@@ -224,14 +293,16 @@ class StormBladeWeapon extends Weapon {
      */
     calculateStats() {
         this.stats = {
-            damage: 25 + (this.level - 1) * 5,
-            cooldown: Math.max(0.8, this.baseCooldown - (this.level - 1) * 0.15),
-            chainCount: 2 + Math.floor(this.level / 2),
-            chainDamage: 15 + (this.level - 1) * 3,
-            chainRange: 120 + (this.level - 1) * 10,
-            attackCount: 1 + Math.floor(this.level / 4),
-            stunChance: 0.1 + (this.level - 1) * 0.05,
-            stunDuration: 0.5 + (this.level - 1) * 0.1
+            damage: 4 + (this.level - 1) * 2,  // 基础伤害
+            projectileSpeed: 220 + (this.level - 1) * 20,  // 投射物速度
+            cooldown: Math.max(0.85, 1.3 - (this.level - 1) * 0.05),  // 冷却时间
+            count: 1 + Math.floor((this.level - 1) / 2.5),  // 每3级增加一个投射物
+            pullRadius: 100 + (this.level - 1) * 10,  // 吸引半径
+            pullStrength: 50 + (this.level - 1) * 10,  // 吸引强度
+            stun: this.level >= 8,  // 8级以上晕眩敌人
+            stunDuration: 0.5 + (this.level - 8) * 0.1,  // 晕眩持续时间
+            duration: 3,  // 持续时间
+            pierce: Math.min(3, 1 + Math.floor((this.level - 1) / 3))  // 穿透数量
         };
     }
 
@@ -240,289 +311,125 @@ class StormBladeWeapon extends Weapon {
      * @param {Player} owner - 拥有者
      */
     fire(owner) {
-        // 获取拥有者属性
         const ownerStats = this.getOwnerStats(owner);
-        
-        // 获取属性
-        const damage = this.stats.damage;
-        const chainCount = this.stats.chainCount + Math.floor((ownerStats.projectileCountBonus || 0) / 2);
-        const chainDamage = this.stats.chainDamage;
-        const chainRange = this.stats.chainRange * (ownerStats.areaMultiplier || 1);
-        const attackCount = this.stats.attackCount;
-        const stunChance = this.stats.stunChance;
+        const projectileCount = this.stats.count + (ownerStats.projectileCountBonus || 0);
+        const speed = this.stats.projectileSpeed * (ownerStats.projectileSpeedMultiplier || 1);
+        const damage = this.stats.damage * (ownerStats.damageMultiplier || 1);
+        const pullRadius = this.stats.pullRadius * (ownerStats.areaMultiplier || 1);
+        const pullStrength = this.stats.pullStrength;
+        const stun = this.stats.stun;
         const stunDuration = this.stats.stunDuration * (ownerStats.durationMultiplier || 1);
+        const duration = this.stats.duration * (ownerStats.durationMultiplier || 1);
+        const pierce = this.stats.pierce + (ownerStats.pierceBonus || 0);
+        const size = GAME_FONT_SIZE * 1.2;
         
-        // 执行多次攻击
-        for (let attack = 0; attack < attackCount; attack++) {
-            // 获取随机敌人
-            const target = owner.findRandomEnemy(GAME_WIDTH) || owner.findNearestEnemy(GAME_WIDTH);
-            
-            // 如果没有目标，跳过
-            if (!target) continue;
-            
-            // 创建闪电链
-            this.createLightningChain(owner, target, damage, chainDamage, chainCount, chainRange, stunChance, stunDuration);
-            
-            // 添加延迟
-            if (attack < attackCount - 1) {
-                setTimeout(() => {
-                    const newTarget = owner.findRandomEnemy(GAME_WIDTH) || owner.findNearestEnemy(GAME_WIDTH);
-                    if (newTarget) {
-                        this.createLightningChain(owner, newTarget, damage, chainDamage, chainCount, chainRange, stunChance, stunDuration);
-                    }
-                }, 200 * (attack + 1));
-            }
-        }
-    }
-
-    /**
-     * 创建闪电链
-     * @param {Player} owner - 拥有者
-     * @param {Enemy} target - 目标敌人
-     * @param {number} damage - 伤害
-     * @param {number} chainDamage - 链式伤害
-     * @param {number} chainCount - 链式数量
-     * @param {number} chainRange - 链式范围
-     * @param {number} stunChance - 眩晕几率
-     * @param {number} stunDuration - 眩晕持续时间
-     */
-    createLightningChain(owner, target, damage, chainDamage, chainCount, chainRange, stunChance, stunDuration) {
-        // 已命中的敌人
-        const hitEnemies = new Set();
+        // 找到最近的敌人
+        const enemy = this.getClosestEnemy(600);
         
-        // 造成初始伤害
-        target.takeDamage(damage * (owner.getStat('damageMultiplier') || 1), owner);
-        hitEnemies.add(target);
-        
-        // 应用眩晕效果
-        if (Math.random() < stunChance) {
-            if (!target.statusEffects) {
-                target.statusEffects = {};
-            }
+        // 发射多个磁力波
+        for (let i = 0; i < projectileCount; i++) {
+            let dirX, dirY;
             
-            target.statusEffects.stun = {
-                duration: stunDuration,
-                source: owner
-            };
-        }
-        
-        // 创建闪电效果
-        this.createLightningEffect(owner.x, owner.y, target.x, target.y);
-        
-        // 当前目标
-        let currentTarget = target;
-        
-        // 链式攻击
-        for (let i = 0; i < chainCount; i++) {
-            // 寻找下一个目标
-            const nextTarget = this.findNextChainTarget(currentTarget, chainRange, hitEnemies);
-            
-            // 如果没有下一个目标，结束链式攻击
-            if (!nextTarget) break;
-            
-            // 造成链式伤害
-            nextTarget.takeDamage(chainDamage * (owner.getStat('damageMultiplier') || 1), owner);
-            hitEnemies.add(nextTarget);
-            
-            // 应用眩晕效果
-            if (Math.random() < stunChance) {
-                if (!nextTarget.statusEffects) {
-                    nextTarget.statusEffects = {};
-                }
+            if (enemy) {
+                // 计算方向朝向敌人
+                const dx = enemy.x - owner.x;
+                const dy = enemy.y - owner.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
                 
-                nextTarget.statusEffects.stun = {
-                    duration: stunDuration,
-                    source: owner
-                };
+                dirX = dx / dist;
+                dirY = dy / dist;
+                
+                // 添加随机偏移
+                const angle = Math.atan2(dirY, dirX);
+                const randomAngle = angle + (Math.random() - 0.5) * Math.PI * 0.3;
+                dirX = Math.cos(randomAngle);
+                dirY = Math.sin(randomAngle);
+            } else {
+                // 随机方向
+                const angle = Math.random() * Math.PI * 2;
+                dirX = Math.cos(angle);
+                dirY = Math.sin(angle);
             }
             
-            // 创建闪电效果
-            this.createLightningEffect(currentTarget.x, currentTarget.y, nextTarget.x, nextTarget.y);
+            // 计算速度
+            const vx = dirX * speed;
+            const vy = dirY * speed;
             
-            // 更新当前目标
-            currentTarget = nextTarget;
+            // 创建磁力波投射物
+            const wave = new MagnetWaveProjectile(
+                owner.x, owner.y, size, vx, vy, damage, duration,
+                ownerStats, pullRadius, pullStrength, stun ? stunDuration : 0
+            );
+            
+            wave.owner = owner;
+            wave.pierce = pierce;
+            projectiles.push(wave);
         }
     }
-
+    
     /**
-     * 寻找下一个链式目标
-     * @param {Enemy} currentTarget - 当前目标
-     * @param {number} range - 范围
-     * @param {Set} hitEnemies - 已命中的敌人
-     * @returns {Enemy} 下一个目标
+     * 获取最近的敌人
+     * @param {number} maxRange - 最大范围
+     * @returns {Enemy|null} 敌人对象或null
      */
-    findNextChainTarget(currentTarget, range, hitEnemies) {
-        // 最近的敌人
-        let nearestEnemy = null;
-        let minDistSq = range * range;
-        
-        // 遍历所有敌人
+    getClosestEnemy(maxRange) {
+        let closestEnemy = null;
+        let minDistanceSq = maxRange * maxRange;
+
+        // 确保this.owner存在，防止空指针异常
+        if (!this.owner) return null;
+
         enemies.forEach(enemy => {
-            // 跳过已命中的敌人
-            if (hitEnemies.has(enemy) || enemy.isGarbage || !enemy.isActive) return;
+            if (!enemy || enemy.isGarbage || !enemy.isActive) return;
+
+            const distanceSq = (enemy.x - this.owner.x) * (enemy.x - this.owner.x) +
+                             (enemy.y - this.owner.y) * (enemy.y - this.owner.y);
             
-            // 计算距离
-            const dx = enemy.x - currentTarget.x;
-            const dy = enemy.y - currentTarget.y;
-            const distSq = dx * dx + dy * dy;
-            
-            // 如果在范围内且更近，更新最近的敌人
-            if (distSq < minDistSq) {
-                minDistSq = distSq;
-                nearestEnemy = enemy;
+            if (distanceSq < minDistanceSq) {
+                minDistanceSq = distanceSq;
+                closestEnemy = enemy;
             }
         });
         
-        return nearestEnemy;
+        return closestEnemy;
     }
 
     /**
-     * 创建闪电效果
-     * @param {number} x1 - 起点X坐标
-     * @param {number} y1 - 起点Y坐标
-     * @param {number} x2 - 终点X坐标
-     * @param {number} y2 - 终点Y坐标
+     * 获取当前描述
      */
-    createLightningEffect(x1, y1, x2, y2) {
-        // 计算距离
-        const dx = x2 - x1;
-        const dy = y2 - y1;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        
-        // 计算段数
-        const segments = Math.max(3, Math.floor(dist / 30));
-        
-        // 计算每段长度
-        const segmentLength = dist / segments;
-        
-        // 计算方向
-        const dirX = dx / dist;
-        const dirY = dy / dist;
-        
-        // 创建闪电点
-        const points = [];
-        points.push({ x: x1, y: y1 });
-        
-        // 生成中间点
-        for (let i = 1; i < segments; i++) {
-            // 计算基准点
-            const baseX = x1 + dirX * segmentLength * i;
-            const baseY = y1 + dirY * segmentLength * i;
-            
-            // 添加随机偏移
-            const perpX = -dirY;
-            const perpY = dirX;
-            const offset = (Math.random() - 0.5) * segmentLength * 0.8;
-            
-            // 添加点
-            points.push({
-                x: baseX + perpX * offset,
-                y: baseY + perpY * offset
-            });
-        }
-        
-        // 添加终点
-        points.push({ x: x2, y: y2 });
-        
-        // 创建闪电效果
-        const effect = {
-            points: points,
-            width: 3,
-            lifetime: 0.3,
-            timer: 0,
-            isGarbage: false,
-            
-            update: function(dt) {
-                this.timer += dt;
-                if (this.timer >= this.lifetime) {
-                    this.isGarbage = true;
-                    return;
-                }
-            },
-            
-            draw: function(ctx) {
-                if (this.isGarbage) return;
-                
-                const alpha = 1 - (this.timer / this.lifetime);
-                
-                // 绘制闪电
-                ctx.strokeStyle = `rgba(100, 180, 255, ${alpha})`;
-                ctx.lineWidth = this.width;
-                ctx.lineCap = 'round';
-                ctx.lineJoin = 'round';
-                
-                ctx.beginPath();
-                
-                // 移动到第一个点
-                const firstScreenPos = cameraManager.worldToScreen(this.points[0].x, this.points[0].y);
-                ctx.moveTo(firstScreenPos.x, firstScreenPos.y);
-                
-                // 连接所有点
-                for (let i = 1; i < this.points.length; i++) {
-                    const screenPos = cameraManager.worldToScreen(this.points[i].x, this.points[i].y);
-                    ctx.lineTo(screenPos.x, screenPos.y);
-                }
-                
-                ctx.stroke();
-                
-                // 绘制发光效果
-                ctx.strokeStyle = `rgba(200, 230, 255, ${alpha * 0.7})`;
-                ctx.lineWidth = this.width * 0.5;
-                ctx.stroke();
-            }
-        };
-        
-        visualEffects.push(effect);
-    }
-
-    /**
-     * 获取升级描述
-     * @returns {string} 升级描述
-     */
-    getUpgradeDescription() {
-        let desc = `Lv${this.level + 1}: `;
-        
-        if (this.level % 2 === 0) {
-            desc += "+1 链式攻击。";
-        } else if (this.level % 4 === 3) {
-            desc += "+1 攻击次数。";
-        } else {
-            desc += "+伤害/范围。";
-        }
-        
-        return desc;
+    getCurrentDescription() {
+        return `发射${this.stats.count}个磁力波，造成${this.stats.damage}伤害并吸引${this.stats.pullRadius}范围内的敌人。${this.stats.stun ? `吸引后晕眩敌人${this.stats.stunDuration.toFixed(1)}秒。` : ''}`;
     }
 
     /**
      * 获取初始描述
-     * @returns {string} 初始描述
      */
     getInitialDescription() {
-        return "发射闪电刀刃，可以连锁攻击敌人。";
+        return "发射磁力波，吸引敌人并造成范围伤害。";
     }
 }
 
 /**
- * 握手武器类
- * 发射握手攻击，可以击退敌人
+ * 火山法杖
+ * 召唤小型火山爆发，造成区域伤害和燃烧效果
  */
-class HandshakeWeapon extends Weapon {
+class VolcanoStaffWeapon extends Weapon {
     /**
      * 静态属性
      */
-    static Name = "握手";
-    static Emoji = EMOJI.WEAPON_HANDSHAKE;
-    static MaxLevel = 8;
+    static Name = "火山法杖";
+    static Emoji = "🌋";
+    static MaxLevel = 10;
     static Evolution = {
-        requires: "Wings",
-        evolvesTo: "HighFive"
+        requires: "Knives",
+        evolvesTo: "MeteorStaff"
     };
 
     /**
      * 构造函数
      */
     constructor() {
-        super(HandshakeWeapon.Name, HandshakeWeapon.Emoji, 1.5, HandshakeWeapon.MaxLevel);
+        super(VolcanoStaffWeapon.Name, VolcanoStaffWeapon.Emoji, 1.8, VolcanoStaffWeapon.MaxLevel);
     }
 
     /**
@@ -530,15 +437,130 @@ class HandshakeWeapon extends Weapon {
      */
     calculateStats() {
         this.stats = {
-            damage: 20 + (this.level - 1) * 4,
-            count: 2 + Math.floor(this.level / 2),
-            radius: 60 + (this.level - 1) * 10,
-            speed: 200 + (this.level - 1) * 15,
-            cooldown: Math.max(0.5, this.baseCooldown - (this.level - 1) * 0.1),
-            duration: 3.0,
-            knockback: 10 + (this.level - 1) * 2,
-            explosionRadius: 40 + (this.level - 1) * 5,
-            stunChance: 0.1 + (this.level - 1) * 0.03
+            damage: 12 + (this.level - 1) * 3,  // 基础伤害
+            cooldown: Math.max(1.0, 1.8 - (this.level - 1) * 0.08),  // 冷却时间
+            count: 1 + Math.floor((this.level - 1) / 3),  // 每3级增加一个火山
+            radius: 70 + (this.level - 1) * 5,  // 爆发半径
+            eruptions: 3 + Math.floor((this.level - 1) / 2),  // 爆发次数
+            eruptionDelay: 0.5,  // 爆发间隔
+            burnDamage: 2 + Math.floor((this.level - 1) * 0.5),  // 燃烧伤害
+            burnDuration: 2 + (this.level - 1) * 0.3,  // 燃烧持续时间
+            lavaPuddle: this.level >= 7,  // 7级以上留下熔岩池
+            lavaDuration: 3 + (this.level - 7) * 0.5  // 熔岩池持续时间
+        };
+        
+        // 10级额外效果
+        if (this.level === 10) {
+            this.stats.eruptions += 2;  // 额外爆发次数
+            this.stats.burnDamage *= 1.5;  // 燃烧伤害提升
+        }
+    }
+
+    /**
+     * 发射武器
+     * @param {Player} owner - 拥有者
+     */
+    fire(owner) {
+        const ownerStats = this.getOwnerStats(owner);
+        const volcanoCount = this.stats.count + (ownerStats.projectileCountBonus || 0);
+        const damage = this.stats.damage * (ownerStats.damageMultiplier || 1);
+        const radius = this.stats.radius * (ownerStats.areaMultiplier || 1);
+        const eruptions = this.stats.eruptions;
+        const eruptionDelay = this.stats.eruptionDelay / (ownerStats.attackSpeedMultiplier || 1);
+        const burnDamage = this.stats.burnDamage * (ownerStats.damageMultiplier || 1);
+        const burnDuration = this.stats.burnDuration * (ownerStats.durationMultiplier || 1);
+        const lavaPuddle = this.stats.lavaPuddle;
+        const lavaDuration = this.stats.lavaDuration * (ownerStats.durationMultiplier || 1);
+        
+        // 创建多个火山
+        for (let i = 0; i < volcanoCount; i++) {
+            let x, y;
+            
+            // 找到随机敌人
+            const enemy = owner.findRandomEnemy(500);
+            
+            if (enemy) {
+                // 在敌人附近创建火山
+                const offsetX = (Math.random() - 0.5) * 100;
+                const offsetY = (Math.random() - 0.5) * 100;
+                x = enemy.x + offsetX;
+                y = enemy.y + offsetY;
+            } else {
+                // 在玩家周围随机位置创建火山
+                const angle = Math.random() * Math.PI * 2;
+                const distance = 100 + Math.random() * 150;
+                x = owner.x + Math.cos(angle) * distance;
+                y = owner.y + Math.sin(angle) * distance;
+            }
+            
+            // 创建火山爆发
+            const volcano = new VolcanoEruption(
+                x, y, radius, damage, eruptions, eruptionDelay,
+                burnDamage, burnDuration, lavaPuddle ? lavaDuration : 0,
+                owner
+            );
+            
+            // 添加到危险区域列表
+            if (typeof hazards !== 'undefined') {
+                hazards.push(volcano);
+            } else {
+                console.error('hazards 数组未定义!');
+            }
+        }
+    }
+
+    /**
+     * 获取当前描述
+     */
+    getCurrentDescription() {
+        return `召唤${this.stats.count}个火山，造成${this.stats.damage}伤害并引发${this.stats.eruptions}次爆发。燃烧敌人造成每秒${this.stats.burnDamage}伤害，持续${this.stats.burnDuration.toFixed(1)}秒。${this.stats.lavaPuddle ? `留下持续${this.stats.lavaDuration.toFixed(1)}秒的熔岩池。` : ''}`;
+    }
+
+    /**
+     * 获取初始描述
+     */
+    getInitialDescription() {
+        return "召唤小型火山爆发，造成区域伤害和燃烧效果。";
+    }
+}
+
+/**
+ * 黑洞球
+ * 发射会变成黑洞的能量球
+ */
+class BlackHoleBallWeapon extends Weapon {
+    /**
+     * 静态属性
+     */
+    static Name = "黑洞球";
+    static Emoji = "⚫";
+    static MaxLevel = 10;
+    static Evolution = {
+        requires: "MagnetSphere",
+        evolvesTo: "EventHorizon"
+    };
+
+    /**
+     * 构造函数
+     */
+    constructor() {
+        super(BlackHoleBallWeapon.Name, BlackHoleBallWeapon.Emoji, 5.0, BlackHoleBallWeapon.MaxLevel);
+    }
+
+    /**
+     * 计算武器属性
+     */
+    calculateStats() {
+        this.stats = {
+            damage: 15 + (this.level - 1) * 5,
+            cooldown: Math.max(2.0, this.baseCooldown - (this.level - 1) * 0.3),
+            projectileSpeed: 120 + (this.level - 1) * 10,
+            blackHoleDuration: 3 + (this.level - 1) * 0.3,
+            blackHoleRadius: 80 + (this.level - 1) * 10,
+            pullStrength: 0.3 + (this.level - 1) * 0.05,
+            tickDamage: 3 + (this.level - 1) * 1,
+            tickInterval: 0.3,
+            collapse: this.level >= 10 // 10级特殊效果：黑洞结束时爆炸
         };
     }
 
@@ -547,228 +569,129 @@ class HandshakeWeapon extends Weapon {
      * @param {Player} owner - 拥有者
      */
     fire(owner) {
-        // 获取拥有者属性
         const ownerStats = this.getOwnerStats(owner);
+        const speed = this.stats.projectileSpeed * (ownerStats.projectileSpeedMultiplier || 1);
+        const damage = this.stats.damage * (ownerStats.damageMultiplier || 1);
+        const blackHoleDuration = this.stats.blackHoleDuration * (ownerStats.durationMultiplier || 1);
+        const size = GAME_FONT_SIZE * 1.5 * (ownerStats.areaMultiplier || 1);
+        const blackHoleRadius = this.stats.blackHoleRadius * (ownerStats.areaMultiplier || 1);
+        const tickDamage = this.stats.tickDamage * (ownerStats.damageMultiplier || 1);
+        const pullStrength = this.stats.pullStrength;
+        const collapse = this.stats.collapse;
         
-        // 获取属性
-        const damage = this.stats.damage;
-        const count = this.stats.count + (ownerStats.projectileCountBonus || 0);
-        const radius = this.stats.radius * (ownerStats.areaMultiplier || 1);
-        const speed = this.stats.speed * (ownerStats.projectileSpeedMultiplier || 1);
-        const duration = this.stats.duration * (ownerStats.durationMultiplier || 1);
-        const knockback = this.stats.knockback;
-        const size = GAME_FONT_SIZE * (ownerStats.areaMultiplier || 1);
+        // 寻找最近的敌人
+        const enemy = this.getClosestEnemy(800);
         
-        // 计算角度间隔
-        const angleStep = Math.PI * 2 / count;
-        
-        // 发射多个握手
-        for (let i = 0; i < count; i++) {
-            // 计算角度
-            const angle = i * angleStep + gameTime % (Math.PI * 2);
+        if (enemy) {
+            // 计算方向朝向敌人
+            const dx = enemy.x - owner.x;
+            const dy = enemy.y - owner.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
             
-            // 计算位置
-            const x = owner.x + Math.cos(angle) * radius;
-            const y = owner.y + Math.sin(angle) * radius;
+            let dirX = dx / dist;
+            let dirY = dy / dist;
+            
+            // 添加一些随机性
+            dirX += (Math.random() - 0.5) * 0.2;
+            dirY += (Math.random() - 0.5) * 0.2;
+            
+            // 规范化方向
+            const length = Math.sqrt(dirX * dirX + dirY * dirY);
+            dirX /= length;
+            dirY /= length;
             
             // 计算速度
+            const vx = dirX * speed;
+            const vy = dirY * speed;
+            
+            // 创建黑洞球投射物
+            const ball = new BlackHoleBallProjectile(
+                owner.x, owner.y, size, vx, vy, damage, 1.5, 
+                ownerStats, blackHoleDuration, blackHoleRadius, 
+                tickDamage, this.stats.tickInterval, pullStrength, collapse
+            );
+            
+            ball.owner = owner;
+            projectiles.push(ball);
+        } else {
+            // 没有敌人时，随机方向
+            const angle = Math.random() * Math.PI * 2;
             const vx = Math.cos(angle) * speed;
             const vy = Math.sin(angle) * speed;
             
-            // 使用对象池生成弹射物
-            const projectile = spawnProjectile(
-                x, 
-                y, 
-                EMOJI.PROJECTILE_HANDSHAKE, 
-                size, 
-                vx, 
-                vy, 
-                damage, 
-                1, // 只能命中一个敌人
-                duration, 
-                ownerStats
+            // 创建黑洞球投射物
+            const ball = new BlackHoleBallProjectile(
+                owner.x, owner.y, size, vx, vy, damage, 1.5, 
+                ownerStats, blackHoleDuration, blackHoleRadius, 
+                tickDamage, this.stats.tickInterval, pullStrength, collapse
             );
             
-            // 添加击退和爆炸效果
-            if (projectile) {
-                projectile.knockback = knockback;
-                projectile.explosionRadius = this.stats.explosionRadius * (ownerStats.areaMultiplier || 1);
-                
-                // 重写命中处理
-                const originalOnHit = projectile.onHitEnemy || function() {};
-                
-                projectile.onHitEnemy = function(enemy) {
-                    // 调用原始命中处理
-                    originalOnHit.call(this, enemy);
-                    
-                    // 应用击退效果
-                    if (!enemy.isGarbage && enemy.isActive) {
-                        // 计算击退方向和距离
-                        const knockbackX = this.vx / Math.sqrt(this.vx * this.vx + this.vy * this.vy) * this.knockback;
-                        const knockbackY = this.vy / Math.sqrt(this.vx * this.vx + this.vy * this.vy) * this.knockback;
-                        
-                        // 应用击退
-                        enemy.x += knockbackX;
-                        enemy.y += knockbackY;
-                        
-                        // 添加眩晕效果
-                        if (Math.random() < owner.weapon.stats.stunChance) {
-                            if (!enemy.statusEffects) {
-                                enemy.statusEffects = {};
-                            }
-                            
-                            enemy.statusEffects.stun = {
-                                duration: 0.5,
-                                source: owner
-                            };
-                        }
-                    }
-                    
-                    // 创建爆炸效果
-                    this.onDestroy();
-                    
-                    // 标记为垃圾
-                    this.isGarbage = true;
-                    this.isActive = false;
-                };
-                
-                // 重写销毁处理
-                projectile.onDestroy = function() {
-                    // 创建爆炸效果
-                    const explosionRadius = this.explosionRadius;
-                    const explosionDamage = this.damage * 0.8;
-                    
-                    // 对范围内的敌人造成伤害
-                    enemies.forEach(enemy => {
-                        if (enemy.isGarbage || !enemy.isActive) return;
-                        
-                        const dx = enemy.x - this.x;
-                        const dy = enemy.y - this.y;
-                        const distSq = dx * dx + dy * dy;
-                        
-                        if (distSq <= explosionRadius * explosionRadius) {
-                            // 计算伤害衰减
-                            const dist = Math.sqrt(distSq);
-                            const damageFactor = 1 - (dist / explosionRadius);
-                            const actualDamage = explosionDamage * damageFactor;
-                            
-                            // 造成伤害
-                            enemy.takeDamage(actualDamage, player);
-                            
-                            // 应用击退效果
-                            const knockbackFactor = this.knockback * 0.5 * damageFactor;
-                            const knockbackX = dx / dist * knockbackFactor;
-                            const knockbackY = dy / dist * knockbackFactor;
-                            
-                            // 应用击退
-                            enemy.x += knockbackX;
-                            enemy.y += knockbackY;
-                        }
-                    });
-                    
-                    // 创建爆炸视觉效果
-                    const effect = {
-                        x: this.x,
-                        y: this.y,
-                        radius: 0,
-                        maxRadius: explosionRadius,
-                        lifetime: 0.3,
-                        timer: 0,
-                        isGarbage: false,
-                        
-                        update: function(dt) {
-                            this.timer += dt;
-                            if (this.timer >= this.lifetime) {
-                                this.isGarbage = true;
-                                return;
-                            }
-                            
-                            this.radius = (this.timer / this.lifetime) * this.maxRadius;
-                        },
-                        
-                        draw: function(ctx) {
-                            if (this.isGarbage) return;
-                            
-                            const alpha = 0.5 - (this.timer / this.lifetime) * 0.5;
-                            const screenPos = cameraManager.worldToScreen(this.x, this.y);
-                            
-                            ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
-                            ctx.beginPath();
-                            ctx.arc(screenPos.x, screenPos.y, this.radius, 0, Math.PI * 2);
-                            ctx.fill();
-                        }
-                    };
-                    
-                    visualEffects.push(effect);
-                };
-                
-                // 添加旋转效果
-                projectile.rotation = 0;
-                projectile.rotationSpeed = (Math.random() * 2 - 1) * Math.PI * 4; // 更快的旋转速度
-                
-                // 重写绘制方法
-                const originalDraw = projectile.draw;
-                
-                projectile.draw = function(ctx) {
-                    if (this.isGarbage || !this.isActive) return;
-                    
-                    // 获取屏幕坐标
-                    const screenPos = cameraManager.worldToScreen(this.x, this.y);
-                    
-                    // 保存上下文
-                    ctx.save();
-                    
-                    // 平移到投射物位置
-                    ctx.translate(screenPos.x, screenPos.y);
-                    
-                    // 旋转
-                    ctx.rotate(this.rotation);
-                    
-                    // 绘制投射物
-                    ctx.font = `${this.size}px 'Segoe UI Emoji', Arial`;
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
-                    ctx.fillText(this.emoji, 0, 0);
-                    
-                    // 恢复上下文
-                    ctx.restore();
-                };
-                
-                // 重写更新方法
-                const originalUpdate = projectile.update;
-                
-                projectile.update = function(dt) {
-                    // 调用原始更新方法
-                    originalUpdate.call(this, dt);
-                    
-                    // 更新旋转
-                    this.rotation += this.rotationSpeed * dt;
-                };
-            }
+            ball.owner = owner;
+            projectiles.push(ball);
         }
     }
 
     /**
-     * 获取升级描述
-     * @returns {string} 升级描述
+     * 获取最近的敌人
+     * @param {number} maxRange - 最大范围
+     * @returns {Enemy|null} 敌人对象或null
      */
-    getUpgradeDescription() {
-        let desc = `Lv${this.level + 1}: `;
+    getClosestEnemy(maxRange) {
+        let closestEnemy = null;
+        let minDistanceSq = maxRange * maxRange;
+
+        // 确保this.owner存在，防止空指针异常
+        if (!this.owner) return null;
+
+        enemies.forEach(enemy => {
+            if (!enemy || enemy.isGarbage || !enemy.isActive) return;
+
+            const distanceSq = (enemy.x - this.owner.x) * (enemy.x - this.owner.x) +
+                             (enemy.y - this.owner.y) * (enemy.y - this.owner.y);
+            
+            if (distanceSq < minDistanceSq) {
+                minDistanceSq = distanceSq;
+                closestEnemy = enemy;
+            }
+        });
         
-        if (this.level % 2 === 1) {
-            desc += "+1 握手。";
-        } else {
-            desc += "+伤害/击退。";
-        }
-        
-        return desc;
+        return closestEnemy;
+    }
+
+    /**
+     * 获取当前描述
+     */
+    getCurrentDescription() {
+        return `发射黑洞球，吸引${this.stats.blackHoleRadius}范围内的敌人并造成每${this.stats.tickInterval.toFixed(1)}秒${this.stats.tickDamage}点伤害。${this.stats.collapse ? '黑洞结束时爆炸，造成额外伤害。' : ''}`;
     }
 
     /**
      * 获取初始描述
-     * @returns {string} 初始描述
      */
     getInitialDescription() {
-        return "发射握手攻击，可以击退敌人。";
+        return "发射会变成黑洞的能量球，吸引并伤害敌人。";
     }
 }
+
+// 在文件末尾添加新武器到全局武器列表
+if (typeof BASE_WEAPONS !== 'undefined') {
+    // 添加新武器
+    if (typeof BubbleWandWeapon === 'function') BASE_WEAPONS.push(BubbleWandWeapon);
+    if (typeof ChaosDiceWeapon === 'function') BASE_WEAPONS.push(ChaosDiceWeapon);
+    if (typeof MagnetGunWeapon === 'function') BASE_WEAPONS.push(MagnetGunWeapon);
+    if (typeof VolcanoStaffWeapon === 'function') BASE_WEAPONS.push(VolcanoStaffWeapon);
+    if (typeof BlackHoleBallWeapon === 'function') BASE_WEAPONS.push(BlackHoleBallWeapon);
+
+    console.log('New weapons added to BASE_WEAPONS:', 
+        BASE_WEAPONS.filter(w => 
+            w !== DaggerWeapon && 
+            w !== GarlicWeapon && 
+            w !== WhipWeapon &&
+            w !== FireBladeWeapon &&
+            w !== StormBladeWeapon &&
+            w !== HandshakeWeapon
+        ).map(w => w.name)
+    );
+} else {
+    console.error('BASE_WEAPONS not found! Make sure basic weapon files are loaded first.');
+} 

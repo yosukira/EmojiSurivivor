@@ -109,19 +109,19 @@ class Player extends Character {
             let newX = this.x + dx * currentSpeed * dt;
             let newY = this.y + dy * currentSpeed * dt;
             
-            // 限制玩家不能移动到屏幕外
-            const margin = this.size / 2;
+            // 限制玩家不能移动到世界边界外
+            const margin = this.size / 2; // 玩家自身的半宽/高作为边距
             
-            // 获取相机视口边界
-            const viewportMinX = cameraManager.x - GAME_WIDTH / 2;
-            const viewportMaxX = cameraManager.x + GAME_WIDTH / 2;
-            const viewportMinY = cameraManager.y - GAME_HEIGHT / 2;
-            const viewportMaxY = cameraManager.y + GAME_HEIGHT / 2;
+            // 世界边界
+            const worldMinX = margin; // 玩家中心不能小于 margin
+            const worldMaxX = GAME_WIDTH - margin; // 玩家中心不能大于 GAME_WIDTH - margin
+            const worldMinY = margin;
+            const worldMaxY = GAME_HEIGHT - margin;
             
             // 限制X坐标
-            newX = Math.max(viewportMinX + margin, Math.min(viewportMaxX - margin, newX));
+            newX = Math.max(worldMinX, Math.min(worldMaxX, newX));
             // 限制Y坐标
-            newY = Math.max(viewportMinY + margin, Math.min(viewportMaxY - margin, newY));
+            newY = Math.max(worldMinY, Math.min(worldMaxY, newY));
 
             // 更新位置
             this.x = newX;
@@ -178,17 +178,31 @@ class Player extends Character {
 
         // 应用被动物品加成
         this.passiveItems.forEach(item => {
-            // 如果有该属性的加成
-            if (item.bonuses[statName]) {
-                // 如果有乘数加成
-                if (item.bonuses[statName].mult) {
-                    multiplier += item.bonuses[statName].mult;
+            // 确保 item 和 item.bonuses 存在
+            if (!item || !item.bonuses) return;
+            
+            // 直接应用来自被动物品的加成
+            if (item.bonuses[statName] !== undefined) {
+                // 乘法属性（以Multiplier结尾）
+                if (statName.endsWith('Multiplier') || statName === 'speedMultiplier') {
+                    multiplier *= item.bonuses[statName];
+                } 
+                // 加法属性（以Bonus结尾）
+                else if (statName.endsWith('Bonus') || statName === 'armor' || statName === 'regen' || 
+                         statName === 'health' || statName === 'maxHealthBonus' || 
+                         statName === 'pickupRadius' || statName === 'projectileCountBonus') {
+                    additive += item.bonuses[statName];
                 }
-
-                // 如果有加值加成
-                if (item.bonuses[statName].add) {
-                    additive += item.bonuses[statName].add;
-                }
+            }
+            
+            // 特殊处理：如果查询最大生命值，也考虑maxHealthMultiplier
+            if (statName === 'health' && item.bonuses.maxHealthMultiplier !== undefined) {
+                multiplier *= item.bonuses.maxHealthMultiplier;
+            }
+            
+            // 特殊处理：如果查询拾取半径，也考虑pickupRadiusBonus
+            if (statName === 'pickupRadius' && item.bonuses.pickupRadiusBonus !== undefined) {
+                additive += item.bonuses.pickupRadiusBonus;
             }
         });
 
@@ -310,6 +324,15 @@ class Player extends Character {
     }
 
     /**
+     * 添加被动物品（别名方法，与 addPassive 功能相同）
+     * @param {PassiveItem} passive - 被动物品
+     * @returns {boolean} 是否成功添加
+     */
+    addPassiveItem(passive) {
+        return this.addPassive(passive);
+    }
+
+    /**
      * 受到伤害
      * @param {number} amount - 伤害量
      * @param {GameObject} source - 伤害来源
@@ -325,7 +348,7 @@ class Player extends Character {
         if (isAuraDamage || isBurnDamage) {
             actualDamage = amount; // 光环和燃烧伤害直接应用，不计算护甲，允许小于1
         } else {
-            const armor = this.getStat('armor');
+        const armor = this.getStat('armor');
             actualDamage = Math.max(1, amount - armor); // 普通攻击计算护甲，最低为1
         }
 
@@ -341,10 +364,10 @@ class Player extends Character {
         // 对于非常小的光环伤害，可以选择不显示
         if (!isAuraDamage || Math.abs(actualDamage) >= 0.01) {
             let damageNumberObj = null;
-            if (inactiveDamageNumbers.length > 0) {
+        if (inactiveDamageNumbers.length > 0) {
                 damageNumberObj = inactiveDamageNumbers.pop();
                 damageNumberObj.init(this.x, this.y - this.size / 2, damageText, damageTakenSize, damageTakenColor, 0.7);
-            } else {
+        } else {
                 damageNumberObj = new DamageNumber(this.x, this.y - this.size / 2, damageText, damageTakenSize, damageTakenColor, 0.7);
             }
             damageNumbers.push(damageNumberObj);
@@ -352,7 +375,7 @@ class Player extends Character {
 
         // 设置短暂的无敌时间 (非光环/燃烧伤害)
         if (!isAuraDamage && !isBurnDamage) {
-            this.invincibleTime = 0.5;
+        this.invincibleTime = 0.5;
         }
 
         // 检查是否死亡
@@ -381,40 +404,27 @@ class Player extends Character {
      * @returns {Enemy|null} 最近的敌人
      */
     findNearestEnemy(maxDistance = Infinity) {
-        // 如果没有敌人，返回null
-        if (enemies.length === 0) return null;
+        let nearestEnemy = null;
+        let minDistanceSq = maxDistance * maxDistance;
 
-        let bestTarget = null;
-        let bestScore = Infinity;
-        const maxDistSq = maxDistance * maxDistance;
-
-        // 遍历所有敌人
         enemies.forEach(enemy => {
-            // 跳过不活动或已标记为垃圾的敌人
             if (enemy.isGarbage || !enemy.isActive) return;
 
-            // 计算距离的平方
+            // 确保敌人在相机视图内 (或大致在视图内，可以加一点缓冲)
+            if (!cameraManager.isPositionInView(enemy.x, enemy.y, enemy.size)) { // 假设 isPositionInView 接受第三个参数作为缓冲/大小
+                return; // 如果不在视图内，则跳过此敌人
+            }
+
             const dx = enemy.x - this.x;
             const dy = enemy.y - this.y;
-            const distSq = dx * dx + dy * dy;
+            const distanceSq = dx * dx + dy * dy;
 
-            // 如果超出最大距离，则跳过
-            if (distSq > maxDistSq) return;
-
-            // 计算分数：距离越近，血量越少，分数越低
-            // 距离权重为1，血量权重可以调整，例如 0.5
-            // 为了避免除以零，如果 enemy.maxHealth 为0或未定义，则将 healthFactor 设为较大值
-            const healthFactor = (enemy.maxHealth && enemy.maxHealth > 0) ? (enemy.health / enemy.maxHealth) : 1;
-            // 综合考虑距离和血量，距离的平方根更符合直观感受
-            const score = Math.sqrt(distSq) + healthFactor * 50; // 血量权重为50，可以根据需要调整
-
-            if (score < bestScore) {
-                bestScore = score;
-                bestTarget = enemy;
+            if (distanceSq < minDistanceSq) {
+                minDistanceSq = distanceSq;
+                nearestEnemy = enemy;
             }
         });
-
-        return bestTarget;
+        return nearestEnemy;
     }
 
     /**
@@ -423,28 +433,28 @@ class Player extends Character {
      * @returns {Enemy|null} 随机敌人
      */
     findRandomEnemy(maxDistance = Infinity) {
-        // 如果没有敌人，返回null
-        if (enemies.length === 0) return null;
+        const validEnemies = [];
+        enemies.forEach(enemy => {
+            if (enemy.isGarbage || !enemy.isActive) return;
 
-        // 可用敌人列表
-        const availableEnemies = enemies.filter(enemy => {
-            // 跳过不活动或已标记为垃圾的敌人
-            if (enemy.isGarbage || !enemy.isActive) return false;
+            // 确保敌人在相机视图内
+            if (!cameraManager.isPositionInView(enemy.x, enemy.y, enemy.size)) {
+                return;
+            }
 
-            // 计算距离
             const dx = enemy.x - this.x;
             const dy = enemy.y - this.y;
-            const distSq = dx * dx + dy * dy;
+            const distanceSq = dx * dx + dy * dy;
 
-            // 检查是否在最大距离内
-            return distSq <= maxDistance * maxDistance;
+            if (distanceSq <= maxDistance * maxDistance) {
+                validEnemies.push(enemy);
+            }
         });
 
-        // 如果没有可用敌人，返回null
-        if (availableEnemies.length === 0) return null;
-
-        // 返回随机敌人
-        return availableEnemies[Math.floor(Math.random() * availableEnemies.length)];
+        if (validEnemies.length > 0) {
+            return validEnemies[Math.floor(Math.random() * validEnemies.length)];
+        }
+        return null;
     }
 
     /**
@@ -494,10 +504,10 @@ class Player extends Character {
         if (playerImage && playerImage.complete && playerImage.naturalHeight !== 0) {
             // 无敌闪烁的 save/restore 已在内部处理 alpha
             ctx.save();
-            if (this.invincibleTime > 0) {
-                const blinkRate = 10;
+        if (this.invincibleTime > 0) {
+            const blinkRate = 10;
                 if (Math.sin(Date.now() / 100 * blinkRate * 2) > 0) { 
-                    ctx.globalAlpha = 0.5; // 内部修改 alpha
+                    ctx.globalAlpha = 0.7; // 提高透明度从0.5到0.7，让玩家更清晰可见
                 }
             }
             ctx.drawImage(playerImage, 
@@ -512,7 +522,7 @@ class Player extends Character {
             if (this.invincibleTime > 0) {
                 const blinkRate = 10;
                  if (Math.sin(Date.now() / 100 * blinkRate * 2) > 0) {
-                    ctx.globalAlpha = 0.5; // 内部修改 alpha
+                    ctx.globalAlpha = 0.7; // 提高透明度从0.5到0.7，让玩家更清晰可见
                 }
             }
             ctx.font = `${drawSize}px 'Segoe UI Emoji', Arial`;
@@ -524,7 +534,7 @@ class Player extends Character {
         
         // 绘制状态效果 (Character.draw 已经处理了状态效果的 save/restore 和 alpha)
         // 所以这里不需要再次 save/restore 或设置 alpha
-        this.drawStatusEffects(ctx); 
+        this.drawStatusEffects(ctx);
 
         ctx.restore(); // 恢复到 Player.draw 最开始保存的状态
     }

@@ -1049,7 +1049,7 @@ class HandshakeWeapon extends Weapon {
      * @returns {string} 初始描述
      */
     getInitialDescription() {
-        return "发射握手攻击敌人，造成范围伤害。在10级时获得眩晕效果。";
+        return "发射握手攻击敌人，造成范围伤害和眩晕效果。";
     }
 }
 

@@ -269,10 +269,10 @@ class Pickup extends GameObject {
      * 吸取所有经验宝石
      */
     magnetizeAllXP() {
-        // 创建磁铁特效 (使用 this.target 来引用玩家)
+        // 创建磁铁特效 (在拾取磁铁的位置，而不是玩家位置)
         const effect = {
-            x: this.target ? this.target.x : 0, // Safely access target
-            y: this.target ? this.target.y : 0,
+            x: this.x,  // 使用拾取物自身的位置
+            y: this.y,
             radius: 0,
             maxRadius: Math.min(GAME_WIDTH, GAME_HEIGHT) * 0.8, // 更大的视觉效果
             lifetime: 0.6,

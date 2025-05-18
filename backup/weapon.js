@@ -21,7 +21,7 @@ class Weapon {
         // 等级
         this.level = 1;
         // 最大等级
-        this.maxLevel = maxLevel || 10;
+        this.maxLevel = maxLevel || 8;
         // 冷却计时器
         this.cooldownTimer = 0;
         // 拥有者
