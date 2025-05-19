@@ -133,6 +133,12 @@ const enemyManager = {
             availableEnemies = ENEMY_TYPES.filter(enemy => {
                 // 将游戏时间设置为至少180秒(第一个Boss的时间)，确保可以刷新更多敌人
                 const effectiveGameTime = Math.max(gameTime, 180);
+                
+                // 过滤掉静止的远程敌人
+                if (enemy.isRanged && enemy.speedMult <= 0.1) {
+                    return false;
+                }
+                
                 return !enemy.minTime || effectiveGameTime >= enemy.minTime;
             });
             
@@ -168,31 +174,18 @@ const enemyManager = {
         
         // 生成敌人
         for (let i = 0; i < spawnCountThisWave; i++) {
-            // 随机选择生成边缘 (0:上, 1:右, 2:下, 3:左)
-            const edge = Math.floor(Math.random() * 4);
-            let x, y;
-
-            const forcedMinSpawnDistance = 100; // 强制最小生成距离
-            const currentSpawnOffset = Math.max(SPAWN_PADDING, forcedMinSpawnDistance);
-
-            switch (edge) {
-                case 0: // 上边缘
-                    x = viewCenterX - halfWidth - currentSpawnOffset + Math.random() * (GAME_WIDTH + 2 * currentSpawnOffset);
-                    y = viewCenterY - halfHeight - currentSpawnOffset;
-                    break;
-                case 1: // 右边缘
-                    x = viewCenterX + halfWidth + currentSpawnOffset;
-                    y = viewCenterY - halfHeight - currentSpawnOffset + Math.random() * (GAME_HEIGHT + 2 * currentSpawnOffset);
-                    break;
-                case 2: // 下边缘
-                    x = viewCenterX - halfWidth - currentSpawnOffset + Math.random() * (GAME_WIDTH + 2 * currentSpawnOffset);
-                    y = viewCenterY + halfHeight + currentSpawnOffset;
-                    break;
-                case 3: // 左边缘
-                    x = viewCenterX - halfWidth - currentSpawnOffset;
-                    y = viewCenterY - halfHeight - currentSpawnOffset + Math.random() * (GAME_HEIGHT + 2 * currentSpawnOffset);
-                    break;
-            }
+            // 增加生成距离，确保敌人在视野外生成
+            const forcedMinSpawnDistance = 150; // 强制最小生成距离
+            const visualRange = Math.max(GAME_WIDTH, GAME_HEIGHT) / 2; // 玩家视野范围
+            const currentSpawnOffset = Math.max(SPAWN_PADDING, visualRange + forcedMinSpawnDistance);
+            
+            // 随机选择生成角度，确保敌人在视野外均匀分布
+            const spawnAngle = Math.random() * Math.PI * 2;
+            const spawnDistance = currentSpawnOffset + Math.random() * 100; // 添加一些随机性
+            
+            // 根据角度和距离计算生成坐标
+            const x = player.x + Math.cos(spawnAngle) * spawnDistance;
+            const y = player.y + Math.sin(spawnAngle) * spawnDistance;
             
             // 根据权重随机选择敌人类型
             const rand = Math.random() * totalWeight;
@@ -238,6 +231,14 @@ const bossManager = {
         if (this.currentBoss && this.currentBoss.isGarbage) {
             this.defeatedBossCount++;
             console.log(`Boss已击败! 总计击败: ${this.defeatedBossCount}`);
+            
+            // 取消Boss战场限制
+            cameraManager.deactivateBossArena();
+            
+            // 播放胜利音效或视觉效果
+            triggerScreenShake(5, 0.8);
+            
+            // 重置当前Boss
             this.currentBoss = null;
         }
 
@@ -289,6 +290,13 @@ const bossManager = {
 
         // 设置当前Boss
         this.currentBoss = boss;
+        
+        // 创建Boss战场，限制玩家移动范围
+        const bossArenaRadius = 800; // 设置一个较大的战场半径
+        cameraManager.activateBossArena(x, y, bossArenaRadius);
+        
+        // 播放Boss战场激活音效或视觉效果
+        triggerScreenShake(10, 1.5);
     },
     
     // 检查第一个Boss是否已被击败
@@ -414,8 +422,9 @@ function init() {
     document.getElementById('pauseScreen').classList.add('hidden');
     document.getElementById('startScreen').classList.add('hidden');
 
-    // 重置相机位置
+    // 重置相机位置和状态
     cameraManager.setPosition(player.x, player.y);
+    cameraManager.deactivateBossArena();
 
     // 开始游戏循环
     lastTime = performance.now();
@@ -509,8 +518,8 @@ function update(dt) {
         }
     }
 
-    // 更新相机
-    cameraManager.setTarget(player.x, player.y);
+    // 更新相机跟踪玩家
+    cameraManager.follow(player);
     cameraManager.update(dt);
     // 更新敌人管理器
     enemyManager.update(dt, gameTime, player);
@@ -680,9 +689,10 @@ function draw() {
             const pattern = offscreenCtx.createPattern(backgroundImage, 'repeat');
             offscreenCtx.fillStyle = pattern;
             
-            // 固定背景位置，不跟随相机移动
-            const offsetX = 0;
-            const offsetY = 0;
+            // 计算重复纹理的偏移，基于相机位置实现视差效果
+            // 将视差速度从0.5改为1.0，使背景与角色移动保持一致
+            const offsetX = -cameraManager.x * 1.0 % backgroundImage.width;
+            const offsetY = -cameraManager.y * 1.0 % backgroundImage.height;
             
             offscreenCtx.save();
             offscreenCtx.translate(offsetX, offsetY);

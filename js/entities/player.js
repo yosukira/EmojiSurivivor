@@ -109,20 +109,8 @@ class Player extends Character {
             let newX = this.x + dx * currentSpeed * dt;
             let newY = this.y + dy * currentSpeed * dt;
             
-            // 限制玩家不能移动到世界边界外
-            const margin = this.size / 2; // 玩家自身的半宽/高作为边距
+            // 不再限制玩家移动范围，允许无限大地图
             
-            // 世界边界
-            const worldMinX = margin; // 玩家中心不能小于 margin
-            const worldMaxX = GAME_WIDTH - margin; // 玩家中心不能大于 GAME_WIDTH - margin
-            const worldMinY = margin;
-            const worldMaxY = GAME_HEIGHT - margin;
-            
-            // 限制X坐标
-            newX = Math.max(worldMinX, Math.min(worldMaxX, newX));
-            // 限制Y坐标
-            newY = Math.max(worldMinY, Math.min(worldMaxY, newY));
-
             // 更新位置
             this.x = newX;
             this.y = newY;
@@ -544,17 +532,6 @@ class Player extends Character {
      * @param {CanvasRenderingContext2D} ctx - 画布上下文
      */
     drawPickupRadius(ctx) {
-        // 获取屏幕坐标
-        const screenPos = cameraManager.worldToScreen(this.x, this.y);
-
-        // 计算半径
-        const radius = this.pickupRadius * cameraManager.zoom;
-
-        // 绘制拾取范围 (已注释掉)
-        // ctx.strokeStyle = 'rgba(100, 200, 255, 0.2)';
-        // ctx.lineWidth = 1;
-        // ctx.beginPath();
-        // ctx.arc(screenPos.x, screenPos.y, radius, 0, Math.PI * 2);
-        // ctx.stroke();
+        // 不绘制拾取范围，可能是图中看到的白色圆
     }
 }
