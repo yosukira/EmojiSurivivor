@@ -75,64 +75,261 @@ const EMOJI = {
 // 敌人类型定义
 const ENEMY_TYPES = [
     {
-        emoji: EMOJI.ENEMY_NORMAL,
-        healthMult: 1,
+        name: "史莱姆",
+        emoji: "🟢",
+        svgPath: "assets/svg/slime.svg",
+        healthMult: 0.5, // 降低血量
         speedMult: 1,
-        damageMult: 1,
-        xpMult: 1,
-        weight: 10
-    },
-    {
-        emoji: EMOJI.ENEMY_FAST,
-        healthMult: 0.7,
-        speedMult: 1.5,
         damageMult: 0.8,
+        xpMult: 1,
+        weight: 10,
+        minTime: 0 // 开始就可以刷新
+    },
+    {
+        name: "蝙蝠",
+        emoji: "🦇",
+        healthMult: 0.35, // 降低血量
+        speedMult: 1.6,
+        damageMult: 0.6,
         xpMult: 1.2,
-        weight: 5,
-        minTime: 75
+        weight: 8,
+        minTime: 0 // 开始就可以刷新
     },
     {
-        emoji: EMOJI.ENEMY_TANK,
-        healthMult: 2.5,
-        speedMult: 0.6,
-        damageMult: 1.2,
-        xpMult: 1.5,
-        weight: 3,
-        minTime: 150
+        name: "骷髅",
+        emoji: "☠️",
+        healthMult: 0.65, // 降低血量
+        speedMult: 1.1,
+        damageMult: 0.9,
+        xpMult: 1.3,
+        weight: 7,
+        minTime: 180 // 第一个Boss之后出现
     },
     {
-        emoji: EMOJI.ENEMY_RANGED,
-        healthMult: 0.8,
+        name: "幽灵",
+        emoji: "👻",
+        healthMult: 0.4, // 降低血量
+        speedMult: 1.3,
+        damageMult: 0.8,
+        xpMult: 1.3,
+        weight: 7,
+        minTime: 180, // 第一个Boss之后出现
+        // 可以穿墙特性可以在碰撞检测或移动逻辑中处理
+    },
+    {
+        name: "僵尸",
+        emoji: "🧟",
+        healthMult: 1.2, // 降低血量但保持较高
         speedMult: 0.7,
         damageMult: 1.0,
-        xpMult: 1.3,
-        weight: 4,
-        minTime: 120,
-        isRanged: true,
-        attackRange: 200,
-        attackCooldownTime: 2.0,
-        projectileSpeed: 150
+        xpMult: 1.4,
+        weight: 6,
+        minTime: 180 // 第一个Boss之后出现
     },
     {
-        emoji: EMOJI.ENEMY_ELITE,
-        healthMult: 3.0,
+        name: "蜘蛛",
+        emoji: "🕷️",
+        healthMult: 0.6, // 降低血量
+        speedMult: 1.35,
+        damageMult: 0.8,
+        xpMult: 1.3,
+        weight: 5,
+        minTime: 240, // 4分钟后出现
+        isRanged: true, // 可以发射蛛网
+        attackRange: 180,
+        attackCooldownTime: 2.5,
+        projectileSpeed: 140
+    },
+    {
+        name: "魔法师",
+        emoji: "🧙",
+        healthMult: 0.8, // 降低血量
+        speedMult: 0.9,
+        damageMult: 1.3,
+        xpMult: 1.5,
+        weight: 5,
+        minTime: 300, // 5分钟后出现
+        isRanged: true,
+        attackRange: 220,
+        attackCooldownTime: 2.0,
+        projectileSpeed: 160
+    },
+    {
+        name: "火焰精灵",
+        emoji: "🔥",
+        healthMult: 0.5, // 降低血量
+        speedMult: 1.2,
+        damageMult: 1.0,
+        xpMult: 1.4,
+        weight: 4,
+        minTime: 300, // 5分钟后出现
+        // 接触时造成燃烧效果可在Enemy.attack方法中实现
+        appliesBurn: true,
+        burnDamage: 2,
+        burnDuration: 3
+    },
+    {
+        name: "冰霜精灵",
+        emoji: "❄️",
+        healthMult: 0.5, // 降低血量
+        speedMult: 1.2,
+        damageMult: 0.9,
+        xpMult: 1.4,
+        weight: 4,
+        minTime: 300, // 5分钟后出现
+        // 接触时造成减速效果可在Enemy.attack方法中实现
+        appliesSlow: true,
+        slowFactor: 0.6,
+        slowDuration: 2
+    },
+    {
+        name: "雷电精灵",
+        emoji: "⚡",
+        healthMult: 0.5, // 降低血量
+        speedMult: 1.3,
+        damageMult: 1.2,
+        xpMult: 1.5,
+        weight: 4,
+        minTime: 300, // 5分钟后出现
+        // 接触时有几率眩晕玩家可在Enemy.attack方法中实现
+        appliesStun: true,
+        stunChance: 0.3,
+        stunDuration: 1
+    },
+    {
+        name: "精英史莱姆",
+        emoji: "🟣",
+        svgPath: "assets/svg/elite_slime.svg",
+        healthMult: 1.7, // 降低血量但保持较高
+        speedMult: 0.8,
+        damageMult: 1.2,
+        xpMult: 2.0,
+        weight: 3,
+        minTime: 360, // 6分钟后出现
+        // 死亡时分裂可在onDeath中处理
+        splitOnDeath: true,
+        splitCount: 2,
+        splitType: "史莱姆"
+    },
+    {
+        name: "精英骷髅",
+        emoji: "💀",
+        healthMult: 2.0, // 降低血量但保持较高
+        speedMult: 1.0,
+        damageMult: 1.5,
+        xpMult: 2.5,
+        weight: 3,
+        minTime: 420, // 7分钟后出现
+        isRanged: true,
+        attackRange: 200,
+        attackCooldownTime: 1.8,
+        projectileSpeed: 170
+    },
+    {
+        name: "精英僵尸",
+        emoji: "🧟‍♂️",
+        healthMult: 3.5, // 降低血量但保持较高
+        speedMult: 0.6,
+        damageMult: 1.7,
+        xpMult: 3.0,
+        weight: 2,
+        minTime: 480, // 8分钟后出现
+        // 毒气光环可以在update中处理
+        hasPoisonAura: true,
+        poisonAuraRadius: 100,
+        poisonDamage: 2,
+        slowFactor: 0.7
+    },
+    {
+        name: "恶魔",
+        emoji: "😈",
+        healthMult: 1.5, // 降低血量
+        speedMult: 1.1,
+        damageMult: 1.2,
+        xpMult: 2.0,
+        weight: 3,
+        minTime: 480, // 8分钟后出现
+        isRanged: true,
+        attackRange: 190,
+        attackCooldownTime: 1.5,
+        projectileSpeed: 180
+    },
+    {
+        name: "地狱犬",
+        emoji: "🐕",
+        healthMult: 1.0, // 降低血量
+        speedMult: 1.7,
+        damageMult: 1.0,
+        xpMult: 1.8,
+        weight: 3,
+        minTime: 480, // 8分钟后出现
+        // 冲刺行为可在updateMovement中处理
+        canDash: true,
+        dashCooldown: 3,
+        dashSpeed: 2.5,
+        dashDuration: 0.8
+    },
+    {
+        name: "骷髅弓手",
+        emoji: "🏹",
+        healthMult: 0.7, // 降低血量
+        speedMult: 1.1,
+        damageMult: 1.0,
+        xpMult: 1.5,
+        weight: 4,
+        minTime: 540, // 9分钟后出现
+        isRanged: true,
+        attackRange: 250,
+        attackCooldownTime: 2.2,
+        projectileSpeed: 190
+    },
+    {
+        name: "巫师",
+        emoji: "🧙‍♀️",
+        healthMult: 1.2, // 降低血量
         speedMult: 0.8,
         damageMult: 1.5,
         xpMult: 2.0,
-        weight: 2,
-        minTime: 300
+        weight: 3,
+        minTime: 540, // 9分钟后出现
+        isRanged: true,
+        attackRange: 230,
+        attackCooldownTime: 2.5,
+        projectileSpeed: 150,
+        // 减速法术可以在projectile命中时处理
+        appliesSlowOnHit: true,
+        slowFactor: 0.5,
+        slowDuration: 3
     },
     {
-        emoji: EMOJI.ENEMY_BOMBER,
-        healthMult: 1.2,
-        speedMult: 1.2,
-        damageMult: 2.0,
-        xpMult: 1.8,
+        name: "堕落天使",
+        emoji: "👼",
+        healthMult: 2.4, // 降低血量但保持较高
+        speedMult: 1.0,
+        damageMult: 1.8,
+        xpMult: 2.5,
         weight: 2,
-        minTime: 240,
+        minTime: 600, // 10分钟后出现
+        // 周期性光束攻击可在update中处理
+        canShootBeam: true,
+        beamCooldown: 5,
+        beamDamage: 15,
+        beamWidth: 30,
+        beamDuration: 1.5
+    },
+    {
+        name: "炸弹",
+        emoji: "💣",
+        healthMult: 0.6, // 较低血量，容易被打爆
+        speedMult: 1.3, // 移动速度较快
+        damageMult: 0.5, // 直接伤害低
+        xpMult: 1.5, // 较高经验值
+        weight: 4,
+        minTime: 360, // 6分钟后出现
+        // 死亡时爆炸
         explodeOnDeath: true,
-        explodeRadius: 120,
-        explodeDamage: 15
+        explodeRadius: 150, // 爆炸范围
+        explodeDamage: 20 // 爆炸伤害
     }
 ];
 
@@ -141,12 +338,12 @@ const BOSS_TYPES = [
     {
         name: "骷髅王",
         emoji: EMOJI.BOSS_SKELETON,
-        healthMult: 2.0,
+        healthMult: 1.6, // 降低血量
         speedMult: 0.8,
         damageMult: 1.0,
         xpMult: 1.0,
         attackPattern: "melee",
-        minTime: 0,
+        minTime: 180, // 第一个Boss在3分钟出现
         earthquakeRadius: 280,
         earthquakeDamageMultiplier: 1.8,
         earthquakeDuration: 2.0,
@@ -157,13 +354,13 @@ const BOSS_TYPES = [
     {
         name: "幽灵领主",
         emoji: EMOJI.BOSS_GHOST,
-        healthMult: 1.6,
+        healthMult: 1.3, // 降低血量
         speedMult: 1.2,
         damageMult: 0.9,
         xpMult: 1.2,
         attackPattern: "ranged",
         attackCooldown: 1.8,
-        minTime: BOSS_INTERVAL,
+        minTime: 420, // 7分钟出现(第二个Boss)
         specialAbilityCooldown: 6.0,
         specialAttackWarningDuration: 1.5,
         displaySizeMultiplier: 4.0,
@@ -184,34 +381,34 @@ const BOSS_TYPES = [
     {
         name: "巨型僵尸",
         emoji: EMOJI.BOSS_ZOMBIE,
-        healthMult: 4.0,
+        healthMult: 3.2, // 降低血量
         speedMult: 0.6,
         damageMult: 1.8,
         xpMult: 5.0,
         attackPattern: "aoe",
-        minTime: BOSS_INTERVAL * 2,
+        minTime: 660, // 11分钟出现(第三个Boss)
         displaySizeMultiplier: 4.5
     },
     {
         name: "恶魔领主",
         emoji: EMOJI.BOSS_DEMON,
-        healthMult: 2.5,
+        healthMult: 2.0, // 降低血量
         speedMult: 1.0,
         damageMult: 1.1,
         xpMult: 2.0,
         attackPattern: "summon",
-        minTime: BOSS_INTERVAL * 3,
+        minTime: 900, // 15分钟出现(第四个Boss)
         displaySizeMultiplier: 4.0
     },
     {
         name: "远古巨龙",
         emoji: EMOJI.BOSS_DRAGON,
-        healthMult: 3.2,
+        healthMult: 2.5, // 降低血量
         speedMult: 0.7,
         damageMult: 1.5,
         xpMult: 2.5,
         attackPattern: "laser",
-        minTime: BOSS_INTERVAL * 4,
+        minTime: 1140, // 19分钟出现(第五个Boss)
         projectileSpeed: 200,
         laserWidth: 40,
         laserDamage: 20,

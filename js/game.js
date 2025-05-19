@@ -108,8 +108,19 @@ const enemyManager = {
         const halfWidth = GAME_WIDTH / 2;
         const halfHeight = GAME_HEIGHT / 2;
         
-        // 根据游戏时间获取可用敌人类型
-        const availableEnemies = ENEMY_TYPES.filter(enemy => !enemy.minTime || gameTime >= enemy.minTime);
+        // 根据游戏时间和Boss击败情况获取可用敌人类型
+        let availableEnemies;
+        
+        // 第一个Boss未击败前只刷新史莱姆和蝙蝠
+        if (!bossManager.isFirstBossDefeated()) {
+            availableEnemies = ENEMY_TYPES.filter(enemy => 
+                (!enemy.minTime || enemy.minTime === 0) && 
+                (enemy.name === "史莱姆" || enemy.name === "蝙蝠")
+            );
+        } else {
+            // 第一个Boss击败后，根据时间解锁更多敌人
+            availableEnemies = ENEMY_TYPES.filter(enemy => !enemy.minTime || gameTime >= enemy.minTime);
+        }
         
         // 计算总权重
         const totalWeight = availableEnemies.reduce((sum, enemy) => sum + enemy.weight, 0);
@@ -135,7 +146,7 @@ const enemyManager = {
         }
         // 确保不会因为一次生成过多而超过总数上限（虽然 update 中已检查，这里再保险一下）
         spawnCountThisWave = Math.min(spawnCountThisWave, maxTotalEnemies - enemies.length);
-        if (spawnCountThisWave <= 0) return; // 如果已满或计算为0，则不生成
+        if (spawnCountThisWave <= 0) return;
         
         // 生成敌人
         for (let i = 0; i < spawnCountThisWave; i++) {
@@ -192,20 +203,25 @@ const enemyManager = {
 
 // Boss管理器
 const bossManager = {
-    nextBossTime: BOSS_INTERVAL,
+    nextBossTime: FIRST_BOSS_TIME, // 使用新的第一个Boss时间
     currentBoss: null,
     bossWarningTimer: 0,
     showingWarning: false,
     pendingBossType: null, // 新增：用于存储待生成的Boss类型
+    defeatedBossCount: 0, // 跟踪已击败的Boss数量
 
     update(dt, gameTime, player) {
         // 如果当前有Boss，更新Boss
         if (this.currentBoss && !this.currentBoss.isGarbage) {
             return;
         }
-
-        // 重置当前Boss
-        this.currentBoss = null;
+        
+        // 如果之前有Boss且现在没有了，表示Boss被击败
+        if (this.currentBoss && this.currentBoss.isGarbage) {
+            this.defeatedBossCount++;
+            console.log(`Boss已击败! 总计击败: ${this.defeatedBossCount}`);
+            this.currentBoss = null;
+        }
 
         // 如果正在显示警告，更新警告计时器
         if (this.showingWarning) {
@@ -230,7 +246,7 @@ const bossManager = {
                 // 随机选择一个Boss并存储
                 this.pendingBossType = availableBosses[Math.floor(Math.random() * availableBosses.length)];
                 this.showBossWarning(this.pendingBossType.name); // 用选定的Boss名字显示警告
-            this.showingWarning = true;
+                this.showingWarning = true;
             } else {
                 // 如果没有可用的Boss（理论上不应发生，除非BOSS_TYPES为空或minTime都过高）
                 // 简单地推迟下一次检查，或者可以记录一个错误
@@ -238,20 +254,6 @@ const bossManager = {
             }
             this.nextBossTime = gameTime + BOSS_INTERVAL; // 设置下一次Boss生成的时间
         }
-    },
-
-    showBossWarning(bossName) { // 修改：接收Boss名字
-        // 显示Boss警告
-        const bossWarningElement = document.getElementById('bossWarning');
-        bossWarningElement.textContent = `👹 BOSS ${bossName} 来袭! 👹`; // 使用传入的Boss名字
-        bossWarningElement.style.display = 'block';
-        bossWarningElement.classList.add('animate');
-
-        // 3秒后隐藏警告
-        setTimeout(() => {
-            bossWarningElement.style.display = 'none';
-            bossWarningElement.classList.remove('animate');
-        }, 3000);
     },
 
     spawnBoss(player, bossTypeToSpawn) { // 修改：接收预选的Boss类型
@@ -269,6 +271,24 @@ const bossManager = {
 
         // 设置当前Boss
         this.currentBoss = boss;
+    },
+    
+    // 检查第一个Boss是否已被击败
+    isFirstBossDefeated() {
+        return this.defeatedBossCount > 0;
+    },
+    
+    showBossWarning(bossName) {
+        // 显示Boss警告
+        const warning = document.createElement("div");
+        warning.className = "boss-warning";
+        warning.textContent = `⚠️ ${bossName}即将出现! ⚠️`;
+        document.body.appendChild(warning);
+        
+        // 3秒后移除警告
+        setTimeout(() => {
+            warning.remove();
+        }, 3000);
     },
 
     cleanup() {

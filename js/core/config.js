@@ -66,19 +66,20 @@ const PLAYER_DEFAULT_STATS = {
 
 // 基础敌人属性
 const ENEMY_BASE_STATS = {
-    health: 30,
+    health: 25, // 降低基础血量
     speed: 70,      // 基础移动速度
     damage: 8,     // 基础伤害
     xp: 2          // 基础经验值 (原为 5)
 };
 
 // Boss 基础属性乘数 (基于 ENEMY_BASE_STATS)
-const BOSS_BASE_HEALTH_MULTIPLIER = 10; 
+const BOSS_BASE_HEALTH_MULTIPLIER = 8; // 降低基础健康乘数
 const BOSS_BASE_DAMAGE_MULTIPLIER = 2.5; 
 
 // 其他游戏设定
 const MAX_ENEMIES_ON_SCREEN = 500; // 屏幕上允许的最大敌人数量
-const BOSS_INTERVAL = 120; // Boss出现间隔时间（秒）
+const BOSS_INTERVAL = 240; // Boss出现间隔时间（秒）：4分钟
+const FIRST_BOSS_TIME = 180; // 第一个Boss出现时间（秒）：3分钟
 // SPAWN_PADDING 和 ENEMY_ATTACK_RANGE 已在下面定义，将检查并使用新值如果不同
 
 // 敌人生成边界距离 - 确保敌人从屏幕外生成
@@ -125,8 +126,23 @@ function showBossWarning(bossName) {
     // 设置警告文本
     warningElement.textContent = `👹 BOSS ${bossName} 来袭! 👹`;
 
-    // 显示警告
+    // 显示警告 - 使用toast样式而不是全屏幕样式
     warningElement.style.display = 'block';
+    warningElement.style.top = '70px';
+    warningElement.style.position = 'absolute';
+    warningElement.style.zIndex = '100';
+    warningElement.style.left = '50%';
+    warningElement.style.transform = 'translateX(-50%)';
+    warningElement.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+    warningElement.style.color = '#e74c3c';
+    warningElement.style.padding = '10px 20px';
+    warningElement.style.borderRadius = '5px';
+    warningElement.style.fontSize = '24px';
+    warningElement.style.fontWeight = 'bold';
+    warningElement.style.boxShadow = '0 0 10px rgba(0, 0, 0, 0.5)';
+    warningElement.style.textAlign = 'center';
+    warningElement.style.width = 'auto';
+    warningElement.style.maxWidth = '80%';
 
     // 添加动画类
     warningElement.classList.add('animate');

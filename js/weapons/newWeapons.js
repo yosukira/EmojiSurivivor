@@ -69,7 +69,7 @@ class BubbleWandWeapon extends Weapon {
         // 确定发射角度范围，倾向于在玩家前方扇形区域发射
         const baseAngle = Math.atan2(owner.lastMoveDirection.y, owner.lastMoveDirection.x);
         const angleSpread = Math.PI * 0.6; // 60度扇形范围
-        
+
         // 随机方向发射泡泡
         for (let i = 0; i < projectileCount; i++) {
             // 计算发射角度，在玩家面向方向的扇形范围内
@@ -203,8 +203,8 @@ class ChaosDiceWeapon extends Weapon {
             
             // 第二个效果不能与第一个相同
             let effect2;
-            do {
-                effect2 = this.effects[Math.floor(Math.random() * this.effects.length)];
+                do {
+                    effect2 = this.effects[Math.floor(Math.random() * this.effects.length)];
             } while (effect2.id === effect1.id);
             
             // 创建骰子投射物
@@ -334,7 +334,7 @@ class MagnetGunWeapon extends Weapon {
                 // 计算方向朝向敌人
                 const dx = enemy.x - owner.x;
                 const dy = enemy.y - owner.y;
-                const dist = Math.sqrt(dx * dx + dy * dy);
+            const dist = Math.sqrt(dx * dx + dy * dy);
                 
                 dirX = dx / dist;
                 dirY = dy / dist;
@@ -366,7 +366,7 @@ class MagnetGunWeapon extends Weapon {
             projectiles.push(wave);
         }
     }
-    
+
     /**
      * 获取最近的敌人
      * @param {number} maxRange - 最大范围
@@ -485,7 +485,7 @@ class VolcanoStaffWeapon extends Weapon {
                 const offsetY = (Math.random() - 0.5) * 100;
                 x = enemy.x + offsetX;
                 y = enemy.y + offsetY;
-            } else {
+                } else {
                 // 在玩家周围随机位置创建火山
                 const angle = Math.random() * Math.PI * 2;
                 const distance = 100 + Math.random() * 150;
@@ -494,17 +494,17 @@ class VolcanoStaffWeapon extends Weapon {
             }
             
             // 创建火山爆发
-            const volcano = new VolcanoEruption(
+                const volcano = new VolcanoEruption(
                 x, y, radius, damage, eruptions, eruptionDelay,
                 burnDamage, burnDuration, lavaPuddle ? lavaDuration : 0,
                 owner
-            );
-            
-            // 添加到危险区域列表
-            if (typeof hazards !== 'undefined') {
-                hazards.push(volcano);
-            } else {
-                console.error('hazards 数组未定义!');
+                );
+                
+                // 添加到危险区域列表
+                if (typeof hazards !== 'undefined') {
+                    hazards.push(volcano);
+                } else {
+                    console.error('hazards 数组未定义!');
             }
         }
     }
@@ -618,8 +618,8 @@ class BlackHoleBallWeapon extends Weapon {
             const angle = Math.random() * Math.PI * 2;
             const vx = Math.cos(angle) * speed;
             const vy = Math.sin(angle) * speed;
-            
-            // 创建黑洞球投射物
+        
+        // 创建黑洞球投射物
             const ball = new BlackHoleBallProjectile(
                 owner.x, owner.y, size, vx, vy, damage, 1.5, 
                 ownerStats, blackHoleDuration, blackHoleRadius, 

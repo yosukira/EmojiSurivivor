@@ -75,7 +75,7 @@ class BubbleProjectile extends Projectile {
         }
         
         if (this.trapped) {
-            // 已困住敌人，更新位置以跟随敌人
+            // 已困住敌人，检查敌人状态
             if (this.trapped.isGarbage || !this.trapped.isActive || this.trapped.health <= 0) {
                 // 敌人已消失或已死亡，泡泡爆炸
                 this.burst();
@@ -209,11 +209,12 @@ class BubbleProjectile extends Projectile {
             enemy.statusEffects = {};
         }
         
-        // 添加特殊的困住效果
+        // 添加特殊的困住效果，增加对敌人死亡状态的检测
         enemy.statusEffects.bubbleTrap = {
             duration: this.trapDuration,
             originalSpeed: enemy.speed,
-            source: this.owner
+            source: this.owner,
+            bubble: this // 保存对泡泡实例的引用
         };
         
         // 几乎停止移动
@@ -242,6 +243,9 @@ class BubbleProjectile extends Projectile {
             
             // 再次造成伤害
             this.trapped.takeDamage(this.damage, this.owner);
+        } else if (this.trapped) {
+            // 敌人已死亡或消失，但仍需清理状态效果（防止引用错误）
+            this.trapped = null;
         }
         
         // 创建爆炸效果
@@ -251,6 +255,15 @@ class BubbleProjectile extends Projectile {
         if (this.splitOnBurst && this.owner) {
             this.createSplitBubbles();
         }
+        
+        // 设置一个短暂的爆炸时间后强制清理
+        this.burstDelay = 0.2;
+        
+        // 强制在短时间后完全清理
+        setTimeout(() => {
+            this.isGarbage = true;
+            this.isActive = false;
+        }, this.burstDelay * 1000);
     }
 
     /**
@@ -268,7 +281,7 @@ class BubbleProjectile extends Projectile {
                 vx: Math.cos(angle) * speed,
                 vy: Math.sin(angle) * speed,
                 size: this.size * 0.3,
-                lifetime: 0.3 + Math.random() * 0.2,
+                lifetime: 0.2 + Math.random() * 0.1, // 减少生命周期
                 timer: 0,
                 isGarbage: false,
                 
@@ -348,20 +361,47 @@ class BubbleProjectile extends Projectile {
             if (this.isBursting) {
                 // 绘制爆炸效果
                 const burstProgress = this.burstTimer / this.burstDelay;
-                const burstSize = this.size * (1 + burstProgress * 1.5);
-                const alpha = 1 - burstProgress;
-                
-                // 绘制爆炸光环
-                ctx.fillStyle = `rgba(200, 230, 255, ${alpha * 0.5})`;
-                ctx.beginPath();
-                ctx.arc(screenPos.x, screenPos.y, burstSize, 0, Math.PI * 2);
-                ctx.fill();
-                
-                // 绘制爆炸中心
-                ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.7})`;
-                ctx.beginPath();
-                ctx.arc(screenPos.x, screenPos.y, burstSize * 0.6, 0, Math.PI * 2);
-                ctx.fill();
+                // 如果爆炸进度超过80%，开始淡出
+                if (burstProgress > 0.8) {
+                    const alpha = 1 - (burstProgress - 0.8) * 5; // 快速淡出
+                    if (alpha <= 0) {
+                        // 完全透明就不绘制，并标记为垃圾清理
+                        this.isGarbage = true;
+                        this.isActive = false;
+                        return;
+                    }
+                    
+                    // 爆炸效果淡出
+                    const burstSize = this.size * (1 + burstProgress * 1.5);
+                    
+                    // 绘制爆炸光环
+                    ctx.fillStyle = `rgba(200, 230, 255, ${alpha * 0.5})`;
+                    ctx.beginPath();
+                    ctx.arc(screenPos.x, screenPos.y, burstSize, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // 绘制爆炸中心
+                    ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.7})`;
+                    ctx.beginPath();
+                    ctx.arc(screenPos.x, screenPos.y, burstSize * 0.6, 0, Math.PI * 2);
+                    ctx.fill();
+                } else {
+                    // 正常爆炸动画
+                    const burstSize = this.size * (1 + burstProgress * 1.5);
+                    const alpha = 1 - burstProgress;
+                    
+                    // 绘制爆炸光环
+                    ctx.fillStyle = `rgba(200, 230, 255, ${alpha * 0.5})`;
+                    ctx.beginPath();
+                    ctx.arc(screenPos.x, screenPos.y, burstSize, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // 绘制爆炸中心
+                    ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.7})`;
+                    ctx.beginPath();
+                    ctx.arc(screenPos.x, screenPos.y, burstSize * 0.6, 0, Math.PI * 2);
+                    ctx.fill();
+                }
             } else {
                 // 常规绘制
                 // 计算泡泡脉动
@@ -407,7 +447,7 @@ class BubbleProjectile extends Projectile {
                 }
             }
         } catch (e) {
-            console.error("绘制泡泡投射物时出错:", e);
+            console.error("泡泡绘制错误:", e);
         }
     }
 }
@@ -422,15 +462,15 @@ class ChaosDiceProjectile extends Projectile {
      * @param {number} x - X坐标
      * @param {number} y - Y坐标
      * @param {number} size - 大小
-     * @param {number} vx - X速度
-     * @param {number} vy - Y速度
-     * @param {number} damage - 伤害
+     * @param {number} vx - X方向速度
+     * @param {number} vy - Y方向速度
+     * @param {number} damage - 伤害值
      * @param {number} duration - 持续时间
      * @param {Object} ownerStats - 拥有者属性
-     * @param {number} area - 效果范围
+     * @param {number} area - 影响范围
      * @param {number} effectPower - 效果强度
-     * @param {Object} effect1 - 第一个效果
-     * @param {Object} effect2 - 第二个效果（可能为null）
+     * @param {Object} effect1 - 主要效果
+     * @param {Object} effect2 - 次要效果
      */
     constructor(x, y, size, vx, vy, damage, duration, ownerStats, area, effectPower, effect1, effect2) {
         super(x, y, "🎲", size, vx, vy, damage, 0, duration, ownerStats);
@@ -447,8 +487,8 @@ class ChaosDiceProjectile extends Projectile {
         this.rollingTimer = 0;
         
         // 效果显示
-        this.effect1Emoji = effect1.emoji;
-        this.effect2Emoji = effect2 ? effect2.emoji : null;
+        this.effect1Emoji = this.getEffectEmoji(effect1);
+        this.effect2Emoji = effect2 ? this.getEffectEmoji(effect2) : null;
         
         // 视觉效果
         this.rotation = 0;
@@ -458,6 +498,34 @@ class ChaosDiceProjectile extends Projectile {
         this.exploded = false;
         this.explosionTimer = 0;
         this.explosionDuration = 0.3;
+        this.effectIcons = [];
+        
+        // 固定效果持续时间
+        this.effectDuration = 3.0; // 所有效果持续3秒
+        
+        // 添加安全计时器，确保效果不会永久存在
+        this.maxEffectLifetime = 5.0;
+        this.effectLifetimeTimer = 0;
+    }
+    
+    /**
+     * 获取效果对应的表情符号
+     * @param {Object} effect - 效果对象
+     * @returns {string} 表情符号
+     */
+    getEffectEmoji(effect) {
+        if (!effect) return "❓";
+        
+        const effectName = effect.name || (typeof effect === 'string' ? effect : '');
+        switch (effectName) {
+            case "火焰": return "🔥";
+            case "冰冻": return "❄️";
+            case "雷电": return "⚡";
+            case "击退": return "💨";
+            case "护盾": return "🛡️";
+            case "治疗": return "💚";
+            default: return "❓";
+        }
     }
 
     /**
@@ -471,9 +539,20 @@ class ChaosDiceProjectile extends Projectile {
         if (this.exploded) {
             // 已爆炸，更新爆炸计时器
             this.explosionTimer += dt;
+            this.effectLifetimeTimer += dt;
             
-            // 如果爆炸结束，标记为垃圾
-            if (this.explosionTimer >= this.explosionDuration) {
+            // 更新效果图标
+            for (let i = this.effectIcons.length - 1; i >= 0; i--) {
+                const icon = this.effectIcons[i];
+                icon.update(dt);
+                if (icon.isGarbage) {
+                    this.effectIcons.splice(i, 1);
+                }
+            }
+            
+            // 如果爆炸结束且没有剩余效果图标，或者超过最大生命周期，标记为垃圾
+            if ((this.explosionTimer >= this.explosionDuration && this.effectIcons.length === 0) || 
+                this.effectLifetimeTimer >= this.maxEffectLifetime) {
                 this.isGarbage = true;
                 this.isActive = false;
                 return;
@@ -543,8 +622,8 @@ class ChaosDiceProjectile extends Projectile {
             // 更新生命周期
             this.lifetime += dt;
             
-            // 如果生命周期结束，爆炸
-            if (this.lifetime >= this.duration) {
+            // 如果生命周期结束或速度很低，爆炸
+            if (this.lifetime >= this.duration || (Math.abs(this.vx) < 10 && Math.abs(this.vy) < 10)) {
                 this.explode();
                 return;
             }
@@ -568,6 +647,8 @@ class ChaosDiceProjectile extends Projectile {
                 
                 // 检查碰撞
                 if (this.checkCollision(enemy)) {
+                    // 记录击中
+                    this.hitTargets.add(enemy);
                     // 爆炸
                     this.explode();
                     return;
@@ -580,6 +661,14 @@ class ChaosDiceProjectile extends Projectile {
      * 爆炸
      */
     explode() {
+        // 如果已经爆炸，不重复触发
+        if (this.exploded || this.isGarbage) return;
+        
+        // 标记为已爆炸
+        this.exploded = true;
+        this.vx = 0;
+        this.vy = 0;
+        
         // 获取范围内的敌人
         const area = this.area;
         enemies.forEach(enemy => {
@@ -618,288 +707,6 @@ class ChaosDiceProjectile extends Projectile {
     }
 
     /**
-     * 应用效果
-     * @param {Enemy} enemy - 敌人
-     * @param {Object} effect - 效果
-     */
-    applyEffect(enemy, effect) {
-        // 初始化状态效果对象
-        if (!enemy.statusEffects) {
-            enemy.statusEffects = {};
-        }
-        
-        // 确保effect是有效对象
-        if (!effect) return;
-        
-        // 获取效果名称
-        const effectName = effect.name || (typeof effect === 'string' ? effect : '');
-        
-        // 根据效果类型应用不同效果
-        switch (effectName) {
-            case "火焰":
-                // 添加燃烧效果
-                const burnDamage = this.damage * 0.3 * this.effectPower;
-                const burnDuration = 3 * this.effectPower;
-                
-                if (enemy.statusEffects.burn) {
-                    enemy.statusEffects.burn.duration = Math.max(
-                        enemy.statusEffects.burn.duration, burnDuration
-                    );
-                    enemy.statusEffects.burn.damage = Math.max(
-                        enemy.statusEffects.burn.damage, burnDamage / 4
-                    );
-                } else {
-                    enemy.statusEffects.burn = {
-                        damage: burnDamage / 4,  // 四次伤害
-                        duration: burnDuration,
-                        tickInterval: burnDuration / 4,
-                        tickTimer: burnDuration / 4,
-                        source: this.owner
-                    };
-                }
-                break;
-                
-            case "冰冻":
-                // 添加减速效果
-                const slowFactor = 0.4 / this.effectPower;  // 减速60%-80%
-                const slowDuration = 2.5 * this.effectPower;
-                
-                if (enemy.statusEffects.slow) {
-                    enemy.statusEffects.slow.duration = Math.max(
-                        enemy.statusEffects.slow.duration, slowDuration
-                    );
-                    enemy.statusEffects.slow.factor = Math.min(
-                        enemy.statusEffects.slow.factor, slowFactor
-                    );
-                } else {
-                    const originalSpeed = enemy.speed;
-                    enemy.speed *= slowFactor;
-                    enemy.statusEffects.slow = {
-                        duration: slowDuration,
-                        factor: slowFactor,
-                        originalSpeed: originalSpeed,
-                        source: this.owner
-                    };
-                }
-                break;
-                
-            case "雷电":
-                // 添加连锁效果
-                const chainDamage = this.damage * 0.5 * this.effectPower;
-                const chainCount = Math.floor(2 * this.effectPower);
-                const chainRange = 100 * this.effectPower;
-                
-                // 链式伤害
-                this.chainLightning(enemy, chainDamage, chainCount, chainRange);
-                break;
-                
-            case "击退":
-                // 应用击退效果
-                const knockbackPower = 80 * this.effectPower;
-                
-                // 计算方向
-                const dx = enemy.x - this.x;
-                const dy = enemy.y - this.y;
-                const dist = Math.sqrt(dx * dx + dy * dy);
-                
-                if (dist > 0) {
-                    const nx = dx / dist;
-                    const ny = dy / dist;
-                    
-                    // 应用击退
-                    enemy.x += nx * knockbackPower;
-                    enemy.y += ny * knockbackPower;
-                }
-                break;
-                
-            case "护盾":
-                // 为玩家添加护盾
-                if (this.owner && this.owner.shield !== undefined) {
-                    const shieldAmount = this.damage * 0.8 * this.effectPower;
-                    this.owner.shield += shieldAmount;
-                    
-                    // 创建护盾效果
-                    this.createShieldEffect(shieldAmount);
-                }
-                break;
-                
-            case "治疗":
-                // 治疗玩家
-                if (this.owner && this.owner.heal) {
-                    const healAmount = this.damage * 0.5 * this.effectPower;
-                    this.owner.heal(healAmount);
-                }
-                break;
-        }
-    }
-
-    /**
-     * 链式闪电
-     * @param {Enemy} startEnemy - 起始敌人
-     * @param {number} damage - 伤害
-     * @param {number} count - 连锁次数
-     * @param {number} range - 连锁范围
-     */
-    chainLightning(startEnemy, damage, count, range) {
-        let currentEnemy = startEnemy;
-        let remainingChains = count;
-        let hitEnemies = new Set([startEnemy]);
-        
-        while (remainingChains > 0) {
-            remainingChains--;
-            
-            // 寻找最近的敌人
-            let nextEnemy = null;
-            let closestDistSq = range * range;
-            
-            enemies.forEach(enemy => {
-                // 跳过无效敌人和已命中的敌人
-                if (enemy.isGarbage || !enemy.isActive || hitEnemies.has(enemy)) return;
-                
-                // 计算距离
-                const dx = enemy.x - currentEnemy.x;
-                const dy = enemy.y - currentEnemy.y;
-                const distSq = dx * dx + dy * dy;
-                
-                // 如果在范围内且更近，更新下一个目标
-                if (distSq < closestDistSq) {
-                    closestDistSq = distSq;
-                    nextEnemy = enemy;
-                }
-            });
-            
-            // 如果找到下一个目标，造成伤害并创建连锁效果
-            if (nextEnemy) {
-                // 造成伤害
-                nextEnemy.takeDamage(damage, this.owner);
-                
-                // 创建连锁效果
-                this.createChainEffect(currentEnemy, nextEnemy);
-                
-                // 更新当前敌人和已命中列表
-                currentEnemy = nextEnemy;
-                hitEnemies.add(nextEnemy);
-            } else {
-                // 没有找到下一个目标，结束连锁
-                break;
-            }
-        }
-    }
-
-    /**
-     * 创建连锁效果
-     * @param {Enemy} from - 起始敌人
-     * @param {Enemy} to - 目标敌人
-     */
-    createChainEffect(from, to) {
-        // 创建闪电效果
-        const effect = {
-            fromX: from.x,
-            fromY: from.y,
-            toX: to.x,
-            toY: to.y,
-            lifetime: 0.3,
-            timer: 0,
-            isGarbage: false,
-            
-            update: function(dt) {
-                this.timer += dt;
-                
-                if (this.timer >= this.lifetime) {
-                    this.isGarbage = true;
-                    return;
-                }
-            },
-            
-            draw: function(ctx) {
-                if (this.isGarbage) return;
-                
-                const fromPos = cameraManager.worldToScreen(this.fromX, this.fromY);
-                const toPos = cameraManager.worldToScreen(this.toX, this.toY);
-                const alpha = 0.8 * (1 - this.timer / this.lifetime);
-                
-                ctx.save();
-                ctx.strokeStyle = `rgba(255, 255, 0, ${alpha})`;
-                ctx.lineWidth = 3;
-                ctx.beginPath();
-                
-                // 绘制锯齿状闪电
-                const segments = 4;
-                const dx = (toPos.x - fromPos.x) / segments;
-                const dy = (toPos.y - fromPos.y) / segments;
-                const zigZagAmount = 8;
-                
-                ctx.moveTo(fromPos.x, fromPos.y);
-                
-                for (let i = 1; i < segments; i++) {
-                    const x = fromPos.x + dx * i;
-                    const y = fromPos.y + dy * i;
-                    const offsetX = (Math.random() - 0.5) * zigZagAmount;
-                    const offsetY = (Math.random() - 0.5) * zigZagAmount;
-                    
-                    ctx.lineTo(x + offsetX, y + offsetY);
-                }
-                
-                ctx.lineTo(toPos.x, toPos.y);
-                ctx.stroke();
-                ctx.restore();
-            }
-        };
-        
-        visualEffects.push(effect);
-    }
-
-    /**
-     * 创建护盾效果
-     * @param {number} amount - 护盾量
-     */
-    createShieldEffect(amount) {
-        // 创建护盾效果
-        const effect = {
-            x: this.owner.x,
-            y: this.owner.y,
-            radius: 0,
-            maxRadius: 50,
-            lifetime: 0.5,
-            timer: 0,
-            isGarbage: false,
-            
-            update: function(dt) {
-                this.timer += dt;
-                
-                if (this.timer >= this.lifetime) {
-                    this.isGarbage = true;
-                    return;
-                }
-                
-                this.radius = (this.timer / this.lifetime) * this.maxRadius;
-            },
-            
-            draw: function(ctx) {
-                if (this.isGarbage) return;
-                
-                const screenPos = cameraManager.worldToScreen(this.x, this.y);
-                const alpha = 0.7 * (1 - this.timer / this.lifetime);
-                
-                ctx.save();
-                ctx.fillStyle = `rgba(100, 100, 255, ${alpha * 0.3})`;
-                ctx.beginPath();
-                ctx.arc(screenPos.x, screenPos.y, this.radius, 0, Math.PI * 2);
-                ctx.fill();
-                
-                ctx.strokeStyle = `rgba(100, 100, 255, ${alpha})`;
-                ctx.lineWidth = 3;
-                ctx.beginPath();
-                ctx.arc(screenPos.x, screenPos.y, this.radius, 0, Math.PI * 2);
-                ctx.stroke();
-                ctx.restore();
-            }
-        };
-        
-        visualEffects.push(effect);
-    }
-
-    /**
      * 创建爆炸效果
      */
     createExplosionEffect() {
@@ -907,12 +714,12 @@ class ChaosDiceProjectile extends Projectile {
         const effect = {
             x: this.x,
             y: this.y,
-            radius: this.area * 0.8, // 减小爆炸效果尺寸，原来是 this.area
+            radius: this.area * 0.8, // 爆炸半径80%
             maxRadius: this.area,
             duration: 0.5,
             timer: 0,
             isGarbage: false,
-            color: 'rgba(255, 200, 100, 0.3)', // 降低基础不透明度，原来是0.6
+            color: 'rgba(255, 200, 100, 0.3)',
             
             update: function(dt) {
                 this.timer += dt;
@@ -929,13 +736,13 @@ class ChaosDiceProjectile extends Projectile {
                 
                 // 计算不透明度
                 const progress = this.timer / this.duration;
-                const alpha = 0.3 * (1 - progress); // 降低最大不透明度，原来是0.6
+                const alpha = 0.3 * (1 - progress);
                 
                 // 获取屏幕坐标
                 const screenPos = cameraManager.worldToScreen(this.x, this.y);
                 
                 ctx.save();
-                // 修复：添加空值检查以防止color未定义
+                // 添加空值检查以防止color未定义
                 if (this.color && typeof this.color === 'string') {
                     ctx.fillStyle = this.color.replace(')', `, ${alpha})`).replace('rgba', 'rgba');
                 } else {
@@ -949,13 +756,19 @@ class ChaosDiceProjectile extends Projectile {
             }
         };
         
-        visualEffects.push(effect);
+        // 添加到可视效果列表
+        if (typeof visualEffects !== 'undefined') {
+            visualEffects.push(effect);
+        }
         
         // 创建效果图标，调整位置使其不那么集中
-        this.createEffectIcon(this.effect1, -20, -20);
-        
-        if (this.effect2) {
-            this.createEffectIcon(this.effect2, 20, -20);
+        if (this.effect1 && !this.effect2) {
+            // 只有一个效果，居中显示
+            this.createEffectIcon(this.effect1, 0, 0);
+        } else if (this.effect1 && this.effect2) {
+            // 两个效果，分开显示
+            this.createEffectIcon(this.effect1, -20, -20);
+            this.createEffectIcon(this.effect2, 20, 20);
         }
     }
 
@@ -972,16 +785,7 @@ class ChaosDiceProjectile extends Projectile {
         const effectName = effect.name || (typeof effect === 'string' ? effect : '');
         
         // 显示对应图标
-        let icon;
-        switch (effectName) {
-            case "火焰": icon = "🔥"; break;
-            case "冰冻": icon = "❄️"; break;
-            case "雷电": icon = "⚡"; break;
-            case "击退": icon = "💨"; break;
-            case "护盾": icon = "🛡️"; break;
-            case "治疗": icon = "💚"; break;
-            default: icon = "✨"; break;
-        }
+        let icon = this.getEffectEmoji(effect);
         
         const iconElement = {
             x: this.x + offsetX,
@@ -1021,27 +825,151 @@ class ChaosDiceProjectile extends Projectile {
             }
         };
         
-        visualEffects.push(iconElement);
+        // 添加到效果图标列表
+        this.effectIcons.push(iconElement);
+        
+        // 添加到可视效果列表
+        if (typeof visualEffects !== 'undefined') {
+            visualEffects.push(iconElement);
+        }
     }
 
+    /**
+     * 应用效果
+     * @param {Enemy} enemy - 敌人
+     * @param {Object} effect - 效果
+     */
+    applyEffect(enemy, effect) {
+        // 初始化状态效果对象
+        if (!enemy.statusEffects) {
+            enemy.statusEffects = {};
+        }
+        
+        // 确保effect是有效对象
+        if (!effect) return;
+        
+        // 获取效果名称
+        const effectName = effect.name || (typeof effect === 'string' ? effect : '');
+        
+        // 设置固定持续时间
+        const effectDuration = this.effectDuration;
+        
+        // 根据效果类型应用不同效果
+        switch (effectName) {
+            case "火焰":
+                // 添加燃烧效果
+                const burnDamage = this.damage * 0.3 * this.effectPower;
+                
+                if (enemy.statusEffects.burn) {
+                    enemy.statusEffects.burn.duration = Math.max(
+                        enemy.statusEffects.burn.duration, effectDuration
+                    );
+                    enemy.statusEffects.burn.damage = Math.max(
+                        enemy.statusEffects.burn.damage, burnDamage / 4
+                    );
+                    enemy.statusEffects.burn.tickTimer = 0; // 重置计时器
+                } else {
+                    enemy.statusEffects.burn = {
+                        damage: burnDamage / 4,  // 四次伤害
+                        duration: effectDuration,
+                        tickInterval: effectDuration / 4,
+                        tickTimer: 0,
+                        source: this.owner
+                    };
+                }
+                break;
+                
+            case "冰冻":
+                // 添加减速效果
+                const slowFactor = 0.4 / this.effectPower;  // 减速60%-80%
+                
+                if (enemy.statusEffects.slow) {
+                    enemy.statusEffects.slow.duration = Math.max(
+                        enemy.statusEffects.slow.duration, effectDuration
+                    );
+                    enemy.statusEffects.slow.factor = Math.min(
+                        enemy.statusEffects.slow.factor, slowFactor
+                    );
+                } else {
+                    const originalSpeed = enemy.speed;
+                    enemy.speed *= slowFactor;
+                    enemy.statusEffects.slow = {
+                        duration: effectDuration,
+                        factor: slowFactor,
+                        originalSpeed: originalSpeed,
+                        source: this.owner
+                    };
+                }
+                break;
+                
+            case "雷电":
+                // 添加连锁效果
+                const chainDamage = this.damage * 0.5 * this.effectPower;
+                const chainCount = Math.floor(2 * this.effectPower);
+                const chainRange = 100 * this.effectPower;
+                
+                // 链式伤害
+                this.chainLightning(enemy, chainDamage, chainCount, chainRange);
+                break;
+                
+            case "击退":
+                // 应用击退效果
+                const knockbackPower = 120 * this.effectPower;
+                
+                // 计算方向
+                const dx = enemy.x - this.x;
+                const dy = enemy.y - this.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                
+                if (dist > 0) {
+                    const knockbackX = (dx / dist) * knockbackPower;
+                    const knockbackY = (dy / dist) * knockbackPower;
+                    
+                    // 应用击退
+                    enemy.vx += knockbackX;
+                    enemy.vy += knockbackY;
+                }
+                break;
+                
+            case "护盾":
+                // 为玩家添加临时护盾
+                if (this.owner && typeof this.owner.addTemporaryShield === 'function') {
+                    const shieldAmount = 15 * this.effectPower;
+                    this.owner.addTemporaryShield(shieldAmount, effectDuration);
+                }
+                break;
+                
+            case "治疗":
+                // 恢复玩家生命值
+                if (this.owner && typeof this.owner.heal === 'function') {
+                    const healAmount = 5 * this.effectPower;
+                    this.owner.heal(healAmount);
+                }
+                break;
+        }
+    }
+    
     /**
      * 绘制投射物
      * @param {CanvasRenderingContext2D} ctx - 画布上下文
      */
     draw(ctx) {
-        if (this.isGarbage || !this.isActive || this.exploded) return;
+        if (this.isGarbage || !this.isActive) return;
         
         try {
             // 获取屏幕坐标
             const screenPos = cameraManager.worldToScreen(this.x, this.y);
             
+            if (this.exploded) {
+                // 不绘制爆炸体本身，爆炸效果通过visualEffects处理
+                return;
+            }
+            
             // 保存上下文
             ctx.save();
             
-            // 平移到投射物位置
+            // 设置旋转
             ctx.translate(screenPos.x, screenPos.y);
-            
-            // 应用旋转
             ctx.rotate(this.rotation);
             
             if (this.isRolling) {
