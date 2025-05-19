@@ -778,7 +778,7 @@ class AncientTreeSap extends PassiveItem {
      * @returns {Object} - 增益
      */
     getBonuses() {
-        // 增强生命回复：基础值从0.2提升到0.5，每级从0.1提升到0.2
+        // 增强生命回复：确保1级有基础回复效果
         let regenAmount = 0.5 + (this.level - 1) * 0.2; // 基础0.5点恢复，每级增加0.2点
         let maxHealthPercent = (this.level - 1) * 0.03; // 每级增加3%最大生命值
         
@@ -793,7 +793,7 @@ class AncientTreeSap extends PassiveItem {
         
         return {
             regenAmount: regenAmount,
-            maxHealthMultiplier: 1 + maxHealthPercent
+            maxHealthMultiplier: maxHealthPercent > 0 ? 1 + maxHealthPercent : 1
         };
     }
 }

@@ -299,11 +299,32 @@ class GarlicWeapon extends Weapon {
         const ownerStats = this.getOwnerStats(owner);
         // 计算实际半径
         const radius = this.stats.radius * (ownerStats.areaMultiplier || 1.0);
-        // 绘制光环
-        ctx.fillStyle = 'rgba(200, 255, 200, 0.2)';
+        
+        // 直接使用玩家的世界坐标，让相机管理器处理转换
+        // 这确保光环始终跟随玩家，而不是固定在某个位置
+        const screenPos = cameraManager.worldToScreen(owner.x, owner.y);
+        
+        // 创建径向渐变
+        const gradient = ctx.createRadialGradient(
+            screenPos.x, screenPos.y, 0,
+            screenPos.x, screenPos.y, radius * cameraManager.zoom // 适应缩放
+        );
+        
+        // 设置颜色渐变
+        gradient.addColorStop(0, 'rgba(180, 255, 180, 0.3)');
+        gradient.addColorStop(0.7, 'rgba(100, 255, 100, 0.2)');
+        gradient.addColorStop(1, 'rgba(50, 255, 50, 0.1)');
+        
+        // 绘制光环 - 使用屏幕坐标和半径
         ctx.beginPath();
-        ctx.arc(owner.x, owner.y, radius, 0, Math.PI * 2);
+        ctx.arc(screenPos.x, screenPos.y, radius * cameraManager.zoom, 0, Math.PI * 2);
+        ctx.fillStyle = gradient;
         ctx.fill();
+        
+        // 添加边缘线
+        ctx.strokeStyle = 'rgba(100, 255, 100, 0.4)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
     }
 
     /**
