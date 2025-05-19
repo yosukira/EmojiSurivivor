@@ -675,15 +675,31 @@ class Enemy extends Character {
      * 掉落物品
      */
     dropItem() {
+        // 基础掉落率
+        let baseHealDropRate = 0.025; // 2.5%基础几率掉落治疗物品，降低掉落率
+        let baseMagnetDropRate = 0.010; // 1.0%基础几率掉落磁铁，降低掉落率
+        
+        // 根据游戏时间调整掉落率（随着时间推移线性降低）
+        // 每分钟减少5%的掉落率，最低降低到基础掉落率的30%
+        const minutesPassed = gameTime / 60;
+        const reductionFactor = Math.max(0.3, 1 - (minutesPassed * 0.05));
+        
+        // 应用时间调整
+        const healDropRate = baseHealDropRate * reductionFactor;
+        const magnetDropRate = baseMagnetDropRate * reductionFactor;
+        
         // 随机选择掉落物品类型
         const rand = Math.random();
-        if (rand < 0.7) { // 70%几率掉落治疗物品
+        
+        if (rand < healDropRate) {
             // 创建治疗物品
             const pickup = new Pickup(this.x, this.y, EMOJI.HEART, 'heal', 20);
+            pickup.lifetime = Infinity; // 不会消失
             worldObjects.push(pickup);
-        } else { // 30%几率掉落磁铁
+        } else if (rand < healDropRate + magnetDropRate) {
             // 创建磁铁物品
             const pickup = new Pickup(this.x, this.y, EMOJI.MAGNET, 'magnet', 0);
+            pickup.lifetime = Infinity; // 不会消失
             worldObjects.push(pickup);
         }
     }
@@ -771,13 +787,19 @@ class Enemy extends Character {
                 if (!this.svgImage) {
                     this.svgImage = new Image();
                     this.svgImage.src = this.type.svgPath;
+                    
+                    // 预加载图像，避免闪烁
                     this.svgImage.onload = () => {
                         this.svgImageLoaded = true;
                     };
-                }
-                
-                // 如果SVG图像已加载，绘制它
-                if (this.svgImageLoaded) {
+                    
+                    // 立即尝试使用emoji作为后备，直到图像加载完成
+                    ctx.font = `${this.size * 2}px Arial`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(this.type.emoji, screenPos.x, screenPos.y);
+                } else if (this.svgImageLoaded) {
+                    // 如果SVG图像已加载，绘制它
                     const size = this.size * 2;
                     ctx.drawImage(
                         this.svgImage,
@@ -787,14 +809,14 @@ class Enemy extends Character {
                         size
                     );
                 } else {
-                    // 如果图像未加载，使用emoji作为后备
+                    // 图像仍在加载中，使用emoji作为后备
                     ctx.font = `${this.size * 2}px Arial`;
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
                     ctx.fillText(this.type.emoji, screenPos.x, screenPos.y);
                 }
             } else {
-                // 使用emoji
+                // 没有SVG图像，使用emoji
                 ctx.font = `${this.size * 2}px Arial`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
@@ -802,6 +824,12 @@ class Enemy extends Character {
             }
         } catch (e) {
             console.error("绘制敌人时出错:", e);
+            
+            // 发生错误时，确保至少显示emoji
+            ctx.font = `${this.size * 2}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(this.type.emoji || "👾", screenPos.x, screenPos.y);
         }
 
         // 绘制生命条（仅在血量不满时）

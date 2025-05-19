@@ -2134,50 +2134,84 @@ class VineHazard {
         }
     }
 
-        /**     * 更新危险区域状态     * @param {number} dt - 时间增量     */    update(dt) {        // 如果已标记为垃圾，不更新        if (this.isGarbage) return;                // 更新计时器        this.timer += dt;        this.leafParticleTimer += dt;                // 如果生命周期结束，启动衰减动画        if (this.timer >= this.lifetime && !this.isDecaying) {            this.isDecaying = true;        }                // 如果正在生长        if (this.isGrowing) {            // 更新生长进度            this.growProgress = Math.min(1, this.timer / this.growDuration);            this.currentRadius = this.radius * this.growProgress;                        // 如果生长完成            if (this.growProgress >= 1) {                this.isGrowing = false;            }                        // 更新藤蔓生长            this.updateVinesGrowth(dt);        }        // 如果正在衰减        else if (this.isDecaying) {            // 更新衰减计时器            this.decayTimer += dt;                        // 计算衰减进度            const decayProgress = this.decayTimer / this.decayDuration;                        // 更新当前半径            this.currentRadius = this.radius * (1 - decayProgress);                        // 如果衰减完成，标记为垃圾            if (decayProgress >= 1) {                this.isGarbage = true;                this.isActive = false;                return;            }        }        // 正常状态        else {            // 使用完整半径            this.currentRadius = this.radius;                        // 更新伤害计时器            this.damageTimer += dt;                        // 如果到达攻击间隔，造成伤害            if (this.damageTimer >= this.attackDuration) {                this.damageEnemies();                this.damageTimer = 0;            }        }    }        /**     * 对范围内的敌人造成伤害     */    damageEnemies() {        // 如果藤蔓不活动，不造成伤害        if (!this.isActive || this.isGarbage) return;                // 获取范围内的敌人        enemies.forEach(enemy => {            // 跳过无效敌人            if (enemy.isGarbage || !enemy.isActive) return;                        // 计算距离            const dx = enemy.x - this.x;            const dy = enemy.y - this.y;            const distSq = dx * dx + dy * dy;                        // 如果在范围内，造成伤害            if (distSq <= this.currentRadius * this.currentRadius) {                // 造成伤害                enemy.takeDamage(this.damage, this.owner);                                // 应用减速效果                if (!enemy.statusEffects) {                    enemy.statusEffects = {};                }                                enemy.statusEffects.slow = {                    factor: this.slowFactor,                    duration: 0.5, // 减速持续短暂时间，下一次攻击前会刷新                    source: this.owner                };            }        });    }
-        
-        // 创建叶子粒子
-        if (this.leafParticleTimer >= this.leafParticleInterval) {
-            this.createLeafParticle();
-            this.leafParticleTimer = 0;
-        }
-    }
-
     /**
-     * 更新藤蔓生长
+     * 更新状态
      * @param {number} dt - 时间增量
      */
-    updateVinesGrowth(dt) {
-        this.vines.forEach(vine => {
-            // 更新当前藤蔓长度
-            vine.currentLength = Math.min(vine.length, vine.currentLength + vine.growSpeed * dt);
+    update(dt) {
+        // 如果已标记为垃圾，不更新
+        if (this.isGarbage) return;
+        
+        // 更新计时器
+        this.timer += dt;
+        
+        // 处理生长阶段
+        if (this.isGrowing) {
+            this.growProgress += dt / this.growDuration;
+            if (this.growProgress >= 1) {
+                this.growProgress = 1;
+                this.isGrowing = false;
+                this.currentRadius = this.radius;
+            } else {
+                this.currentRadius = this.radius * this.growProgress;
+            }
+        }
+        
+        // 处理衰减阶段
+        if (this.isDecaying) {
+            this.decayTimer += dt;
+            if (this.decayTimer >= this.decayDuration) {
+                this.isGarbage = true;
+                this.isActive = false;
+                return;
+            }
+            this.currentRadius = this.radius * (1 - this.decayTimer / this.decayDuration);
+        }
+        
+        // 如果生命周期结束，开始衰减
+        if (!this.isDecaying && this.timer >= this.lifetime) {
+            this.isDecaying = true;
+            this.decayTimer = 0;
+        }
+        
+        // 更新伤害计时器
+        this.damageTimer += dt;
+        
+        // 如果达到攻击间隔，对范围内敌人造成伤害
+        if (this.damageTimer >= this.attackDuration) {
+            this.damageTimer = 0;
+            this.damageEnemiesInArea();
+        }
+        
+        // 更新视觉效果
+        this.leafParticleTimer += dt;
+        if (this.leafParticleTimer >= this.leafParticleInterval) {
+            this.leafParticleTimer = 0;
+            this.createLeafParticle();
+        }
+    }
+    
+    /**
+     * 对范围内敌人造成伤害和减速效果
+     */
+    damageEnemiesInArea() {
+        enemies.forEach(enemy => {
+            // 跳过无效敌人
+            if (enemy.isGarbage || !enemy.isActive) return;
             
-            // 更新段生长状态
-            vine.segments.forEach(segment => {
-                if (!segment.isReady) {
-                    if (this.timer > segment.growDelay) {
-                        segment.isReady = true;
-                    }
-                }
-            });
+            // 计算距离
+            const dx = enemy.x - this.x;
+            const dy = enemy.y - this.y;
+            const distSq = dx * dx + dy * dy;
             
-            // 更新花朵生长状态
-            vine.flowers.forEach(flower => {
-                if (!flower.isReady) {
-                    if (this.timer > flower.growDelay) {
-                        flower.isReady = true;
-                    }
-                }
-            });
-            
-            // 更新刺生长状态
-            vine.thorns.forEach(thorn => {
-                if (!thorn.isReady) {
-                    if (this.timer > thorn.growDelay) {
-                        thorn.isReady = true;
-                    }
-                }
-            });
+            // 如果在范围内，造成伤害和减速
+            if (distSq <= this.currentRadius * this.currentRadius) {
+                // 造成伤害
+                enemy.takeDamage(this.damage, this.owner);
+                
+                // 应用减速效果
+                this.applySlow(enemy);
+            }
         });
     }
 
@@ -2946,6 +2980,10 @@ class LaserBeamAttack {
         // 计算攻击起点
         this.x = owner.x;
         this.y = owner.y;
+
+        // 伤害计时器
+        this.damageInterval = 0.3; // 每0.3秒造成一次伤害
+        this.damageTimer = 0;
     }
 
     /**
@@ -2976,9 +3014,16 @@ class LaserBeamAttack {
             this.isActive = false;
             return;
         }
-        
-        // 检测碰撞
-        this.checkCollisions();
+
+        // 更新伤害计时器
+        this.damageTimer += dt;
+        if (this.damageTimer >= this.damageInterval) {
+            this.damageTimer = 0;
+            this.hitEnemies.clear(); // 只有当达到伤害间隔时才重置已命中敌人列表
+            
+            // 检测碰撞并造成伤害
+            this.checkCollisions();
+        }
     }
 
     /**
@@ -3358,7 +3403,7 @@ class VolcanoEruption {
             x: this.x,
             y: this.y,
             radius: this.radius * 0.8,
-            lifetime: 6.0,  // 持续6秒
+            lifetime: this.lavaPuddle,  // 使用传入的lavaDuration参数
             timer: 0,
             damageTimer: 0,
             damageInterval: 0.5,
@@ -4814,7 +4859,7 @@ class PoisonVialProjectile extends Projectile {
         
         // 毒云相关
         this.cloudLifetime = 0;
-        this.cloudDuration = toxicCloud ? 5.0 : 0; // 毒云持续5秒
+        this.cloudDuration = toxicCloud ? 3.0 : 0; // 毒云持续固定3秒
         this.cloudTick = 0;
         this.cloudTickInterval = 0.5; // 每0.5秒造成一次伤害
         this.affectedEnemies = new Set(); // 已中毒的敌人

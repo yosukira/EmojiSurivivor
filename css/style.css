@@ -176,6 +176,22 @@ canvas {
     25%, 75% { opacity: 1; } 
 }
 
+/* 新的Boss警告动画 */
+.boss-warning-animate {
+    animation: bossWarningPulse 0.5s infinite alternate;
+}
+
+@keyframes bossWarningPulse {
+    from {
+        transform: translateX(-50%) scale(1);
+        box-shadow: 0 0 20px rgba(255, 0, 0, 0.7);
+    }
+    to {
+        transform: translateX(-50%) scale(1.05);
+        box-shadow: 0 0 30px rgba(255, 100, 0, 0.9);
+    }
+}
+
 .hidden { 
     display: none !important; 
 }

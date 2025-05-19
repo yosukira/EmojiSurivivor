@@ -323,29 +323,105 @@ class MagnetGunWeapon extends Weapon {
         const pierce = this.stats.pierce + (ownerStats.pierceBonus || 0);
         const size = GAME_FONT_SIZE * 1.2;
         
-        // 找到最近的敌人
-        const enemy = this.getClosestEnemy(600);
+        // 获取玩家当前移动方向
+        const playerDirectionX = owner.lastMoveDirectionX || 0;
+        const playerDirectionY = owner.lastMoveDirectionY || 0;
+        const hasPlayerDirection = playerDirectionX !== 0 || playerDirectionY !== 0;
+        
+        // 优先朝玩家移动方向寻找敌人，其次是最近的敌人
+        const visibleEnemies = this.getVisibleEnemies(800);
+        let targetEnemies = [];
+        
+        // 如果玩家有移动方向，优先考虑该方向的敌人
+        if (hasPlayerDirection && visibleEnemies.length > 0) {
+            // 计算玩家朝向的单位向量
+            const dirMag = Math.sqrt(playerDirectionX * playerDirectionX + playerDirectionY * playerDirectionY);
+            const normalizedDirX = playerDirectionX / dirMag;
+            const normalizedDirY = playerDirectionY / dirMag;
+            
+            // 为每个敌人计算一个"方向得分"，基于它们与玩家朝向的一致性和距离
+            const scoredEnemies = visibleEnemies.map(enemy => {
+                const dx = enemy.x - owner.x;
+                const dy = enemy.y - owner.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                
+                // 计算敌人方向的单位向量
+                const enemyDirX = dx / dist;
+                const enemyDirY = dy / dist;
+                
+                // 计算点积（方向相似度，1表示完全相同，-1表示相反）
+                const dotProduct = normalizedDirX * enemyDirX + normalizedDirY * enemyDirY;
+                
+                // 距离因子（近的敌人得分更高）
+                const distFactor = 1 - Math.min(1, dist / 800);
+                
+                // 最终得分：方向相似度和距离的加权和
+                // 方向占70%权重，距离占30%权重
+                const score = dotProduct * 0.7 + distFactor * 0.3;
+                
+                return { enemy, score };
+            });
+            
+            // 按得分排序（高到低）
+            scoredEnemies.sort((a, b) => b.score - a.score);
+            
+            // 只考虑得分为正（即朝向玩家前方）的敌人，并且确保有足够的目标
+            targetEnemies = scoredEnemies
+                .filter(item => item.score > 0)
+                .slice(0, projectileCount)
+                .map(item => item.enemy);
+        }
+        
+        // 如果没有找到足够的目标敌人，填充最近的敌人
+        if (targetEnemies.length < projectileCount) {
+            // 按距离排序的敌人列表
+            const nearbyEnemies = [...visibleEnemies].sort((a, b) => {
+                const distA = (a.x - owner.x) * (a.x - owner.x) + (a.y - owner.y) * (a.y - owner.y);
+                const distB = (b.x - owner.x) * (b.x - owner.x) + (b.y - owner.y) * (b.y - owner.y);
+                return distA - distB;
+            });
+            
+            // 添加尚未选为目标的敌人
+            for (const enemy of nearbyEnemies) {
+                if (!targetEnemies.includes(enemy)) {
+                    targetEnemies.push(enemy);
+                    if (targetEnemies.length >= projectileCount) break;
+                }
+            }
+        }
         
         // 发射多个磁力波
         for (let i = 0; i < projectileCount; i++) {
             let dirX, dirY;
             
-            if (enemy) {
-                // 计算方向朝向敌人
+            // 如果有目标敌人，瞄准它
+            if (i < targetEnemies.length) {
+                const enemy = targetEnemies[i];
                 const dx = enemy.x - owner.x;
                 const dy = enemy.y - owner.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
+                const dist = Math.sqrt(dx * dx + dy * dy);
                 
                 dirX = dx / dist;
                 dirY = dy / dist;
                 
-                // 添加随机偏移
+                // 添加小随机偏移，使射击更自然
                 const angle = Math.atan2(dirY, dirX);
-                const randomAngle = angle + (Math.random() - 0.5) * Math.PI * 0.3;
+                const randomAngle = angle + (Math.random() - 0.5) * Math.PI * 0.1; // 减小随机偏移范围
                 dirX = Math.cos(randomAngle);
                 dirY = Math.sin(randomAngle);
-            } else {
-                // 随机方向
+            } 
+            // 如果没有足够的目标敌人但有玩家朝向，朝玩家移动方向发射
+            else if (hasPlayerDirection) {
+                const angle = Math.atan2(playerDirectionY, playerDirectionX);
+                // 添加扇形散布
+                const spreadAngle = (i - (projectileCount / 2)) * (Math.PI / 12);
+                const finalAngle = angle + spreadAngle;
+                
+                dirX = Math.cos(finalAngle);
+                dirY = Math.sin(finalAngle);
+            } 
+            // 最后的选择：随机方向
+            else {
                 const angle = Math.random() * Math.PI * 2;
                 dirX = Math.cos(angle);
                 dirY = Math.sin(angle);
@@ -365,6 +441,32 @@ class MagnetGunWeapon extends Weapon {
             wave.pierce = pierce;
             projectiles.push(wave);
         }
+    }
+
+    /**
+     * 获取视野内的敌人
+     * @param {number} maxRange - 最大范围
+     * @returns {Array} 敌人数组
+     */
+    getVisibleEnemies(maxRange) {
+        const visibleEnemies = [];
+        const maxRangeSq = maxRange * maxRange;
+
+        // 确保this.owner存在
+        if (!this.owner) return visibleEnemies;
+
+        enemies.forEach(enemy => {
+            if (!enemy || enemy.isGarbage || !enemy.isActive) return;
+
+            const distanceSq = (enemy.x - this.owner.x) * (enemy.x - this.owner.x) +
+                               (enemy.y - this.owner.y) * (enemy.y - this.owner.y);
+            
+            if (distanceSq < maxRangeSq) {
+                visibleEnemies.push(enemy);
+            }
+        });
+        
+        return visibleEnemies;
     }
 
     /**
@@ -444,9 +546,9 @@ class VolcanoStaffWeapon extends Weapon {
             eruptions: 3 + Math.floor((this.level - 1) / 2),  // 爆发次数
             eruptionDelay: 0.5,  // 爆发间隔
             burnDamage: 2 + Math.floor((this.level - 1) * 0.5),  // 燃烧伤害
-            burnDuration: 2 + (this.level - 1) * 0.3,  // 燃烧持续时间
+            burnDuration: 3.0,  // 燃烧持续时间固定为3秒
             lavaPuddle: this.level >= 7,  // 7级以上留下熔岩池
-            lavaDuration: 3 + (this.level - 7) * 0.5  // 熔岩池持续时间
+            lavaDuration: 3.0  // 熔岩池持续时间固定为3秒
         };
         
         // 10级额外效果

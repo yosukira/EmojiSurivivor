@@ -1043,8 +1043,12 @@ class SoulRelic extends PassiveItem {
      * @returns {string} - 当前描述
      */
     getInitialDescription() {
-        const chance = (this.bonuses.reanimateChance * 100).toFixed(0);
-        return `有${chance}%几率使敌人死亡后变成友方幽灵，造成${this.bonuses.ghostDamage}点伤害，持续${this.bonuses.ghostDuration}秒。`;
+        // 确保有正确的bonuses值
+        const bonuses = this.getBonuses();
+        const chance = bonuses.reanimateChance ? Math.round(bonuses.reanimateChance * 100) : 5;
+        const damage = bonuses.ghostDamage ? bonuses.ghostDamage.toFixed(1) : "3.0";
+        const duration = bonuses.ghostDuration ? Math.round(bonuses.ghostDuration) : 5;
+        return `有${chance}%几率使敌人死亡后变成友方幽灵，造成${damage}点伤害，持续${duration}秒。`;
     }
     
     /**

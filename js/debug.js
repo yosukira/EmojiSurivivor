@@ -562,16 +562,7 @@ if (typeof VineSeedWeapon === 'undefined') {
             super(VineSeedWeapon.Name, VineSeedWeapon.Emoji, 2.0, VineSeedWeapon.MaxLevel);
         }
 
-        calculateStats() {
-            this.stats = {
-                damage: 10 + (this.level - 1) * 3,
-                cooldown: Math.max(1.0, 2.0 - (this.level - 1) * 0.1),
-                count: 1 + Math.floor((this.level - 1) / 3),
-                radius: 60 + (this.level - 1) * 5,
-                slowFactor: 0.3 + (this.level - 1) * 0.05,
-                duration: 5 + (this.level - 1) * 0.5
-            };
-        }
+                calculateStats() {            this.stats = {                damage: 10 + (this.level - 1) * 3,                cooldown: Math.max(1.0, 2.0 - (this.level - 1) * 0.1),                count: 1 + Math.floor((this.level - 1) / 3),                radius: 60 + (this.level - 1) * 5,                slowFactor: 0.3 + (this.level - 1) * 0.05,                duration: 5.0 // 持续时间固定为5秒            };        }
         
         /**
          * 更新武器状态
@@ -779,7 +770,7 @@ if (typeof PoisonVialWeapon === 'undefined') {
                 cooldown: Math.max(1.0, 1.8 - (this.level - 1) * 0.08),
                 count: 1 + Math.floor((this.level - 1) / 3),
                 poisonDamage: 3 + (this.level - 1) * 1,
-                poisonDuration: 3 + (this.level - 1) * 0.3,
+                poisonDuration: Math.min(5, 3 + (this.level - 1) * 0.3),
                 area: 60 + (this.level - 1) * 5,
                 projectileSpeed: 250 + (this.level - 1) * 10,
                 toxicCloud: this.level >= 7
@@ -1031,5 +1022,22 @@ if (typeof FrostStaffWeapon === 'undefined') {
         }
     }
     window.FrostStaffWeapon = FrostStaffWeapon;
+}
+
+// 将新武器添加到BASE_WEAPONS数组中
+if (typeof BASE_WEAPONS !== 'undefined') {
+    // 添加新武器到BASE_WEAPONS
+    if (typeof VineSeedWeapon === 'function') BASE_WEAPONS.push(VineSeedWeapon);
+    if (typeof LaserPrismWeapon === 'function') BASE_WEAPONS.push(LaserPrismWeapon);
+    if (typeof PoisonVialWeapon === 'function') BASE_WEAPONS.push(PoisonVialWeapon);
+    if (typeof FrostStaffWeapon === 'function') BASE_WEAPONS.push(FrostStaffWeapon);
+    
+    console.log('Debug weapons added to BASE_WEAPONS:', 
+        [VineSeedWeapon, LaserPrismWeapon, PoisonVialWeapon, FrostStaffWeapon]
+            .filter(w => typeof w === 'function')
+            .map(w => w.Name)
+    );
+} else {
+    console.error('BASE_WEAPONS not found! Make sure weapon files are loaded first.');
 }
  

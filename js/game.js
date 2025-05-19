@@ -87,8 +87,18 @@ const enemyManager = {
         // 每20秒增加难度 (原30秒)
         if (this.difficultyTimer >= 20) {
             // 随着时间推移逐渐减少生成间隔，但不低于0.5秒 (原0.8, 原削减率0.92)
-            this.currentSpawnInterval = Math.max(0.5, this.currentSpawnInterval * 0.90);
+            // 将削减率从0.90改为0.95，使生成速度增长更平缓
+            this.currentSpawnInterval = Math.max(0.8, this.currentSpawnInterval * 0.95);
             this.difficultyTimer = 0;
+            
+            // 根据游戏时间动态调整敌人上限
+            // 初始上限较低，随时间逐渐增加
+            const baseEnemyCap = 30; // 初始敌人上限
+            const maxEnemyCap = 100; // 最大敌人上限
+            const minutesPassed = gameTime / 60;
+            // 每3分钟增加10个敌人上限，但不超过最大值
+            const capIncrease = Math.min(Math.floor(minutesPassed / 3) * 10, maxEnemyCap - baseEnemyCap);
+            this.maxEnemyCap = baseEnemyCap + capIncrease;
         }
 
         // 如果计时器超过生成间隔，并且当前敌人数量未达上限，则生成敌人
@@ -118,8 +128,15 @@ const enemyManager = {
                 (enemy.name === "史莱姆" || enemy.name === "蝙蝠")
             );
         } else {
-            // 第一个Boss击败后，根据时间解锁更多敌人
-            availableEnemies = ENEMY_TYPES.filter(enemy => !enemy.minTime || gameTime >= enemy.minTime);
+            // 第一个Boss击败后，根据游戏时间解锁更多敌人
+            availableEnemies = ENEMY_TYPES.filter(enemy => {
+                // 将游戏时间设置为至少180秒(第一个Boss的时间)，确保可以刷新更多敌人
+                const effectiveGameTime = Math.max(gameTime, 180);
+                return !enemy.minTime || effectiveGameTime >= enemy.minTime;
+            });
+            
+            // 打印可用敌人，用于调试
+            console.log("第一个Boss已击败，当前可用敌人:", availableEnemies.map(e => e.name).join(', '));
         }
         
         // 计算总权重
@@ -279,16 +296,31 @@ const bossManager = {
     },
     
     showBossWarning(bossName) {
-        // 显示Boss警告
-        const warning = document.createElement("div");
-        warning.className = "boss-warning";
-        warning.textContent = `⚠️ ${bossName}即将出现! ⚠️`;
-        document.body.appendChild(warning);
-        
-        // 3秒后移除警告
-        setTimeout(() => {
-            warning.remove();
-        }, 3000);
+        // 调用全局showBossWarning函数
+        if (typeof showBossWarning === 'function') {
+            showBossWarning(bossName);
+        } else {
+            // 备用警告逻辑
+            console.warn("全局showBossWarning函数不可用，使用备用警告");
+            const warning = document.createElement("div");
+            warning.className = "boss-warning";
+            warning.textContent = `⚠️ ${bossName}即将出现! ⚠️`;
+            warning.style.position = 'absolute';
+            warning.style.top = '20%';
+            warning.style.left = '50%';
+            warning.style.transform = 'translateX(-50%)';
+            warning.style.backgroundColor = 'rgba(200, 0, 0, 0.8)';
+            warning.style.color = '#ffffff';
+            warning.style.padding = '15px 30px';
+            warning.style.borderRadius = '8px';
+            warning.style.zIndex = '1000';
+            document.body.appendChild(warning);
+            
+            // 3秒后移除警告
+            setTimeout(() => {
+                warning.remove();
+            }, 3000);
+        }
     },
 
     cleanup() {

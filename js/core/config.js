@@ -8,7 +8,7 @@ let GAME_WIDTH = 1920 // 增加游戏宽度
 let GAME_HEIGHT = 1080// 增加游戏高度
 
 // 游戏字体大小
-const GAME_FONT_SIZE = 24;
+const GAME_FONT_SIZE = 20;
 
 // 最大等级
 const MAX_LEVEL = 100;
@@ -122,34 +122,41 @@ function spawnBoss(gameTime) {
 function showBossWarning(bossName) {
     // 获取警告元素
     const warningElement = document.getElementById('bossWarning');
+    if (!warningElement) {
+        console.error("警告元素不存在!");
+        return;
+    }
 
     // 设置警告文本
-    warningElement.textContent = `👹 BOSS ${bossName} 来袭! 👹`;
+    warningElement.textContent = `${bossName}即将出现!`;
 
-    // 显示警告 - 使用toast样式而不是全屏幕样式
+    // 显示警告 - 使用toast样式
     warningElement.style.display = 'block';
-    warningElement.style.top = '70px';
+    warningElement.style.top = '20%'; // 显示在屏幕上方20%位置
     warningElement.style.position = 'absolute';
-    warningElement.style.zIndex = '100';
+    warningElement.style.zIndex = '1000';
     warningElement.style.left = '50%';
     warningElement.style.transform = 'translateX(-50%)';
-    warningElement.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-    warningElement.style.color = '#e74c3c';
-    warningElement.style.padding = '10px 20px';
-    warningElement.style.borderRadius = '5px';
-    warningElement.style.fontSize = '24px';
+    warningElement.style.backgroundColor = 'rgba(200, 0, 0, 0.8)';
+    warningElement.style.color = '#ffffff';
+    warningElement.style.padding = '15px 30px';
+    warningElement.style.borderRadius = '8px';
+    warningElement.style.fontSize = '30px';
     warningElement.style.fontWeight = 'bold';
-    warningElement.style.boxShadow = '0 0 10px rgba(0, 0, 0, 0.5)';
+    warningElement.style.boxShadow = '0 0 20px rgba(255, 0, 0, 0.7)';
     warningElement.style.textAlign = 'center';
     warningElement.style.width = 'auto';
     warningElement.style.maxWidth = '80%';
+    warningElement.style.border = '2px solid #ff0000';
+    warningElement.style.margin = '0'; // 清除外边距
+    warningElement.style.pointerEvents = 'none'; // 避免干扰游戏操作
 
     // 添加动画类
-    warningElement.classList.add('animate');
+    warningElement.classList.add('boss-warning-animate');
 
     // 3秒后隐藏警告
     setTimeout(() => {
         warningElement.style.display = 'none';
-        warningElement.classList.remove('animate');
+        warningElement.classList.remove('boss-warning-animate');
     }, 3000);
 }
