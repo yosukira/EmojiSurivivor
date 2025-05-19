@@ -908,9 +908,7 @@ class ChaosDiceProjectile extends Projectile {
                 const chainCount = Math.floor(2 * this.effectPower);
                 const chainRange = 100 * this.effectPower;
                 
-                // 链式伤害
-                this.chainLightning(enemy, chainDamage, chainCount, chainRange);
-                break;
+                                // 链式伤害                if (typeof this.chainLightning === 'function') {                    this.chainLightning(enemy, chainDamage, chainCount, chainRange);                }                break;
                 
             case "击退":
                 // 应用击退效果
