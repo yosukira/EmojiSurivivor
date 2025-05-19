@@ -3217,18 +3217,27 @@ class LaserBeamAttack {
                 endX, endY
             );
             
+            // 获取敌人碰撞半径
+            const enemyRadius = enemy.radius || (enemy.size / 2);
+            
             // 如果在激光范围内，命中敌人
-            if (distToLine <= (this.width/2 + enemy.radius) * (this.width/2 + enemy.radius)) {
+            if (distToLine <= (this.width/2 + enemyRadius) * (this.width/2 + enemyRadius)) {
                 // 如果敌人没有被命中过或者激光可以穿透
                 if (!this.hitEnemies.has(enemy)) {
-                    // 造成伤害
-                    enemy.takeDamage(this.damage, this.owner);
+                    // 造成伤害 - 确保伤害值不为零
+                    const damageToApply = Math.max(1, this.damage);
+                    enemy.takeDamage(damageToApply, this.owner);
                     
                     // 添加到已命中列表
                     this.hitEnemies.add(enemy);
                     
                     // 创建命中特效
                     this.createHitEffect(enemy);
+                    
+                    // 如果不能穿透，在命中第一个敌人后停止检测
+                    if (!this.piercing) {
+                        return;
+                    }
                 }
             }
         });
@@ -3347,37 +3356,46 @@ class LaserBeamAttack {
             // 设置激光渐变
             const gradient = ctx.createLinearGradient(startPos.x, startPos.y, endPos.x, endPos.y);
             gradient.addColorStop(0, 'rgba(255, 255, 220, 0.9)');
-            gradient.addColorStop(0.5, 'rgba(255, 200, 100, 0.7)');
-            gradient.addColorStop(1, 'rgba(255, 100, 50, 0.5)');
+            gradient.addColorStop(0.5, 'rgba(255, 220, 100, 0.7)');
+            gradient.addColorStop(1, 'rgba(255, 150, 50, 0.5)');
             
-            // 绘制激光中心线
+            // 对象大小和生命周期结束时的渐变透明度
+            let alpha = 1.0;
+            if (this.lifetime > this.duration * 0.8) {
+                alpha = 1.0 - (this.lifetime - this.duration * 0.8) / (this.duration * 0.2);
+            }
+            
+            // 绘制激光光束
+            ctx.globalAlpha = alpha;
             ctx.strokeStyle = gradient;
             ctx.lineWidth = this.width;
             ctx.lineCap = 'round';
             
+            // 绘制中心光束
             ctx.beginPath();
             ctx.moveTo(startPos.x, startPos.y);
             ctx.lineTo(endPos.x, endPos.y);
             ctx.stroke();
             
-            // 绘制激光外发光
-            ctx.strokeStyle = 'rgba(255, 200, 100, 0.3)';
-            ctx.lineWidth = this.width * 1.5;
-            
+            // 绘制中心发光点
+            ctx.globalAlpha = alpha * 0.7;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
             ctx.beginPath();
-            ctx.moveTo(startPos.x, startPos.y);
-            ctx.lineTo(endPos.x, endPos.y);
-            ctx.stroke();
-            
-            // 绘制起点发光
-            ctx.fillStyle = 'rgba(255, 255, 200, 0.8)';
-            ctx.beginPath();
-            ctx.arc(startPos.x, startPos.y, this.width * 0.8, 0, Math.PI * 2);
+            ctx.arc(startPos.x, startPos.y, this.width * 0.7, 0, Math.PI * 2);
             ctx.fill();
             
+            // 绘制无法穿透时的激光终点特效
+            if (!this.piercing) {
+                ctx.globalAlpha = alpha * 0.8;
+                ctx.fillStyle = 'rgba(255, 220, 100, 0.8)';
+                ctx.beginPath();
+                ctx.arc(endPos.x, endPos.y, this.width * 0.5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
             ctx.restore();
-        } catch (e) {
-            console.error("绘制激光束攻击时出错:", e);
+        } catch (error) {
+            console.error("Error drawing laser beam:", error);
         }
     }
 }

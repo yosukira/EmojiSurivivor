@@ -23,7 +23,7 @@ class Enemy extends Character {
         super(
             x, y,
             type.emoji || EMOJI.ENEMY_NORMAL,
-            GAME_FONT_SIZE,
+            GAME_FONT_SIZE * 0.7, // 将尺寸改为原来的70%
             {
                 health: ENEMY_BASE_STATS.health * (type.healthMult || 1),
                 speed: ENEMY_BASE_STATS.speed * (type.speedMult || 1),
@@ -34,15 +34,15 @@ class Enemy extends Character {
 
         // Time-based scaling for health and damage
         const minutesPassed = gameTime / 60;
-        // Health: Starts scaling after 2 mins, caps at +150% (2.5x total) around 12 mins
+        // Health: Starts scaling after 2 mins, no cap on scaling
         let healthScalingFactor = 1.0;
         if (minutesPassed > 2) {
-            healthScalingFactor += Math.min((minutesPassed - 2) * 0.15, 1.5); // 0.15 per min after 2 mins, up to +150%
+            healthScalingFactor += (minutesPassed - 2) * 0.20; // 0.20 per min after 2 mins, no cap
         }
-        // Damage: Starts scaling after 3 mins, caps at +100% (2x total) around 13 mins
+        // Damage: Starts scaling after 3 mins, no cap on scaling
         let damageScalingFactor = 1.0;
         if (minutesPassed > 3) {
-            damageScalingFactor += Math.min((minutesPassed - 3) * 0.10, 1.0); // 0.10 per min after 3 mins, up to +100%
+            damageScalingFactor += (minutesPassed - 3) * 0.15; // 0.15 per min after 3 mins, no cap
         }
 
         this.stats.health *= healthScalingFactor;
@@ -118,6 +118,9 @@ class Enemy extends Character {
         
         // 更新特殊能力冷却和状态
         this.updateSpecialAbilities(dt);
+        
+        // 更新状态效果（燃烧、冰冻、毒素等）
+        this.updateStatusEffects(dt);
         
         // 更新移动
         if (!this.isStunned() && !this.isDashing && !this.isShootingBeam) {

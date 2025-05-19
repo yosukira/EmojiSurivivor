@@ -122,28 +122,40 @@ const enemyManager = {
         // 根据游戏时间和Boss击败情况获取可用敌人类型
         let availableEnemies;
         
-        // 第一个Boss未击败前只刷新史莱姆和蝙蝠
-        if (!bossManager.isFirstBossDefeated()) {
+        // 根据游戏时间和Boss击败情况筛选敌人类型
+        if (gameTime < 60) {
+            // 1分钟内只刷史莱姆
+            availableEnemies = ENEMY_TYPES.filter(enemy => enemy.name === "史莱姆");
+        } else if (gameTime < 120) {
+            // 1-2分钟刷史莱姆和骷髅
             availableEnemies = ENEMY_TYPES.filter(enemy => 
-                (!enemy.minTime || enemy.minTime === 0) && 
-                (enemy.name === "史莱姆" || enemy.name === "蝙蝠")
+                enemy.name === "史莱姆" || enemy.name === "骷髅"
+            );
+        } else if (gameTime < 180 || !bossManager.isFirstBossDefeated()) {
+            // 2-3分钟或第一个Boss未击败前，刷史莱姆、骷髅
+            availableEnemies = ENEMY_TYPES.filter(enemy => 
+                enemy.name === "史莱姆" || enemy.name === "骷髅"
+            );
+        } else if (gameTime < 300) {
+            // 第一个Boss击败后至5分钟，刷史莱姆、骷髅和蝙蝠
+            availableEnemies = ENEMY_TYPES.filter(enemy => 
+                enemy.name === "史莱姆" || enemy.name === "骷髅" || enemy.name === "蝙蝠"
             );
         } else {
-            // 第一个Boss击败后，根据游戏时间解锁更多敌人
+            // 5分钟后根据游戏时间解锁更多敌人
             availableEnemies = ENEMY_TYPES.filter(enemy => {
-                // 将游戏时间设置为至少180秒(第一个Boss的时间)，确保可以刷新更多敌人
-                const effectiveGameTime = Math.max(gameTime, 180);
-                
                 // 过滤掉静止的远程敌人
                 if (enemy.isRanged && enemy.speedMult <= 0.1) {
                     return false;
                 }
                 
-                return !enemy.minTime || effectiveGameTime >= enemy.minTime;
+                return !enemy.minTime || gameTime >= enemy.minTime;
             });
-            
-            // 打印可用敌人，用于调试
-            console.log("第一个Boss已击败，当前可用敌人:", availableEnemies.map(e => e.name).join(', '));
+        }
+        
+        // 打印可用敌人，用于调试
+        if (bossManager.isFirstBossDefeated() && gameTime % 60 < 1) {
+            console.log(`当前游戏时间: ${Math.floor(gameTime)}秒, 可用敌人:`, availableEnemies.map(e => e.name).join(', '));
         }
         
         // 计算总权重
@@ -234,6 +246,7 @@ const bossManager = {
             
             // 取消Boss战场限制
             cameraManager.deactivateBossArena();
+            console.log("Boss战场已解除!");
             
             // 播放胜利音效或视觉效果
             triggerScreenShake(5, 0.8);
@@ -271,7 +284,28 @@ const bossManager = {
                 // 简单地推迟下一次检查，或者可以记录一个错误
                 console.warn("No bosses available to choose from at gameTime:", gameTime);
             }
-            this.nextBossTime = gameTime + BOSS_INTERVAL; // 设置下一次Boss生成的时间
+            
+            // 计算下一个Boss出现的时间间隔
+            let nextBossInterval = BOSS_INTERVAL; // 默认4分钟
+            
+            // 后期Boss刷新频率加快
+            if (gameTime >= 900) { // 15分钟后
+                if (gameTime < 1200) { // 15-20分钟
+                    nextBossInterval = 240; // 保持4分钟
+                } else if (gameTime < 1500) { // 20-25分钟
+                    nextBossInterval = 210; // 减少到3.5分钟
+                } else if (gameTime < 1800) { // 25-30分钟
+                    nextBossInterval = 180; // 减少到3分钟
+                } else if (gameTime < 2100) { // 30-35分钟
+                    nextBossInterval = 150; // 减少到2.5分钟
+                } else { // 35分钟后
+                    nextBossInterval = 120; // 减少到2分钟
+                }
+            }
+            
+            // 设置下一次Boss生成的时间
+            this.nextBossTime = gameTime + nextBossInterval;
+            console.log(`下一个Boss将在游戏时间 ${Math.floor(this.nextBossTime)} 秒出现，间隔：${nextBossInterval}秒`);
         }
     },
 
@@ -1737,7 +1771,16 @@ let weaponClasses = {
     GarlicWeapon: false,
     FireBladeWeapon: false,
     StormBladeWeapon: false,
-    HandshakeWeapon: false
+    HandshakeWeapon: false,
+    PoisonVialWeapon: false,
+    FrostStaffWeapon: false,
+    VineSeedWeapon: false,
+    LaserPrismWeapon: false,
+    BubbleWandWeapon: false,
+    ChaosDiceWeapon: false,
+    VolcanoStaffWeapon: false,
+    BlackHoleBallWeapon: false,
+    MagnetGunWeapon: false
 };
 
 // 检查现有武器列表
@@ -1781,7 +1824,16 @@ let passiveClasses = {
     EmptyTome: false,
     Candelabrador: false,
     Bracer: false,
-    SoulRelic: false
+    SoulRelic: false,
+    MagicCrystal: false,
+    MysteryCard: false,
+    OccultCharm: false,
+    BarrierRune: false,
+    FrostHeart: false,
+    DragonSpice: false,
+    ThunderAmulet: false,
+    PoisonOrb: false,
+    MagnetSphere: false
 };
 
 // 检查现有被动物品列表

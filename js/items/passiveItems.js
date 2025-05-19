@@ -84,6 +84,7 @@ class PassiveItem {
         
         // 将bonuses应用到owner的stats中
         for (const [key, value] of Object.entries(this.bonuses)) {
+            // 处理数值型属性
             if (typeof value === 'number') {
                 // 如果是乘数类型的属性，确保正确应用
                 if (key.endsWith('Multiplier')) {
@@ -95,7 +96,15 @@ class PassiveItem {
                     owner.stats[key] *= value;
                 } 
                 // 如果是加成类型的属性
-                else if (key.endsWith('Bonus') || key.endsWith('Count') || key.endsWith('Chance') || key.endsWith('Damage') || key.endsWith('Duration') || key.endsWith('Strength')) {
+                else if (key.endsWith('Bonus') || key === 'armor' || key === 'regen' || 
+                         key === 'pickupRadius' || key === 'projectileCountBonus' || 
+                         key === 'projectilePierceBonus' || key === 'maxHealthBonus' || 
+                         key === 'burnDamage' || key === 'burnChance' || key === 'burnDuration' ||
+                         key === 'lightningDamage' || key === 'lightningChainCount' ||
+                         key === 'slowStrength' || key === 'freezeChance' || key === 'poisonDamage' ||
+                         key === 'poisonDuration' || key === 'critChance' || key === 'magnetRange' ||
+                         key === 'magnetStrength' || key.includes('Count') || key.includes('Chance') || 
+                         key.includes('Damage') || key.includes('Duration') || key.includes('Strength')) {
                     // 初始化如果不存在
                     if (owner.stats[key] === undefined) {
                         owner.stats[key] = 0;
@@ -108,6 +117,18 @@ class PassiveItem {
                     owner.stats[key] = value;
                 }
             }
+            // 处理布尔型属性
+            else if (typeof value === 'boolean') {
+                owner.stats[key] = value;
+            }
+        }
+
+        // 打印调试信息，可以在发布时移除
+        console.log(`应用被动物品 ${this.name}(Lv${this.level}) 的效果: `, this.bonuses);
+        
+        // 确保玩家重新计算属性
+        if (typeof owner.recalculateStats === 'function') {
+            owner.recalculateStats();
         }
     }
     
@@ -184,177 +205,45 @@ class PassiveItem {
      */
     getUpgradeDescription() {
         if (this.isMaxLevel()) {
-            return `${this.name} 已达到最大等级。`;
+            return `${this.name}已达到最大等级。`;
         }
         
-        // 获取当前等级和下一等级的加成
-        const currentBonuses = this.getBonuses();
-        this.level++; // 临时增加等级
+        // 计算当前和下一级的几率
+        const currentChance = (this.bonuses.reanimateChance * 100).toFixed(0);
+        
+        // 临时提升等级计算下一级
+        this.level++;
         const nextBonuses = this.getBonuses();
-        this.level--; // 恢复等级
+        this.level--;
         
-        const upgradeBenefits = [];
+        const nextChance = (nextBonuses.reanimateChance * 100).toFixed(0);
+        const chanceIncrease = nextChance - currentChance;
         
-        // 比较两级之间的差异
-        for (const key in nextBonuses) {
-            const currentValue = currentBonuses[key] || 0;
-            const nextValue = nextBonuses[key] || 0;
-            
-            // 处理各种不同类型的属性
-            if (key === 'damageMultiplier' && nextValue > currentValue) {
-                const increase = Math.round((nextValue - currentValue) * 100);
-                if (increase > 0) {
-                    upgradeBenefits.push(`攻击伤害 +${increase}%`);
-                }
-            } else if (key === 'maxHealthBonus' && nextValue > currentValue) {
-                const increase = Math.round(nextValue - currentValue);
-                if (increase > 0) {
-                    upgradeBenefits.push(`最大生命值 +${increase}`);
-                }
-            } else if (key === 'speedMultiplier' && nextValue > currentValue) {
-                const increase = Math.round((nextValue - currentValue) * 100);
-                if (increase > 0) {
-                    upgradeBenefits.push(`移动速度 +${increase}%`);
-                }
-            } else if (key === 'cooldownMultiplier' && nextValue < currentValue) {
-                const decrease = Math.round((currentValue - nextValue) * 100);
-                if (decrease > 0) {
-                    upgradeBenefits.push(`攻击冷却 -${decrease}%`);
-                }
-            } else if (key === 'pickupRadiusBonus' && nextValue > currentValue) {
-                const increase = Math.round(nextValue - currentValue);
-                if (increase > 0) {
-                    upgradeBenefits.push(`拾取范围 +${increase}`);
-                }
-            } else if (key === 'projectileCountBonus' && nextValue > currentValue) {
-                const increase = Math.round(nextValue - currentValue);
-                if (increase > 0) {
-                    upgradeBenefits.push(`投射物数量 +${increase}`);
-                }
-            } else if (key === 'regenAmount' && nextValue > currentValue) {
-                const increase = (nextValue - currentValue).toFixed(1);
-                if (parseFloat(increase) > 0) {
-                    upgradeBenefits.push(`生命恢复 +${increase}/秒`);
-                }
-            } else if (key === 'burnDamage' && nextValue > currentValue) {
-                const increase = (nextValue - currentValue).toFixed(1);
-                if (parseFloat(increase) > 0) {
-                    upgradeBenefits.push(`燃烧伤害 +${increase}/秒`);
-                }
-            } else if (key === 'burnChance' && nextValue > currentValue) {
-                const increase = Math.round((nextValue - currentValue) * 100);
-                if (increase > 0) {
-                    upgradeBenefits.push(`燃烧几率 +${increase}%`);
-                }
-            } else if (key === 'lightningDamage' && nextValue > currentValue) {
-                const increase = (nextValue - currentValue).toFixed(1);
-                if (parseFloat(increase) > 0) {
-                    upgradeBenefits.push(`闪电伤害 +${increase}`);
-                }
-            } else if (key === 'lightningChainCount' && nextValue > currentValue) {
-                const increase = Math.round(nextValue - currentValue);
-                if (increase > 0) {
-                    upgradeBenefits.push(`闪电连锁 +${increase}个敌人`);
-                }
-            } else if (key === 'slowStrength' && nextValue > currentValue) {
-                const increase = Math.round((nextValue - currentValue) * 100);
-                if (increase > 0) {
-                    upgradeBenefits.push(`减速效果 +${increase}%`);
-                }
-            } else if (key === 'freezeChance' && nextValue > currentValue) {
-                const increase = Math.round((nextValue - currentValue) * 100);
-                if (increase > 0) {
-                    upgradeBenefits.push(`冻结几率 +${increase}%`);
-                }
-            } else if (key === 'armorBonus' && nextValue > currentValue) {
-                const increase = Math.round(nextValue - currentValue);
-                if (increase > 0) {
-                    upgradeBenefits.push(`护甲值 +${increase}`);
-                }
-            } else if (key === 'damageReductionMultiplier' && nextValue < currentValue) {
-                const decrease = Math.round((currentValue - nextValue) * 100);
-                if (decrease > 0) {
-                    upgradeBenefits.push(`伤害减免 +${decrease}%`);
-                }
-            } else if (key === 'poisonDamage' && nextValue > currentValue) {
-                const increase = (nextValue - currentValue).toFixed(1);
-                if (parseFloat(increase) > 0) {
-                    upgradeBenefits.push(`毒素伤害 +${increase}/秒`);
-                }
-            } else if (key === 'poisonDuration' && nextValue > currentValue) {
-                const increase = (nextValue - currentValue).toFixed(1);
-                if (parseFloat(increase) > 0) {
-                    upgradeBenefits.push(`毒素持续 +${increase}秒`);
-                }
-            } else if (key === 'projectilePierceBonus' && nextValue > currentValue) {
-                const increase = Math.round(nextValue - currentValue);
-                if (increase > 0) {
-                    upgradeBenefits.push(`穿透次数 +${increase}`);
-                }
-            } else if (key === 'projectileAreaMultiplier' && nextValue > currentValue) {
-                const increase = Math.round((nextValue - currentValue) * 100);
-                if (increase > 0) {
-                    upgradeBenefits.push(`投射物范围 +${increase}%`);
-                }
-            } else if (key === 'critChance' && nextValue > currentValue) {
-                const increase = Math.round((nextValue - currentValue) * 100);
-                if (increase > 0) {
-                    upgradeBenefits.push(`暴击几率 +${increase}%`);
-                }
-            }
+        // 计算其他属性提升
+        const durationIncrease = nextBonuses.ghostDuration - this.bonuses.ghostDuration;
+        const damageIncrease = nextBonuses.ghostDamage - this.bonuses.ghostDamage;
+        
+        // 构建描述
+        let description = `升级到${this.level + 1}级：`;
+        
+        if (chanceIncrease > 0) {
+            description += `复活几率+${chanceIncrease}%`;
         }
         
-        // 如果是10级特殊效果，添加具体的特殊效果描述
+        if (durationIncrease > 0) {
+            description += `，持续时间+${durationIncrease}秒`;
+        }
+        
+        if (damageIncrease > 0) {
+            description += `，伤害+${damageIncrease.toFixed(1)}`;
+        }
+        
+        // 10级特殊效果
         if (this.level === 9) {
-            let specialEffectDesc = "";
-            
-            // 根据不同被动道具添加不同的10级特效描述
-            if (this instanceof Spinach) {
-                specialEffectDesc = "额外增加15%伤害和5%暴击率";
-            } else if (this instanceof Bracer) {
-                specialEffectDesc = "额外减少12%冷却时间，并增加5%投射物速度";
-            } else if (this instanceof HollowHeart) {
-                specialEffectDesc = "额外增加30点生命值和持续生命恢复";
-            } else if (this instanceof Wings) {
-                specialEffectDesc = "额外增加15%速度和10%闪避率";
-            } else if (this instanceof EmptyBottle) {
-                specialEffectDesc = "增加30点拾取范围和20%掉落率";
-            } else if (this instanceof Gargoyle) {
-                specialEffectDesc = "额外增加1个投射物和15%投射物大小";
-            } else if (this instanceof MagicCrystal) {
-                specialEffectDesc = "获得15%双倍经验几率";
-            } else if (this instanceof MysteryCard) {
-                specialEffectDesc = "增加稀有物品发现率";
-            } else if (this instanceof OccultCharm) {
-                specialEffectDesc = "额外增加2次穿透和20%投射物范围";
-            } else if (this instanceof BarrierRune) {
-                specialEffectDesc = "获得8%几率完全格挡伤害";
-            } else if (this instanceof FrostHeart) {
-                specialEffectDesc = "获得12%几率造成范围冻结";
-            } else if (this instanceof DragonSpice) {
-                specialEffectDesc = "15%几率使燃烧敌人爆炸";
-            } else if (this instanceof ThunderAmulet) {
-                specialEffectDesc = "20%几率触发范围电击";
-            } else if (this instanceof PoisonOrb) {
-                specialEffectDesc = "25%几率使毒素扩散到附近敌人";
-            } else if (this instanceof MagnetSphere) {
-                specialEffectDesc = "自动收集周围经验宝石";
-            } else if (this instanceof AncientTreeSap) {
-                specialEffectDesc = "生命危险时获得短暂无敌";
-            } else if (this instanceof SoulRelic) {
-                specialEffectDesc = "幽灵获得范围攻击能力";
-            } else {
-                specialEffectDesc = "解锁强力的特殊效果";
-            }
-            
-            upgradeBenefits.push(`10级特效: ${specialEffectDesc}`);
+            description += "。10级解锁：幽灵获得范围攻击能力！";
         }
         
-        if (upgradeBenefits.length > 0) {
-            return `提升到 ${this.level + 1} 级：${upgradeBenefits.join("，")}`;
-        }
-        
-        return `提升到 ${this.level + 1} 级，增强该道具的所有效果。`;
+        return description;
     }
 }
 
@@ -889,15 +778,16 @@ class AncientTreeSap extends PassiveItem {
      * @returns {Object} - 增益
      */
     getBonuses() {
-        let regenAmount = 0.2 + (this.level - 1) * 0.1; // 基础0.2点恢复，每级增加0.1点
+        // 增强生命回复：基础值从0.2提升到0.5，每级从0.1提升到0.2
+        let regenAmount = 0.5 + (this.level - 1) * 0.2; // 基础0.5点恢复，每级增加0.2点
         let maxHealthPercent = (this.level - 1) * 0.03; // 每级增加3%最大生命值
         
         // 10级特殊效果：额外恢复和生命值，并在生命危急时提供保护
         if (this.level === 10) {
             return {
-                regenAmount: regenAmount + 0.5,
-                maxHealthMultiplier: 1 + maxHealthPercent + 0.1,
-                emergencyShield: 0.1 // 生命值低于10%时获得3秒无敌
+                regenAmount: regenAmount + 1.0, // 增加到1.0额外加成
+                maxHealthMultiplier: 1 + maxHealthPercent + 0.15, // 增加到15%额外生命值
+                emergencyShield: 0.15 // 生命值低于15%时获得4秒无敌(原10%和3秒)
             };
         }
         
@@ -1109,7 +999,7 @@ class SoulRelic extends PassiveItem {
         const damageIncrease = nextBonuses.ghostDamage - this.bonuses.ghostDamage;
         
         // 构建描述
-        let description = `提升到${this.level + 1}级：`;
+        let description = `升级到${this.level + 1}级：`;
         
         if (chanceIncrease > 0) {
             description += `复活几率+${chanceIncrease}%`;

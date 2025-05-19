@@ -68,6 +68,9 @@ class Player extends Character {
 
         // 更新生命恢复
         this.updateRegen(dt);
+        
+        // 检查并处理被动特殊效果触发
+        this.checkPassiveEffectTriggers(dt);
     }
 
     /**
@@ -533,5 +536,369 @@ class Player extends Character {
      */
     drawPickupRadius(ctx) {
         // 不绘制拾取范围，可能是图中看到的白色圆
+    }
+
+    /**
+     * 检查被动特殊效果触发
+     * @param {number} dt - 时间增量
+     */
+    checkPassiveEffectTriggers(dt) {
+        // 检查是否有无敌护盾需要激活(古树精华10级特效)
+        const emergencyThreshold = this.getStat('emergencyShield');
+        if (emergencyThreshold > 0 && this.health <= this.getStat('health') * emergencyThreshold && this.invincibleTime <= 0) {
+            // 激活紧急护盾
+            this.invincibleTime = 4.0; // 4秒无敌时间
+            console.log("激活古树精华紧急护盾!");
+            
+            // 创建无敌特效
+            this.createShieldEffect();
+        }
+        
+        // 随机触发燃烧、雷电、冰霜等效果
+        // 每2秒检查一次是否触发随机元素特效
+        this.elementalEffectTimer = (this.elementalEffectTimer || 0) + dt;
+        if (this.elementalEffectTimer >= 2.0) {
+            this.elementalEffectTimer = 0;
+            
+            // 获取各元素相关属性
+            const burnChance = this.getStat('burnChance') || 0;
+            const burnDamage = this.getStat('burnDamage') || 0;
+            const burnDuration = this.getStat('burnDuration') || 3.0;
+            
+            const lightningChance = this.getStat('lightningChance') || (this.getStat('areaShockChance') || 0);
+            const lightningDamage = this.getStat('lightningDamage') || 0;
+            const lightningChainCount = this.getStat('lightningChainCount') || 1;
+            
+            const freezeChance = this.getStat('freezeChance') || 0;
+            const slowStrength = this.getStat('slowStrength') || 0;
+            
+            const poisonChance = this.getStat('poisonChance') || (this.getStat('spreadChance') || 0);
+            const poisonDamage = this.getStat('poisonDamage') || 0;
+            const poisonDuration = this.getStat('poisonDuration') || 3.0;
+            
+            // 寻找半径内的敌人
+            const enemies = this.findEnemiesInRadius(180); // 180半径内敌人
+            
+            if (enemies.length > 0) {
+                // 尝试触发燃烧效果
+                if (burnChance > 0 && burnDamage > 0 && Math.random() < burnChance) {
+                    // 随机选择一个敌人
+                    const targetEnemy = enemies[Math.floor(Math.random() * enemies.length)];
+                    if (targetEnemy && !targetEnemy.isGarbage && targetEnemy.isActive) {
+                        // 应用燃烧效果
+                        if (typeof targetEnemy.applyBurnEffect === 'function') {
+                            targetEnemy.applyBurnEffect(burnDamage, burnDuration, this);
+                            console.log(`龙息香料触发! 对敌人施加 ${burnDamage} 燃烧伤害，持续 ${burnDuration} 秒`);
+                        } else {
+                            // 如果敌人没有烧伤方法，则直接造成伤害
+                            targetEnemy.takeDamage(burnDamage, this, true);
+                        }
+                        
+                        // 创建燃烧特效
+                        this.createElementalEffect(targetEnemy, 'fire');
+                    }
+                }
+                
+                // 尝试触发雷电效果
+                if (lightningChance > 0 && lightningDamage > 0 && Math.random() < lightningChance) {
+                    // 随机选择一个敌人
+                    const targetEnemy = enemies[Math.floor(Math.random() * enemies.length)];
+                    if (targetEnemy && !targetEnemy.isGarbage && targetEnemy.isActive) {
+                        // 应用闪电效果，包括链式伤害
+                        this.applyLightningEffect(targetEnemy, lightningDamage, lightningChainCount);
+                        console.log(`雷光护符触发! 对敌人造成 ${lightningDamage} 闪电伤害，链接 ${lightningChainCount} 次`);
+                    }
+                }
+                
+                // 尝试触发冰冻效果
+                if (freezeChance > 0 && Math.random() < freezeChance) {
+                    // 随机选择一个敌人
+                    const targetEnemy = enemies[Math.floor(Math.random() * enemies.length)];
+                    if (targetEnemy && !targetEnemy.isGarbage && targetEnemy.isActive) {
+                        // 应用冰冻效果
+                        if (typeof targetEnemy.applyFreezeEffect === 'function') {
+                            targetEnemy.applyFreezeEffect(2.0, this); // 冻结2秒
+                            console.log("寒冰之心触发! 冻结敌人 2 秒");
+                        } else if (typeof targetEnemy.applySlowEffect === 'function' && slowStrength > 0) {
+                            // 如果没有冻结方法但有减速方法，则应用减速
+                            targetEnemy.applySlowEffect(slowStrength, 3.0, this);
+                            console.log(`寒冰之心触发! 减速敌人 ${Math.round(slowStrength * 100)}%, 持续 3 秒`);
+                        }
+                        
+                        // 创建冰冻特效
+                        this.createElementalEffect(targetEnemy, 'ice');
+                    }
+                }
+                
+                // 尝试触发毒素效果
+                if (poisonChance > 0 && poisonDamage > 0 && Math.random() < poisonChance) {
+                    // 随机选择一个敌人
+                    const targetEnemy = enemies[Math.floor(Math.random() * enemies.length)];
+                    if (targetEnemy && !targetEnemy.isGarbage && targetEnemy.isActive) {
+                        // 应用毒素效果
+                        if (typeof targetEnemy.applyPoisonEffect === 'function') {
+                            targetEnemy.applyPoisonEffect(poisonDamage, poisonDuration, this);
+                            console.log(`毒素宝珠触发! 对敌人施加 ${poisonDamage} 毒素伤害，持续 ${poisonDuration} 秒`);
+                        } else {
+                            // 如果敌人没有中毒方法，则直接造成伤害
+                            targetEnemy.takeDamage(poisonDamage, this);
+                        }
+                        
+                        // 创建毒素特效
+                        this.createElementalEffect(targetEnemy, 'poison');
+                    }
+                }
+            }
+        }
+    }
+    
+    /**
+     * 创建护盾特效
+     */
+    createShieldEffect() {
+        // 创建护盾特效
+        const effect = {
+            x: this.x,
+            y: this.y,
+            radius: this.size * 1.5,
+            maxRadius: this.size * 2.5,
+            timer: 0,
+            maxTime: 1.0,
+            isGarbage: false,
+            player: this,
+            
+            update: function(dt) {
+                this.timer += dt;
+                if (this.timer >= this.maxTime) {
+                    this.isGarbage = true;
+                    return;
+                }
+                
+                // 更新位置跟随玩家
+                this.x = this.player.x;
+                this.y = this.player.y;
+                
+                // 更新大小
+                const progress = this.timer / this.maxTime;
+                this.radius = this.maxRadius * (1 - progress) + this.radius * progress;
+            },
+            
+            draw: function(ctx) {
+                if (this.isGarbage) return;
+                
+                const screenPos = cameraManager.worldToScreen(this.x, this.y);
+                
+                // 护盾渐变效果
+                ctx.beginPath();
+                const gradient = ctx.createRadialGradient(
+                    screenPos.x, screenPos.y, this.radius * 0.7,
+                    screenPos.x, screenPos.y, this.radius
+                );
+                
+                gradient.addColorStop(0, 'rgba(100, 255, 100, 0)');
+                gradient.addColorStop(0.5, 'rgba(100, 255, 100, 0.3)');
+                gradient.addColorStop(1, 'rgba(100, 255, 100, 0)');
+                
+                ctx.fillStyle = gradient;
+                ctx.arc(screenPos.x, screenPos.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        };
+        
+        // 添加特效
+        visualEffects.push(effect);
+    }
+    
+    /**
+     * 应用闪电效果
+     * @param {Enemy} target - 目标敌人
+     * @param {number} damage - 伤害值
+     * @param {number} chainCount - 链接次数
+     */
+    applyLightningEffect(target, damage, chainCount) {
+        if (!target || target.isGarbage || !target.isActive) return;
+        
+        // 对目标造成伤害
+        target.takeDamage(damage, this);
+        
+        // 创建闪电效果
+        this.createElementalEffect(target, 'lightning');
+        
+        // 如果链接次数大于0，寻找下一个目标
+        if (chainCount > 0) {
+            // 已命中的目标
+            const hitTargets = new Set([target]);
+            
+            // 寻找周围敌人
+            const nearbyEnemies = enemies
+                .filter(enemy => enemy && !enemy.isGarbage && enemy.isActive && !hitTargets.has(enemy))
+                .map(enemy => ({
+                    enemy,
+                    distance: Math.sqrt(
+                        Math.pow(enemy.x - target.x, 2) + 
+                        Math.pow(enemy.y - target.y, 2)
+                    )
+                }))
+                .filter(item => item.distance < 150) // 150范围内的敌人
+                .sort((a, b) => a.distance - b.distance);
+            
+            // 如果有可链接的敌人
+            if (nearbyEnemies.length > 0) {
+                const nextTarget = nearbyEnemies[0].enemy;
+                
+                // 创建链接特效
+                const chainEffect = {
+                    from: { x: target.x, y: target.y },
+                    to: { x: nextTarget.x, y: nextTarget.y },
+                    timer: 0,
+                    duration: 0.3,
+                    isGarbage: false,
+                    
+                    update: function(dt) {
+                        this.timer += dt;
+                        if (this.timer >= this.duration) {
+                            this.isGarbage = true;
+                        }
+                    },
+                    
+                    draw: function(ctx) {
+                        if (this.isGarbage) return;
+                        
+                        const fromPos = cameraManager.worldToScreen(this.from.x, this.from.y);
+                        const toPos = cameraManager.worldToScreen(this.to.x, this.to.y);
+                        
+                        // 绘制闪电
+                        ctx.strokeStyle = 'rgba(100, 180, 255, 0.7)';
+                        ctx.lineWidth = 3;
+                        
+                        ctx.beginPath();
+                        ctx.moveTo(fromPos.x, fromPos.y);
+                        
+                        // 添加一些随机的中间点，使闪电看起来不那么直
+                        const segmentCount = 4;
+                        const dx = (toPos.x - fromPos.x) / segmentCount;
+                        const dy = (toPos.y - fromPos.y) / segmentCount;
+                        
+                        for (let i = 1; i < segmentCount; i++) {
+                            const offsetX = (Math.random() - 0.5) * 15;
+                            const offsetY = (Math.random() - 0.5) * 15;
+                            ctx.lineTo(
+                                fromPos.x + dx * i + offsetX, 
+                                fromPos.y + dy * i + offsetY
+                            );
+                        }
+                        
+                        ctx.lineTo(toPos.x, toPos.y);
+                        ctx.stroke();
+                    }
+                };
+                
+                // 添加链接特效
+                visualEffects.push(chainEffect);
+                
+                // 递归调用，链接到下一个敌人
+                // 稍微延迟，使视觉效果更好
+                setTimeout(() => {
+                    this.applyLightningEffect(nextTarget, damage * 0.8, chainCount - 1);
+                }, 100);
+            }
+        }
+    }
+    
+    /**
+     * 创建元素效果
+     * @param {Enemy} target - 目标敌人
+     * @param {string} elementType - 元素类型: 'fire', 'lightning', 'ice', 'poison'
+     */
+    createElementalEffect(target, elementType) {
+        if (!target || target.isGarbage || !target.isActive) return;
+        
+        let color, emoji, size, duration;
+        
+        // 根据元素类型设置参数
+        switch (elementType) {
+            case 'fire':
+                color = 'rgba(255, 100, 0, 0.7)';
+                emoji = '🔥';
+                size = target.size * 1.2;
+                duration = 0.8;
+                break;
+            case 'lightning':
+                color = 'rgba(100, 180, 255, 0.7)';
+                emoji = '⚡';
+                size = target.size * 1.2;
+                duration = 0.5;
+                break;
+            case 'ice':
+                color = 'rgba(150, 220, 255, 0.7)';
+                emoji = '❄️';
+                size = target.size * 1.2;
+                duration = 1.0;
+                break;
+            case 'poison':
+                color = 'rgba(120, 255, 120, 0.7)';
+                emoji = '☠️';
+                size = target.size * 1.2;
+                duration = 0.8;
+                break;
+            default:
+                color = 'rgba(255, 255, 255, 0.5)';
+                emoji = '✨';
+                size = target.size;
+                duration = 0.5;
+        }
+        
+        // 创建效果
+        const effect = {
+            x: target.x,
+            y: target.y,
+            size: size * 0.8,
+            maxSize: size,
+            color: color,
+            emoji: emoji,
+            timer: 0,
+            duration: duration,
+            isGarbage: false,
+            target: target,
+            
+            update: function(dt) {
+                this.timer += dt;
+                if (this.timer >= this.duration) {
+                    this.isGarbage = true;
+                    return;
+                }
+                
+                // 更新位置跟随目标
+                if (this.target && !this.target.isGarbage && this.target.isActive) {
+                    this.x = this.target.x;
+                    this.y = this.target.y;
+                }
+                
+                // 更新大小
+                const progress = this.timer / this.duration;
+                this.size = this.maxSize * (1 - progress);
+            },
+            
+            draw: function(ctx) {
+                if (this.isGarbage) return;
+                
+                const screenPos = cameraManager.worldToScreen(this.x, this.y);
+                
+                // 绘制光环
+                ctx.beginPath();
+                ctx.fillStyle = this.color;
+                ctx.arc(screenPos.x, screenPos.y, this.size / 2, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // 绘制emoji
+                ctx.font = `${this.size}px 'Segoe UI Emoji', Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(this.emoji, screenPos.x, screenPos.y);
+            }
+        };
+        
+        // 添加效果
+        visualEffects.push(effect);
     }
 }

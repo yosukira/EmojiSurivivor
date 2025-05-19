@@ -564,12 +564,12 @@ if (typeof VineSeedWeapon === 'undefined') {
 
         calculateStats() {
             this.stats = {
-                damage: 10 + (this.level - 1) * 3,
-                cooldown: Math.max(1.0, 2.0 - (this.level - 1) * 0.1),
+                damage: 6 + (this.level - 1) * 2,
+                cooldown: Math.max(1.5, 2.0 - (this.level - 1) * 0.05),
                 count: 1 + Math.floor((this.level - 1) / 3),
-                radius: 60 + (this.level - 1) * 5,
-                slowFactor: 0.3 + (this.level - 1) * 0.05,
-                duration: 5.0 // 持续时间固定为5秒
+                radius: 50 + (this.level - 1) * 4,
+                slowFactor: 0.2 + (this.level - 1) * 0.03,
+                duration: 4.0
             };
         }
         
@@ -716,12 +716,15 @@ if (typeof LaserPrismWeapon === 'undefined') {
             const durationMultiplier = owner.getStat ? owner.getStat('durationMultiplier') : 1;
             const finalDuration = this.stats.duration * durationMultiplier;
             
-            // 计算激光方向，均匀分布
+            // 计算激光方向，确保数量固定 - 修复闪烁问题
             const beamCount = this.stats.count;
+            
+            // 使用固定的起始角度，而不是随机角度，这样每次生成的激光位置都固定
+            const startAngle = (gameTime * 0.5) % (Math.PI * 2); // 随时间缓慢旋转
             const angleStep = Math.PI * 2 / beamCount;
             
             for (let i = 0; i < beamCount; i++) {
-                const angle = angleStep * i;
+                const angle = startAngle + angleStep * i;
                 const dirX = Math.cos(angle);
                 const dirY = Math.sin(angle);
                 

@@ -56,23 +56,31 @@ class BubbleWandWeapon extends Weapon {
         const trapDuration = this.stats.trapDuration * (ownerStats.durationMultiplier || 1);
         const size = GAME_FONT_SIZE * 1.2 * (ownerStats.areaMultiplier || 1);
         const splitOnBurst = this.stats.splitOnBurst;
-
-        // 确保玩家有lastMoveDirection
-        if (!owner.lastMoveDirection) {
-            owner.lastMoveDirection = { x: 0, y: -1 }; // 默认向上
-        }
         
         // 限制屏幕上泡泡总数
         const currentBubbleCount = projectiles.filter(p => p instanceof BubbleProjectile).length;
         if (currentBubbleCount > 100) return; // 如果已经有太多泡泡，不再发射新的
 
-        // 确定发射角度范围，倾向于在玩家前方扇形区域发射
-        const baseAngle = Math.atan2(owner.lastMoveDirection.y, owner.lastMoveDirection.x);
+        // 寻找目标，与匕首武器索敌逻辑一致
+        let target = owner.findNearestEnemy(GAME_WIDTH * 1.5) || {
+            x: owner.x + owner.lastMoveDirection.x * 100,
+            y: owner.y + owner.lastMoveDirection.y * 100
+        };
+        
+        // 计算方向
+        const dx = target.x - owner.x;
+        const dy = target.y - owner.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const dirX = dist > 0 ? dx / dist : owner.lastMoveDirection.x;
+        const dirY = dist > 0 ? dy / dist : owner.lastMoveDirection.y;
+        
+        // 计算角度和扇形范围
+        const baseAngle = Math.atan2(dirY, dirX);
         const angleSpread = Math.PI * 0.6; // 60度扇形范围
 
         // 随机方向发射泡泡
         for (let i = 0; i < projectileCount; i++) {
-            // 计算发射角度，在玩家面向方向的扇形范围内
+            // 计算发射角度，在敌人方向的扇形范围内
             const randomAngle = baseAngle + (Math.random() - 0.5) * angleSpread;
             
             const dirX = Math.cos(randomAngle);
