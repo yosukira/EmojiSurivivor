@@ -43,6 +43,7 @@ let deltaTime = 0;
 let killCount = 0;
 let animationFrameId = null;
 let playerImage = null; // 用于存储玩家图片
+let backgroundImage = null; // 用于存储背景图片
 
 // 屏幕震动相关变量
 let screenShakeIntensity = 0;
@@ -362,6 +363,17 @@ function init() {
         playerImage = null; // 加载失败则不使用图片
     };
 
+    // 加载背景图片
+    backgroundImage = new Image();
+    backgroundImage.src = 'assets/grassbg.png';
+    backgroundImage.onload = () => {
+        console.log("背景图片加载完成。");
+    };
+    backgroundImage.onerror = () => {
+        console.error("无法加载背景图片！");
+        backgroundImage = null; // 加载失败则使用纯色背景
+    };
+
     // 清空对象池和活动列表
     inactiveProjectiles = [];
     inactiveDamageNumbers = [];
@@ -663,8 +675,27 @@ function draw() {
         }
 
         // 使用离屏画布进行绘制
-        offscreenCtx.fillStyle = '#1a4d2e';
-        offscreenCtx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+        if (backgroundImage && backgroundImage.complete && backgroundImage.naturalHeight !== 0) {
+            // 使用图片作为背景纹理
+            const pattern = offscreenCtx.createPattern(backgroundImage, 'repeat');
+            offscreenCtx.fillStyle = pattern;
+            
+            // 固定背景位置，不跟随相机移动
+            const offsetX = 0;
+            const offsetY = 0;
+            
+            offscreenCtx.save();
+            offscreenCtx.translate(offsetX, offsetY);
+            // 确保无论如何都能完全覆盖画布，多绘制一些区域
+            offscreenCtx.fillRect(-offsetX - backgroundImage.width, -offsetY - backgroundImage.height, 
+                                 GAME_WIDTH + 2 * backgroundImage.width, 
+                                 GAME_HEIGHT + 2 * backgroundImage.height);
+            offscreenCtx.restore();
+        } else {
+            // 使用纯色作为背景
+            offscreenCtx.fillStyle = '#1a4d2e';
+            offscreenCtx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+        }
         
         // 按照图层顺序从底到顶绘制：
         // 1. 世界背景物体
