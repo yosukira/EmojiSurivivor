@@ -2120,7 +2120,57 @@ class SonicWaveAttack {
  * 藤蔓危险区域类
  * 藤蔓种子的效果区域
  */
-class VineHazard {    /**     * 构造函数     * @param {number} x - X坐标     * @param {number} y - Y坐标     * @param {number} radius - 半径     * @param {number} damage - 伤害     * @param {number} attackDuration - 攻击持续时间     * @param {number} slowFactor - 减速因子     * @param {number} lifetime - 生命周期     * @param {Player} owner - 拥有者     */    constructor(x, y, radius, damage, attackDuration, slowFactor, lifetime, owner) {        // 基本属性        this.x = x;        this.y = y;        this.radius = radius;        this.damage = damage;        this.attackDuration = attackDuration;        this.slowFactor = slowFactor;        this.lifetime = lifetime;        this.owner = owner;                // 状态        this.isActive = true;        this.isGarbage = false;        this.timer = 0;        this.damageTimer = 0;                // 生长动画        this.isGrowing = true;        this.growDuration = 0.7;        this.growProgress = 0;        this.currentRadius = 0;                // 衰减动画        this.isDecaying = false;        this.decayDuration = 0.5;        this.decayTimer = 0;                // 藤蔓        this.vines = [];        this.createVines();                // 视觉效果        this.leafParticleTimer = 0;        this.leafParticleInterval = 0.5;                // 添加受影响的敌人集合        this.affectedEnemies = new Set();    }
+class VineHazard {
+    /**
+     * 构造函数
+     * @param {number} x - X坐标
+     * @param {number} y - Y坐标
+     * @param {number} radius - 半径
+     * @param {number} damage - 伤害
+     * @param {number} attackDuration - 攻击持续时间
+     * @param {number} slowFactor - 减速因子
+     * @param {number} lifetime - 生命周期
+     * @param {Player} owner - 拥有者
+     */
+    constructor(x, y, radius, damage, attackDuration, slowFactor, lifetime, owner) {
+        // 基本属性
+        this.x = x;
+        this.y = y;
+        this.radius = radius;
+        this.damage = damage;
+        this.attackDuration = attackDuration;
+        this.slowFactor = slowFactor;
+        this.lifetime = lifetime;
+        this.owner = owner;
+        
+        // 状态
+        this.isActive = true;
+        this.isGarbage = false;
+        this.timer = 0;
+        this.damageTimer = 0;
+        
+        // 生长动画
+        this.isGrowing = true;
+        this.growDuration = 0.7;
+        this.growProgress = 0;
+        this.currentRadius = 0;
+        
+        // 衰减动画
+        this.isDecaying = false;
+        this.decayDuration = 0.5;
+        this.decayTimer = 0;
+        
+        // 藤蔓
+        this.vines = [];
+        this.createVines();
+        
+        // 视觉效果
+        this.leafParticleTimer = 0;
+        this.leafParticleInterval = 0.5;
+        
+        // 添加受影响的敌人集合
+        this.affectedEnemies = new Set();
+    }
 
     /**
      * 创建藤蔓
@@ -2218,7 +2268,7 @@ class VineHazard {    /**     * 构造函数     * @param {number} x - X坐标  
             
             this.vines.push(vine);
         }
-    }
+    };
 
     /**
      * 更新状态
@@ -2278,7 +2328,7 @@ class VineHazard {    /**     * 构造函数     * @param {number} x - X坐标  
         
         // 更新藤蔓生长
         this.updateVines(dt);
-    }
+    };
     
     /**
      * 更新藤蔓生长
@@ -2318,7 +2368,7 @@ class VineHazard {    /**     * 构造函数     * @param {number} x - X坐标  
                 });
             });
         }
-    }
+    };
     
     /**
      * 对范围内敌人造成伤害
@@ -2339,6 +2389,7 @@ class VineHazard {    /**     * 构造函数     * @param {number} x - X坐标  
             const dy = enemy.y - this.y;
             const distSq = dx * dx + dy * dy;
             
+            // 如果在范围内，造成伤害
             if (distSq <= this.currentRadius * this.currentRadius) {
                 // 造成伤害
                 enemy.takeDamage(this.damage, this.owner);
@@ -2346,17 +2397,12 @@ class VineHazard {    /**     * 构造函数     * @param {number} x - X坐标  
                 // 应用减速效果
                 this.applySlow(enemy);
                 
-                // 添加到受影响敌人集合
+                // 添加到受影响列表
                 this.affectedEnemies.add(enemy);
-            } else {
-                // 如果敌人离开范围，移除减速效果
-                if (this.affectedEnemies.has(enemy)) {
-                    this.affectedEnemies.delete(enemy);
-                }
             }
         });
-    }
-
+    };
+    
     /**
      * 应用减速效果
      * @param {Enemy} enemy - 敌人
@@ -2371,7 +2417,7 @@ class VineHazard {    /**     * 构造函数     * @param {number} x - X坐标  
         if (enemy.statusEffects.vineSlow) {
             enemy.statusEffects.vineSlow.duration = Math.max(
                 enemy.statusEffects.vineSlow.duration,
-                this.attackDuration * 2
+                0.5
             );
         } else {
             // 添加新的减速效果
@@ -2379,14 +2425,14 @@ class VineHazard {    /**     * 构造函数     * @param {number} x - X坐标  
             enemy.speed *= this.slowFactor;
             
             enemy.statusEffects.vineSlow = {
-                duration: this.attackDuration * 2,
+                duration: 0.5,
                 factor: this.slowFactor,
                 originalSpeed: originalSpeed,
                 source: this.owner
             };
         }
-    }
-
+    };
+    
     /**
      * 创建叶子粒子
      */
@@ -2394,33 +2440,28 @@ class VineHazard {    /**     * 构造函数     * @param {number} x - X坐标  
         // 在区域内随机位置生成叶子
         const angle = Math.random() * Math.PI * 2;
         const distance = Math.random() * this.currentRadius;
-        
         const x = this.x + Math.cos(angle) * distance;
         const y = this.y + Math.sin(angle) * distance;
-        
-        // 随机叶子类型
-        const leafType = Math.random() < 0.5 ? '🍃' : '🍂';
         
         // 创建叶子粒子
         const leaf = {
             x: x,
             y: y,
-            emoji: leafType,
-            vx: (Math.random() - 0.5) * 10,
-            vy: (Math.random() - 0.5) * 10 - 5,  // 轻微上升
+            vx: (Math.random() - 0.5) * 5,
+            vy: (Math.random() - 0.5) * 5 - 10, // 向上的初始速度
             rotation: Math.random() * Math.PI * 2,
             rotationSpeed: (Math.random() - 0.5) * Math.PI,
-            size: 8 + Math.random() * 4,
-            lifetime: 1.5 + Math.random() * 1,
+            size: 3 + Math.random() * 2,
+            lifetime: 1.0 + Math.random() * 0.5,
             timer: 0,
+            type: Math.random() < 0.5 ? '🌿' : '🍃',
             isGarbage: false,
             
             update: function(dt) {
                 this.timer += dt;
                 this.x += this.vx * dt;
                 this.y += this.vy * dt;
-                this.vx *= 0.95;
-                this.vy *= 0.95;
+                this.vy += 5 * dt; // 重力
                 this.rotation += this.rotationSpeed * dt;
                 
                 if (this.timer >= this.lifetime) {
@@ -2433,17 +2474,17 @@ class VineHazard {    /**     * 构造函数     * @param {number} x - X坐标  
                 if (this.isGarbage) return;
                 
                 const screenPos = cameraManager.worldToScreen(this.x, this.y);
-                const alpha = 0.8 * (1 - Math.pow(this.timer / this.lifetime, 2));
+                const alpha = 0.7 * (1 - this.timer / this.lifetime);
                 
                 ctx.save();
                 ctx.translate(screenPos.x, screenPos.y);
                 ctx.rotate(this.rotation);
-                
                 ctx.globalAlpha = alpha;
+                
                 ctx.font = `${this.size}px 'Segoe UI Emoji', Arial`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
-                ctx.fillText(this.emoji, 0, 0);
+                ctx.fillText(this.type, 0, 0);
                 
                 ctx.restore();
             }
@@ -2453,10 +2494,10 @@ class VineHazard {    /**     * 构造函数     * @param {number} x - X坐标  
         if (typeof particles !== 'undefined') {
             particles.push(leaf);
         }
-    }
-
+    };
+    
     /**
-     * 绘制危险区域
+     * 绘制藤蔓
      * @param {CanvasRenderingContext2D} ctx - 画布上下文
      */
     draw(ctx) {
@@ -2466,28 +2507,20 @@ class VineHazard {    /**     * 构造函数     * @param {number} x - X坐标  
             // 获取屏幕坐标
             const screenPos = cameraManager.worldToScreen(this.x, this.y);
             
-            // 保存上下文
-            ctx.save();
-            
-            // 绘制区域边界
-            if (!this.isDecaying) {
-                ctx.strokeStyle = 'rgba(0, 150, 0, 0.3)';
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                ctx.arc(screenPos.x, screenPos.y, this.currentRadius, 0, Math.PI * 2);
-                ctx.stroke();
-            }
+            // 绘制生长区域
+            const areaOpacity = this.isDecaying ? 0.1 * (1 - this.decayTimer / this.decayDuration) : 0.1;
+            ctx.fillStyle = `rgba(50, 150, 50, ${areaOpacity})`;
+            ctx.beginPath();
+            ctx.arc(screenPos.x, screenPos.y, this.currentRadius, 0, Math.PI * 2);
+            ctx.fill();
             
             // 绘制藤蔓
             this.drawVines(ctx, screenPos);
-            
-            // 恢复上下文
-            ctx.restore();
         } catch (e) {
-            console.error("绘制藤蔓危险区域时出错:", e);
+            console.error("绘制藤蔓时出错:", e);
         }
-    }
-
+    };
+    
     /**
      * 绘制藤蔓
      * @param {CanvasRenderingContext2D} ctx - 画布上下文
@@ -2497,34 +2530,25 @@ class VineHazard {    /**     * 构造函数     * @param {number} x - X坐标  
         // 对于每条藤蔓
         this.vines.forEach(vine => {
             // 计算透明度
-            let alpha = 1.0;
-            if (this.isDecaying) {
-                alpha = 1 - this.decayTimer / this.decayDuration;
-            }
+            const opacity = this.isDecaying ? 
+                0.8 * (1 - this.decayTimer / this.decayDuration) : 
+                0.8;
             
             // 绘制藤蔓段
-            vine.segments.forEach(segment => {
+            vine.segments.forEach((segment, index) => {
+                // 如果段不可见，跳过绘制
                 if (!segment.isReady) return;
                 
-                // 转换坐标
+                // 计算屏幕坐标
                 const startScreenX = screenPos.x + segment.startX;
                 const startScreenY = screenPos.y + segment.startY;
                 const endScreenX = screenPos.x + segment.endX;
                 const endScreenY = screenPos.y + segment.endY;
                 
                 // 绘制藤蔓段
-                ctx.strokeStyle = `rgba(20, 150, 20, ${alpha * 0.9})`;
+                ctx.strokeStyle = `rgba(50, 130, 50, ${opacity})`;
                 ctx.lineWidth = vine.thickness;
                 ctx.lineCap = 'round';
-                
-                ctx.beginPath();
-                ctx.moveTo(startScreenX, startScreenY);
-                ctx.lineTo(endScreenX, endScreenY);
-                ctx.stroke();
-                
-                // 绘制藤蔓阴影
-                ctx.strokeStyle = `rgba(0, 100, 0, ${alpha * 0.5})`;
-                ctx.lineWidth = vine.thickness * 1.5;
                 
                 ctx.beginPath();
                 ctx.moveTo(startScreenX, startScreenY);
@@ -2534,42 +2558,46 @@ class VineHazard {    /**     * 构造函数     * @param {number} x - X坐标  
             
             // 绘制花朵
             vine.flowers.forEach(flower => {
+                // 如果花朵不可见，跳过绘制
                 if (!flower.isReady) return;
                 
-                // 转换坐标
+                // 计算屏幕坐标
                 const flowerScreenX = screenPos.x + flower.x;
                 const flowerScreenY = screenPos.y + flower.y;
                 
                 // 绘制花朵
-                ctx.globalAlpha = alpha;
                 ctx.font = `${flower.size}px 'Segoe UI Emoji', Arial`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
+                
+                // 使用表情符号绘制花朵
                 ctx.fillText(flower.type, flowerScreenX, flowerScreenY);
             });
             
             // 绘制刺
             vine.thorns.forEach(thorn => {
+                // 如果刺不可见，跳过绘制
                 if (!thorn.isReady) return;
                 
-                // 转换坐标
-                const thornStartX = screenPos.x + thorn.x;
-                const thornStartY = screenPos.y + thorn.y;
-                const thornEndX = thornStartX + Math.cos(thorn.angle) * thorn.length;
-                const thornEndY = thornStartY + Math.sin(thorn.angle) * thorn.length;
+                // 计算屏幕坐标
+                const thornScreenX = screenPos.x + thorn.x;
+                const thornScreenY = screenPos.y + thorn.y;
+                
+                // 计算刺的端点
+                const thornEndX = thornScreenX + Math.cos(thorn.angle) * thorn.length;
+                const thornEndY = thornScreenY + Math.sin(thorn.angle) * thorn.length;
                 
                 // 绘制刺
-                ctx.strokeStyle = `rgba(100, 40, 0, ${alpha * 0.9})`;
-                ctx.lineWidth = 2;
-                ctx.lineCap = 'round';
+                ctx.strokeStyle = `rgba(100, 70, 40, ${opacity})`;
+                ctx.lineWidth = 1;
                 
                 ctx.beginPath();
-                ctx.moveTo(thornStartX, thornStartY);
+                ctx.moveTo(thornScreenX, thornScreenY);
                 ctx.lineTo(thornEndX, thornEndY);
                 ctx.stroke();
             });
         });
-    }
+    };
 }
 
 /**
