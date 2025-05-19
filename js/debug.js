@@ -954,50 +954,78 @@ if (typeof FrostStaffWeapon === 'undefined') {
             const damageMultiplier = owner.getStat ? owner.getStat('damageMultiplier') : 1;
             const finalDamage = this.stats.damage * damageMultiplier;
             
+            // 获取穿透加成
+            const pierceBonus = owner.getStat ? owner.getStat('pierceBonus') || 0 : 0;
+            const finalPierce = this.stats.pierce + pierceBonus;
+            
             // 获取持续时间乘数
             const durationMultiplier = owner.getStat ? owner.getStat('durationMultiplier') : 1;
             const finalFreezeDuration = this.stats.freezeDuration * durationMultiplier;
             
-            // 获取投射物速度乘数
-            const projSpeedMultiplier = owner.getStat ? owner.getStat('projectileSpeedMultiplier') : 1;
-            const finalSpeed = this.stats.projectileSpeed * projSpeedMultiplier;
+            // 获取速度乘数
+            const speedMultiplier = owner.getStat ? owner.getStat('projectileSpeedMultiplier') : 1;
+            const finalSpeed = this.stats.projectileSpeed * speedMultiplier;
             
-            // 平均分布发射角度
-            const angleBase = Math.PI / 4; // 45度扇形角度
-            const angleStep = this.stats.count > 1 ? angleBase / (this.stats.count - 1) : 0;
+            // 寻找附近敌人而不是考虑玩家朝向
+            const targets = [];
             
-            // 使用玩家的最后移动方向作为基准
-            const lastDir = owner.lastMoveDirection || { x: 0, y: 1 };
-            const baseAngle = Math.atan2(lastDir.y, lastDir.x);
+            // 如果有enemies数组
+            if (typeof enemies !== 'undefined') {
+                // 获取可视范围内的敌人
+                const maxRange = 800; // 最大索敌范围
+                
+                // 筛选视野内的敌人
+                const visibleEnemies = enemies.filter(enemy => {
+                    if (!enemy || enemy.isGarbage || !enemy.isActive) return false;
+                    
+                    const dx = enemy.x - owner.x;
+                    const dy = enemy.y - owner.y;
+                    const distSq = dx * dx + dy * dy;
+                    
+                    return distSq <= maxRange * maxRange;
+                });
+                
+                // 按距离排序
+                const sortedEnemies = visibleEnemies.sort((a, b) => {
+                    const distA = (a.x - owner.x) * (a.x - owner.x) + (a.y - owner.y) * (a.y - owner.y);
+                    const distB = (b.x - owner.x) * (b.x - owner.x) + (b.y - owner.y) * (b.y - owner.y);
+                    return distA - distB;
+                });
+                
+                // 取最近的几个敌人作为目标
+                targets.push(...sortedEnemies.slice(0, this.stats.count));
+            }
             
+            // 对每个目标发射冰晶
             for (let i = 0; i < this.stats.count; i++) {
-                // 计算角度偏移
-                let offsetAngle;
-                if (this.stats.count === 1) {
-                    offsetAngle = 0;
+                let vx, vy;
+                
+                // 如果有目标，瞄准目标
+                if (i < targets.length) {
+                    const target = targets[i];
+                    const dx = target.x - owner.x;
+                    const dy = target.y - owner.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    
+                    vx = dx / dist * finalSpeed;
+                    vy = dy / dist * finalSpeed;
                 } else {
-                    offsetAngle = -angleBase / 2 + angleStep * i;
+                    // 没有目标时随机方向
+                    const angle = Math.random() * Math.PI * 2;
+                    vx = Math.cos(angle) * finalSpeed;
+                    vy = Math.sin(angle) * finalSpeed;
                 }
-                
-                // 最终角度
-                const finalAngle = baseAngle + offsetAngle;
-                
-                // 计算方向和速度
-                const dirX = Math.cos(finalAngle);
-                const dirY = Math.sin(finalAngle);
-                const vx = dirX * finalSpeed;
-                const vy = dirY * finalSpeed;
                 
                 // 创建冰晶投射物
                 if (typeof FrostCrystalProjectile === 'function') {
                     const crystal = new FrostCrystalProjectile(
                         owner.x,
                         owner.y,
-                        28, // 大小
+                        24, // 大小
                         vx,
                         vy,
                         finalDamage,
-                        this.stats.pierce,
+                        finalPierce,
                         4.0, // 存在时间
                         damageMultiplier,
                         finalFreezeDuration,

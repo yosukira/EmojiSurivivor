@@ -950,6 +950,139 @@ class ChaosDiceProjectile extends Projectile {
     }
     
     /**
+     * 创建闪电链效果
+     * @param {Enemy} sourceEnemy - 起始敌人
+     * @param {number} damage - 伤害
+     * @param {number} chainCount - 链数
+     * @param {number} range - 范围
+     */
+    chainLightning(sourceEnemy, damage, chainCount, range) {
+        // 已命中的敌人
+        const hitEnemies = new Set([sourceEnemy]);
+        
+        // 当前源敌人
+        let currentSource = sourceEnemy;
+        
+        // 链式攻击
+        for (let i = 0; i < chainCount; i++) {
+            // 寻找范围内未命中的敌人
+            const nearbyEnemies = enemies.filter(enemy => {
+                if (enemy.isGarbage || !enemy.isActive || hitEnemies.has(enemy)) return false;
+                
+                const dx = enemy.x - currentSource.x;
+                const dy = enemy.y - currentSource.y;
+                const distSq = dx * dx + dy * dy;
+                
+                return distSq <= range * range;
+            });
+            
+            // 如果没有可用敌人，结束链
+            if (nearbyEnemies.length === 0) break;
+            
+            // 随机选择一个敌人
+            const targetEnemy = nearbyEnemies[Math.floor(Math.random() * nearbyEnemies.length)];
+            
+            // 造成伤害
+            targetEnemy.takeDamage(damage, this.owner);
+            
+            // 创建闪电视觉效果
+            this.createLightningEffect(currentSource.x, currentSource.y, targetEnemy.x, targetEnemy.y);
+            
+            // 添加到已命中列表
+            hitEnemies.add(targetEnemy);
+            
+            // 更新当前源敌人
+            currentSource = targetEnemy;
+        }
+    }
+    
+    /**
+     * 创建闪电视觉效果
+     * @param {number} x1 - 起点X坐标
+     * @param {number} y1 - 起点Y坐标
+     * @param {number} x2 - 终点X坐标
+     * @param {number} y2 - 终点Y坐标
+     */
+    createLightningEffect(x1, y1, x2, y2) {
+        // 计算方向和距离
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        
+        // 闪电段数
+        const segments = 6 + Math.floor(dist / 30);
+        
+        // 闪电点
+        const points = [{x: x1, y: y1}];
+        
+        // 生成闪电路径点
+        for (let i = 1; i < segments; i++) {
+            const ratio = i / segments;
+            const perpDist = 15 * (Math.random() - 0.5) * (1 - Math.abs(ratio - 0.5) * 2);
+            
+            const perpX = -dy / dist * perpDist;
+            const perpY = dx / dist * perpDist;
+            
+            points.push({
+                x: x1 + dx * ratio + perpX,
+                y: y1 + dy * ratio + perpY
+            });
+        }
+        
+        // 添加终点
+        points.push({x: x2, y: y2});
+        
+        // 创建闪电效果
+        const lightning = {
+            points: points,
+            lifetime: 0.3,
+            timer: 0,
+            isGarbage: false,
+            
+            update: function(dt) {
+                this.timer += dt;
+                if (this.timer >= this.lifetime) {
+                    this.isGarbage = true;
+                }
+            },
+            
+            draw: function(ctx) {
+                if (this.isGarbage) return;
+                
+                const alpha = 1 - (this.timer / this.lifetime);
+                
+                // 获取屏幕坐标
+                const screenPoints = this.points.map(p => cameraManager.worldToScreen(p.x, p.y));
+                
+                // 绘制闪电
+                ctx.strokeStyle = `rgba(100, 180, 255, ${alpha})`;
+                ctx.lineWidth = 2;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                
+                ctx.beginPath();
+                ctx.moveTo(screenPoints[0].x, screenPoints[0].y);
+                
+                for (let i = 1; i < screenPoints.length; i++) {
+                    ctx.lineTo(screenPoints[i].x, screenPoints[i].y);
+                }
+                
+                ctx.stroke();
+                
+                // 发光效果
+                ctx.strokeStyle = `rgba(200, 230, 255, ${alpha * 0.7})`;
+                ctx.lineWidth = 4;
+                ctx.stroke();
+            }
+        };
+        
+        // 添加到视觉效果
+        if (typeof visualEffects !== 'undefined') {
+            visualEffects.push(lightning);
+        }
+    }
+    
+    /**
      * 绘制投射物
      * @param {CanvasRenderingContext2D} ctx - 画布上下文
      */
@@ -1987,54 +2120,7 @@ class SonicWaveAttack {
  * 藤蔓危险区域类
  * 藤蔓种子的效果区域
  */
-class VineHazard {
-    /**
-     * 构造函数
-     * @param {number} x - X坐标
-     * @param {number} y - Y坐标
-     * @param {number} radius - 半径
-     * @param {number} damage - 伤害
-     * @param {number} attackDuration - 攻击持续时间
-     * @param {number} slowFactor - 减速因子
-     * @param {number} lifetime - 生命周期
-     * @param {Player} owner - 拥有者
-     */
-    constructor(x, y, radius, damage, attackDuration, slowFactor, lifetime, owner) {
-        // 基本属性
-        this.x = x;
-        this.y = y;
-        this.radius = radius;
-        this.damage = damage;
-        this.attackDuration = attackDuration;
-        this.slowFactor = slowFactor;
-        this.lifetime = lifetime;
-        this.owner = owner;
-        
-        // 状态
-        this.isActive = true;
-        this.isGarbage = false;
-        this.timer = 0;
-        this.damageTimer = 0;
-        
-        // 生长动画
-        this.isGrowing = true;
-        this.growDuration = 0.7;
-        this.growProgress = 0;
-        this.currentRadius = 0;
-        
-        // 衰减动画
-        this.isDecaying = false;
-        this.decayDuration = 0.5;
-        this.decayTimer = 0;
-        
-        // 藤蔓
-        this.vines = [];
-        this.createVines();
-        
-        // 视觉效果
-        this.leafParticleTimer = 0;
-        this.leafParticleInterval = 0.5;
-    }
+class VineHazard {    /**     * 构造函数     * @param {number} x - X坐标     * @param {number} y - Y坐标     * @param {number} radius - 半径     * @param {number} damage - 伤害     * @param {number} attackDuration - 攻击持续时间     * @param {number} slowFactor - 减速因子     * @param {number} lifetime - 生命周期     * @param {Player} owner - 拥有者     */    constructor(x, y, radius, damage, attackDuration, slowFactor, lifetime, owner) {        // 基本属性        this.x = x;        this.y = y;        this.radius = radius;        this.damage = damage;        this.attackDuration = attackDuration;        this.slowFactor = slowFactor;        this.lifetime = lifetime;        this.owner = owner;                // 状态        this.isActive = true;        this.isGarbage = false;        this.timer = 0;        this.damageTimer = 0;                // 生长动画        this.isGrowing = true;        this.growDuration = 0.7;        this.growProgress = 0;        this.currentRadius = 0;                // 衰减动画        this.isDecaying = false;        this.decayDuration = 0.5;        this.decayTimer = 0;                // 藤蔓        this.vines = [];        this.createVines();                // 视觉效果        this.leafParticleTimer = 0;        this.leafParticleInterval = 0.5;                // 添加受影响的敌人集合        this.affectedEnemies = new Set();    }
 
     /**
      * 创建藤蔓
@@ -2183,34 +2269,90 @@ class VineHazard {
             this.damageEnemiesInArea();
         }
         
-        // 更新视觉效果
+        // 更新粒子效果计时器
         this.leafParticleTimer += dt;
         if (this.leafParticleTimer >= this.leafParticleInterval) {
             this.leafParticleTimer = 0;
             this.createLeafParticle();
         }
+        
+        // 更新藤蔓生长
+        this.updateVines(dt);
     }
     
     /**
-     * 对范围内敌人造成伤害和减速效果
+     * 更新藤蔓生长
+     * @param {number} dt - 时间增量
+     */
+    updateVines(dt) {
+        // 如果正在生长，更新藤蔓生长状态
+        if (this.isGrowing) {
+            this.vines.forEach(vine => {
+                // 更新藤蔓段
+                vine.segments.forEach((segment, index) => {
+                    // 如果已经准备好，不需要更新
+                    if (segment.isReady) return;
+                    
+                    // 计算生长延迟
+                    if (this.timer > segment.growDelay) {
+                        segment.isReady = true;
+                    }
+                });
+                
+                // 更新花朵
+                vine.flowers.forEach(flower => {
+                    if (flower.isReady) return;
+                    
+                    if (this.timer > flower.growDelay) {
+                        flower.isReady = true;
+                    }
+                });
+                
+                // 更新刺
+                vine.thorns.forEach(thorn => {
+                    if (thorn.isReady) return;
+                    
+                    if (this.timer > thorn.growDelay) {
+                        thorn.isReady = true;
+                    }
+                });
+            });
+        }
+    }
+    
+    /**
+     * 对范围内敌人造成伤害
      */
     damageEnemiesInArea() {
+        // 清除不再存在的敌人引用
+        this.affectedEnemies.forEach(enemy => {
+            if (enemy.isGarbage || !enemy.isActive) {
+                this.affectedEnemies.delete(enemy);
+            }
+        });
+        
+        // 对范围内的敌人造成伤害
         enemies.forEach(enemy => {
-            // 跳过无效敌人
             if (enemy.isGarbage || !enemy.isActive) return;
             
-            // 计算距离
             const dx = enemy.x - this.x;
             const dy = enemy.y - this.y;
             const distSq = dx * dx + dy * dy;
             
-            // 如果在范围内，造成伤害和减速
             if (distSq <= this.currentRadius * this.currentRadius) {
                 // 造成伤害
                 enemy.takeDamage(this.damage, this.owner);
                 
                 // 应用减速效果
                 this.applySlow(enemy);
+                
+                // 添加到受影响敌人集合
+                this.affectedEnemies.add(enemy);
+            } else {
+                // 如果敌人离开范围，移除减速效果
+                if (this.affectedEnemies.has(enemy)) {
+                    this.affectedEnemies.delete(enemy);
+                }
             }
         });
     }
@@ -3403,7 +3545,7 @@ class VolcanoEruption {
             x: this.x,
             y: this.y,
             radius: this.radius * 0.8,
-            lifetime: this.lavaPuddle,  // 使用传入的lavaDuration参数
+            lifetime: 3.0,  // 固定熔岩池持续时间为3秒
             timer: 0,
             damageTimer: 0,
             damageInterval: 0.5,
@@ -3445,8 +3587,7 @@ class VolcanoEruption {
                             // 应用燃烧效果
                             volcano.applyBurnEffect(enemy);
                             
-                            // 减速效果
-                            this.applySlowEffect(enemy);
+                                                        // 减速效果                            this.applySlowEffect(enemy, volcano);
                         }
                     });
                 }
@@ -3457,7 +3598,7 @@ class VolcanoEruption {
                 }
             },
             
-            applySlowEffect: function(enemy) {
+            applySlowEffect: function(enemy, volcano) {
                 // 初始化状态效果对象
                 if (!enemy.statusEffects) {
                     enemy.statusEffects = {};

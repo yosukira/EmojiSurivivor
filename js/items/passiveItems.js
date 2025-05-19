@@ -76,6 +76,39 @@ class PassiveItem {
         this.owner = owner;
         // 应用时更新 bonuses
         this.bonuses = this.getBonuses();
+        
+        // 确保owner有stats属性
+        if (!owner.stats) {
+            owner.stats = {};
+        }
+        
+        // 将bonuses应用到owner的stats中
+        for (const [key, value] of Object.entries(this.bonuses)) {
+            if (typeof value === 'number') {
+                // 如果是乘数类型的属性，确保正确应用
+                if (key.endsWith('Multiplier')) {
+                    // 初始化如果不存在
+                    if (owner.stats[key] === undefined) {
+                        owner.stats[key] = 1.0;
+                    }
+                    // 应用乘数效果
+                    owner.stats[key] *= value;
+                } 
+                // 如果是加成类型的属性
+                else if (key.endsWith('Bonus') || key.endsWith('Count') || key.endsWith('Chance') || key.endsWith('Damage') || key.endsWith('Duration') || key.endsWith('Strength')) {
+                    // 初始化如果不存在
+                    if (owner.stats[key] === undefined) {
+                        owner.stats[key] = 0;
+                    }
+                    // 应用加成效果
+                    owner.stats[key] += value;
+                }
+                // 其他情况直接赋值
+                else {
+                    owner.stats[key] = value;
+                }
+            }
+        }
     }
     
     /**

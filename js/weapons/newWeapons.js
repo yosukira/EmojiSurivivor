@@ -356,8 +356,8 @@ class MagnetGunWeapon extends Weapon {
                 const distFactor = 1 - Math.min(1, dist / 800);
                 
                 // 最终得分：方向相似度和距离的加权和
-                // 方向占70%权重，距离占30%权重
-                const score = dotProduct * 0.7 + distFactor * 0.3;
+                // 方向占40%权重，距离占60%权重，更注重距离而非方向
+                const score = (dotProduct + 1) * 0.2 + distFactor * 0.8;
                 
                 return { enemy, score };
             });
@@ -365,9 +365,8 @@ class MagnetGunWeapon extends Weapon {
             // 按得分排序（高到低）
             scoredEnemies.sort((a, b) => b.score - a.score);
             
-            // 只考虑得分为正（即朝向玩家前方）的敌人，并且确保有足够的目标
+            // 按得分排序选择目标，不限制必须在玩家前方
             targetEnemies = scoredEnemies
-                .filter(item => item.score > 0)
                 .slice(0, projectileCount)
                 .map(item => item.enemy);
         }
@@ -598,7 +597,7 @@ class VolcanoStaffWeapon extends Weapon {
             // 创建火山爆发
                 const volcano = new VolcanoEruption(
                 x, y, radius, damage, eruptions, eruptionDelay,
-                burnDamage, burnDuration, lavaPuddle ? lavaDuration : 0,
+                burnDamage, burnDuration, lavaPuddle, // 修改：只传递是否生成熔岩池的标记
                 owner
                 );
                 
