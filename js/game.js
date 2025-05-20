@@ -1871,7 +1871,8 @@ let passiveClasses = {
     DragonSpice: false,
     ThunderAmulet: false,
     PoisonOrb: false,
-    MagnetSphere: false
+    MagnetSphere: false,
+    AncientTreeSap: false // 确保古树精华也被包含
 };
 
 // 检查现有被动物品列表
@@ -1891,6 +1892,23 @@ Object.keys(passiveClasses).forEach(className => {
     if (!passiveClasses[className] && typeof window[className] !== 'undefined') {
         console.log(`Adding missing passive class: ${className}`);
         BASE_PASSIVES.push(window[className]);
+    }
+});
+
+// 显式确保关键被动物品被添加
+const criticalPassives = ["Spinach", "Wings", "Bracer", "HollowHeart", "AncientTreeSap"];
+criticalPassives.forEach(className => {
+    // 检查是否已存在于BASE_PASSIVES中
+    const exists = BASE_PASSIVES.some(PassiveClass => 
+        PassiveClass.name === className || 
+        (PassiveClass.prototype && PassiveClass.prototype.constructor && PassiveClass.prototype.constructor.name === className)
+    );
+    
+    if (!exists && typeof window[className] !== 'undefined') {
+        console.log(`强制添加关键被动物品: ${className}`);
+        BASE_PASSIVES.push(window[className]);
+    } else if (!exists) {
+        console.error(`无法添加关键被动物品 ${className}，该类不存在或无法访问`);
     }
 });
 
