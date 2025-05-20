@@ -113,7 +113,7 @@ class Player extends Character {
             let newY = this.y + dy * currentSpeed * dt;
             
             // 不再限制玩家移动范围，允许无限大地图
-            
+
             // 更新位置
             this.x = newX;
             this.y = newY;
@@ -141,8 +141,8 @@ class Player extends Character {
 
         // 如果计时器超过1秒，恢复生命
         if (this.regenTimer >= 1.0) {
-            // 获取生命恢复量
-            const regenAmount = this.getStat('regen');
+            // 获取生命恢复量，直接使用regenAmount属性
+            const regenAmount = this.getStat('regenAmount');
             // 如果有生命恢复，恢复生命
             if (regenAmount > 0) {
                 this.heal(regenAmount);
@@ -882,8 +882,8 @@ class Player extends Character {
             draw: function(ctx) {
                 if (this.isGarbage) return;
                 
-                const screenPos = cameraManager.worldToScreen(this.x, this.y);
-                
+        const screenPos = cameraManager.worldToScreen(this.x, this.y);
+
                 // 绘制光环
                 ctx.beginPath();
                 ctx.fillStyle = this.color;

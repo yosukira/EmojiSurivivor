@@ -679,8 +679,8 @@ class Enemy extends Character {
      */
     dropItem() {
         // 基础掉落率
-        let baseHealDropRate = 0.025; // 2.5%基础几率掉落治疗物品，降低掉落率
-        let baseMagnetDropRate = 0.010; // 1.0%基础几率掉落磁铁，降低掉落率
+        let baseHealDropRate = 0.045; // 4.5%基础几率掉落治疗物品，提高掉落率
+        let baseMagnetDropRate = 0.010; // 1.0%基础几率掉落磁铁，保持不变
         
         // 根据游戏时间调整掉落率（随着时间推移线性降低）
         // 每分钟减少5%的掉落率，最低降低到基础掉落率的30%
@@ -742,6 +742,15 @@ class Enemy extends Character {
             ctx.beginPath();
             ctx.arc(screenPos.x, screenPos.y, this.size * 0.6, 0, Math.PI * 2);
             ctx.fill();
+            ctx.restore();
+            
+            // 添加蜗牛图标表示减速状态
+            ctx.save();
+            ctx.globalAlpha = 1.0;
+            ctx.font = `${GAME_FONT_SIZE * 0.5}px 'Segoe UI Emoji', Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('🐌', screenPos.x, screenPos.y - this.size * 0.8);
             ctx.restore();
         }
 

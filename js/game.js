@@ -132,23 +132,27 @@ const enemyManager = {
                 enemy.name === "史莱姆" || enemy.name === "骷髅"
             );
         } else if (gameTime < 180 || !bossManager.isFirstBossDefeated()) {
-            // 2-3分钟或第一个Boss未击败前，刷史莱姆、骷髅
-            availableEnemies = ENEMY_TYPES.filter(enemy => 
-                enemy.name === "史莱姆" || enemy.name === "骷髅"
-            );
-        } else if (gameTime < 300) {
-            // 第一个Boss击败后至5分钟，刷史莱姆、骷髅和蝙蝠
+            // 2-3分钟或第一个Boss未击败前，刷史莱姆、骷髅和蝙蝠
             availableEnemies = ENEMY_TYPES.filter(enemy => 
                 enemy.name === "史莱姆" || enemy.name === "骷髅" || enemy.name === "蝙蝠"
             );
+        } else if (gameTime < 300) {
+            // 第一个Boss击败后至5分钟，刷史莱姆、骷髅、蝙蝠和僵尸
+            availableEnemies = ENEMY_TYPES.filter(enemy => 
+                enemy.name === "史莱姆" || enemy.name === "骷髅" || 
+                enemy.name === "蝙蝠" || enemy.name === "僵尸"
+            );
+        } else if (gameTime < 360) {
+            // 5-6分钟增加幽灵
+            availableEnemies = ENEMY_TYPES.filter(enemy => 
+                enemy.name === "史莱姆" || enemy.name === "骷髅" || 
+                enemy.name === "蝙蝠" || enemy.name === "僵尸" ||
+                enemy.name === "幽灵"
+            );
         } else {
-            // 5分钟后根据游戏时间解锁更多敌人
+            // 6分钟后根据游戏时间解锁所有敌人，包括炸弹、法师等
             availableEnemies = ENEMY_TYPES.filter(enemy => {
-                // 过滤掉静止的远程敌人
-                if (enemy.isRanged && enemy.speedMult <= 0.1) {
-                    return false;
-                }
-                
+                // 直接使用enemy.minTime属性判断是否应该出现
                 return !enemy.minTime || gameTime >= enemy.minTime;
             });
         }
@@ -232,6 +236,7 @@ const bossManager = {
     showingWarning: false,
     pendingBossType: null, // 新增：用于存储待生成的Boss类型
     defeatedBossCount: 0, // 跟踪已击败的Boss数量
+    bossArenaEffect: null, // 存储Boss战场边界效果
 
     update(dt, gameTime, player) {
         // 如果当前有Boss，更新Boss
@@ -247,6 +252,9 @@ const bossManager = {
             // 取消Boss战场限制
             cameraManager.deactivateBossArena();
             console.log("Boss战场已解除!");
+            
+            // 清理所有与Boss相关的视觉效果
+            this.cleanupBossEffects();
             
             // 播放胜利音效或视觉效果
             triggerScreenShake(5, 0.8);
@@ -371,6 +379,34 @@ const bossManager = {
         if (this.currentBoss && this.currentBoss.isGarbage) {
             this.currentBoss = null;
         }
+    },
+
+    // 清理Boss相关的所有视觉效果
+    cleanupBossEffects() {
+        // 清理标记为Boss战场效果的视觉效果
+        for (let i = visualEffects.length - 1; i >= 0; i--) {
+            if (visualEffects[i].isBossArenaEffect || 
+                (visualEffects[i].boss && visualEffects[i].boss === this.currentBoss)) {
+                visualEffects[i].isGarbage = true;
+            }
+        }
+        
+        // 清理Boss产生的危害区域
+        for (let i = hazards.length - 1; i >= 0; i--) {
+            if (hazards[i].owner === this.currentBoss) {
+                hazards[i].isGarbage = true;
+            }
+        }
+        
+        // 清理敌人投射物
+        for (let i = enemyProjectiles.length - 1; i >= 0; i--) {
+            if (enemyProjectiles[i].owner === this.currentBoss) {
+                enemyProjectiles[i].isGarbage = true;
+            }
+        }
+        
+        // 重置存储的效果引用
+        this.bossArenaEffect = null;
     }
 };
 
@@ -1611,6 +1647,8 @@ class EnemyProjectile {
         
         // 大小
         this.size = customSize !== null ? customSize : (this.emoji ? GAME_FONT_SIZE * 0.8 : GAME_FONT_SIZE * 0.6);
+        
+        // 确保width和height属性存在并赋值，防止"Cannot set properties of undefined"错误
         this.width = this.size;
         this.height = this.size;
         
@@ -1863,13 +1901,13 @@ function spawnRandomPickup(x, y) {
 
     // 调整掉落率：
     // 磁铁: 2% -> 0.5%
-    // 心: 3% -> 1% (累计概率，所以是 0.005 到 0.015)
+    // 心: 3% -> 3% (累计概率，所以是 0.005 到 0.035)
     if (rand < 0.005) { // 0.5% 几率掉落磁铁
         spawnPickup(x, y, 'magnet');
-    } else if (rand < 0.015) { // 1% 几率掉落心 (0.015 - 0.005 = 0.01)
+    } else if (rand < 0.035) { // 3% 几率掉落心 (0.035 - 0.005 = 0.03)
         spawnPickup(x, y, 'heart');
     } else {
-        // 剩余 (98.5%) 几率掉落经验
+        // 剩余 (96.5%) 几率掉落经验
         const xpValue = Math.random() < 0.1 ? 5 : 1; // 10% 几率掉落大经验
         spawnPickup(x, y, 'xp', xpValue);
     }

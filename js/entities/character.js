@@ -56,7 +56,7 @@ class Character extends GameObject {
         
         this.statusEffects[type] = { ...effectData };
         if (type === 'slow') {
-            this.statusEffects.slow.icon = '🐌'; // 添加图标属性
+            this.statusEffects.slow.icon = '🐌'; // 确保所有减速效果都有蜗牛图标
             console.log('Slow effect applied to:', this, 'New slow status:', this.statusEffects.slow);
         }
     }

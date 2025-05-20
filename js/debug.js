@@ -564,12 +564,12 @@ if (typeof VineSeedWeapon === 'undefined') {
 
         calculateStats() {
             this.stats = {
-                damage: 6 + (this.level - 1) * 2,
-                cooldown: Math.max(1.5, 2.0 - (this.level - 1) * 0.05),
-                count: 1 + Math.floor((this.level - 1) / 3),
-                radius: 50 + (this.level - 1) * 4,
-                slowFactor: 0.2 + (this.level - 1) * 0.03,
-                duration: 4.0
+                damage: 4 + (this.level - 1) * 1.5,
+                cooldown: Math.max(1.8, 2.0 - (this.level - 1) * 0.03),
+                count: Math.floor(1 + (this.level - 1) / 3),
+                radius: 45 + (this.level - 1) * 3,
+                slowFactor: 0.15 + (this.level - 1) * 0.03,
+                duration: 3.5
             };
         }
         
@@ -922,14 +922,14 @@ if (typeof FrostStaffWeapon === 'undefined') {
 
         calculateStats() {
             this.stats = {
-                damage: 12 + (this.level - 1) * 4,
-                cooldown: Math.max(0.8, 1.5 - (this.level - 1) * 0.07),
+                damage: 9 + (this.level - 1) * 3,
+                cooldown: Math.max(1.0, 1.5 - (this.level - 1) * 0.06),
                 count: 1 + Math.floor((this.level - 1) / 2),
-                freezeDuration: 1.0 + (this.level - 1) * 0.1,
-                slowFactor: 0.5 + (this.level - 1) * 0.05,
+                freezeDuration: 0.7 + (this.level - 1) * 0.1,
+                slowFactor: 0.3 + (this.level - 1) * 0.03,
                 projectileSpeed: 300 + (this.level - 1) * 10,
-                pierce: 1 + Math.floor((this.level - 1) / 3),
-                split: this.level >= 7
+                pierce: Math.floor((this.level - 1) / 3),
+                split: this.level >= 8
             };
         }
         

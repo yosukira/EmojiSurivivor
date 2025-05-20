@@ -119,12 +119,12 @@ const ENEMY_TYPES = [
     {
         name: "僵尸",
         emoji: "🧟",
-        healthMult: 1.2, // 降低血量但保持较高
-        speedMult: 0.7,
-        damageMult: 1.0,
-        xpMult: 1.4,
-        weight: 6,
-        minTime: 180 // 第一个Boss之后出现
+        healthMult: 2.0, // 较高的生命值
+        speedMult: 0.7, // 较慢的移动速度
+        damageMult: 1.1, // 略高的伤害
+        xpMult: 2.5, // 较高经验值
+        weight: 10, // 常见敌人
+        minTime: 180 // 3分钟后出现(第一个Boss后)
     },
     {
         name: "蜘蛛",

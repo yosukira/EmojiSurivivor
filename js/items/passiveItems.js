@@ -331,32 +331,32 @@ class HollowHeart extends PassiveItem {
      * @returns {Object} - 增益
      */
     getBonuses() {
-        let healthBonus = this.level * 20; // 每级增加20点生命值
+        let healthBonus = 20 + (this.level - 1) * 10; // 初始20点生命值，每级增加10点
         
-        // 10级特殊效果：额外增加30点生命值和微量自动回血
+        // 10级特殊效果：额外增加生命值和少量生命恢复
         if (this.level === 10) {
             return {
-                maxHealthBonus: healthBonus + 30,
+                maxHealth: healthBonus + 50,  // 额外增加50点生命值
                 regenAmount: 0.5 // 每秒回复0.5点生命值
             };
         }
         
         return {
-            maxHealthBonus: healthBonus
+            maxHealth: healthBonus
         };
     }
 }
 
 /**
  * 翅膀
- * 增加速度
+ * 增加移动速度
  */
 class Wings extends PassiveItem {
     /**
      * 构造函数
      */
     constructor() {
-        super("翅膀", "🦋", 10, "增加速度");
+        super("翅膀", "🦋", 10, "增加移动速度");
     }
 
     /**
@@ -364,18 +364,21 @@ class Wings extends PassiveItem {
      * @returns {Object} - 增益
      */
     getBonuses() {
-        let speedBonus = (this.level - 1) * 0.1; // 每级增加10%速度
+        // 修复：确保有正确的速度加成
+        let speedBonus = 20 + (this.level - 1) * 5; // 基础20点速度，每级增加5点
         
-        // 10级特殊效果：额外增加15%速度和闪避率
+        // 10级特殊效果：短暂冲刺能力
         if (this.level === 10) {
             return {
-                speedMultiplier: 1 + speedBonus + 0.15,
-                dodgeChance: 0.1 // 10%闪避率
+                speed: speedBonus + 30, // 额外30点速度
+                dashChance: 0.2, // 20%几率在受伤时获得2秒冲刺能力
+                dashDuration: 2.0,
+                dashSpeedMultiplier: 1.5
             };
         }
         
         return {
-            speedMultiplier: 1 + speedBonus
+            speed: speedBonus
         };
     }
 }
@@ -778,14 +781,14 @@ class AncientTreeSap extends PassiveItem {
      * @returns {Object} - 增益
      */
     getBonuses() {
-        // 增强生命回复：确保1级有基础回复效果
-        let regenAmount = 0.5 + (this.level - 1) * 0.2; // 基础0.5点恢复，每级增加0.2点
-        let maxHealthPercent = (this.level - 1) * 0.03; // 每级增加3%最大生命值
+        // 增强生命回复：确保1级有更强的基础回复效果
+        let regenAmount = 1.0 + (this.level - 1) * 0.3; // 基础1.0点恢复，每级增加0.3点
+        let maxHealthPercent = 0.02 + (this.level - 1) * 0.03; // 从1级就有2%最大生命值加成，每级增加3%
         
         // 10级特殊效果：额外恢复和生命值，并在生命危急时提供保护
         if (this.level === 10) {
             return {
-                regenAmount: regenAmount + 1.0, // 增加到1.0额外加成
+                regenAmount: regenAmount + 1.5, // 增加到1.5额外加成
                 maxHealthMultiplier: 1 + maxHealthPercent + 0.15, // 增加到15%额外生命值
                 emergencyShield: 0.15 // 生命值低于15%时获得4秒无敌(原10%和3秒)
             };
@@ -793,7 +796,7 @@ class AncientTreeSap extends PassiveItem {
         
         return {
             regenAmount: regenAmount,
-            maxHealthMultiplier: maxHealthPercent > 0 ? 1 + maxHealthPercent : 1
+            maxHealthMultiplier: 1 + maxHealthPercent // 确保1级就有生命值加成
         };
     }
 }
