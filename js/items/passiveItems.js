@@ -264,8 +264,8 @@ class Spinach extends PassiveItem {
      * @returns {Object} - 增益
      */
     getBonuses() {
-        // 每级增加10%伤害，以乘法形式提供
-        let damageBonus = (this.level - 1) * 0.1; 
+        // 修改：确保1级就有明显的伤害加成
+        let damageBonus = 0.1 + (this.level - 1) * 0.1; // 1级时10%伤害加成，每升一级再增加10%
         
         // 10级特殊效果：额外增加15%伤害和5%暴击率
         if (this.level === 10) {
@@ -298,7 +298,8 @@ class Bracer extends PassiveItem {
      * @returns {Object} - 增益
      */
     getBonuses() {
-        let cooldownReduction = (this.level - 1) * 0.08; // 每级减少8%冷却时间
+        // 修改：确保1级就有明显的冷却减少效果
+        let cooldownReduction = 0.08 + (this.level - 1) * 0.05; // 1级时8%冷却减少，每升一级再减少5%
         
         // 10级特殊效果：额外减少12%冷却时间，增加5%攻速
         if (this.level === 10) {
@@ -342,7 +343,7 @@ class HollowHeart extends PassiveItem {
         }
         
         return {
-            maxHealth: healthBonus
+            maxHealth: healthBonus // 确保返回的是maxHealth而不是health
         };
     }
 }
@@ -433,7 +434,8 @@ class Gargoyle extends PassiveItem {
      * @returns {Object} - 增益
      */
     getBonuses() {
-        let projectileBonus = Math.floor(this.level / 2); // 每2级增加1个投射物
+        // 修改：确保1级就有投射物加成
+        let projectileBonus = 1 + Math.floor((this.level - 1) / 2); // 1级时+1投射物，每2级再增加1个
         
         // 10级特殊效果：额外增加1个投射物和增加投射物大小
         if (this.level === 10) {

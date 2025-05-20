@@ -406,7 +406,7 @@ class MagnetGunWeapon extends Weapon {
                 const enemy = targetEnemies[i];
                 const dx = enemy.x - owner.x;
                 const dy = enemy.y - owner.y;
-                const dist = Math.sqrt(dx * dx + dy * dy);
+            const dist = Math.sqrt(dx * dx + dy * dy);
                 
                 dirX = dx / dist;
                 dirY = dy / dist;
@@ -594,7 +594,7 @@ class VolcanoStaffWeapon extends Weapon {
                 const offsetY = (Math.random() - 0.5) * 100;
                 x = enemy.x + offsetX;
                 y = enemy.y + offsetY;
-            } else {
+                } else {
                 // 在玩家周围随机位置创建火山
                 const angle = Math.random() * Math.PI * 2;
                 const distance = 100 + Math.random() * 150;
@@ -612,7 +612,7 @@ class VolcanoStaffWeapon extends Weapon {
                 // 添加到危险区域列表
                 if (typeof hazards !== 'undefined') {
                     hazards.push(volcano);
-            } else {
+                } else {
                     console.error('hazards 数组未定义!');
             }
         }
@@ -690,8 +690,8 @@ class BlackHoleBallWeapon extends Weapon {
         
         // 寻找最近的敌人
         const enemy = this.getClosestEnemy(800);
-            
-            if (enemy) {
+        
+        if (enemy) {
             // 计算方向朝向敌人
             const dx = enemy.x - owner.x;
             const dy = enemy.y - owner.y;
@@ -722,9 +722,9 @@ class BlackHoleBallWeapon extends Weapon {
             
             ball.owner = owner;
             projectiles.push(ball);
-            } else {
+        } else {
             // 没有敌人时，随机方向
-                const angle = Math.random() * Math.PI * 2;
+            const angle = Math.random() * Math.PI * 2;
             const vx = Math.cos(angle) * speed;
             const vy = Math.sin(angle) * speed;
         

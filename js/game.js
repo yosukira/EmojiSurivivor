@@ -272,15 +272,34 @@ const bossManager = {
             this.defeatedBossCount++;
             console.log(`Boss已击败! 总计击败: ${this.defeatedBossCount}`);
             
+            // 诊断：检查visualEffects数组中是否有Boss战场效果
+            let bossEffectsCount = 0;
+            for (let i = 0; i < visualEffects.length; i++) {
+                if (visualEffects[i] && visualEffects[i].isBossArenaEffect) {
+                    bossEffectsCount++;
+                }
+            }
+            console.log(`Boss战场效果诊断: 当前存在 ${bossEffectsCount} 个Boss战场视觉效果`);
+            
+            // 强制立即清理Boss战场效果，不依赖垃圾回收机制
+            this.cleanupBossEffects();
+            
             // 取消Boss战场限制
             cameraManager.deactivateBossArena();
             console.log("Boss战场已解除!");
             
-            // 清理所有与Boss相关的视觉效果
-            this.cleanupBossEffects();
-            
             // 播放胜利音效或视觉效果
             triggerScreenShake(5, 0.8);
+            
+            // 检查清理后是否还有残留的Boss战场效果
+            bossEffectsCount = 0;
+            for (let i = 0; i < visualEffects.length; i++) {
+                if (visualEffects[i] && visualEffects[i].isBossArenaEffect) {
+                    bossEffectsCount++;
+                    console.log("发现残留的Boss战场效果:", visualEffects[i]);
+                }
+            }
+            console.log(`清理后Boss战场效果检查: 剩余 ${bossEffectsCount} 个效果`);
             
             // 重置当前Boss
             this.currentBoss = null;
@@ -406,48 +425,80 @@ const bossManager = {
 
     // 清理Boss相关的所有视觉效果
     cleanupBossEffects() {
+        console.log("开始清理Boss战场效果和相关视觉效果...");
+
+        // 确保全局引用被清除
+        if (window.bossArenaEffect) {
+            console.log("发现全局Boss战场效果引用，准备清除");
+            window.bossArenaEffect = null;
+            console.log("全局Boss战场效果引用已清除");
+        }
+        
         // 确保Boss战场被停用
         cameraManager.bossArenaActive = false;
+        console.log("Boss战场标记已重置: bossArenaActive = false");
         
-        // 直接从visualEffects数组中删除所有Boss战场边界效果
-        for (let i = visualEffects.length - 1; i >= 0; i--) {
-            if (visualEffects[i].isBossArenaEffect || 
-                (visualEffects[i].boss && visualEffects[i].boss === this.currentBoss)) {
-                visualEffects.splice(i, 1); // 直接从数组中移除，而不仅是标记为垃圾
-                console.log("已直接移除Boss战场效果");
-            }
-        }
-        
-        // 清理标记为Boss战场效果的视觉效果
-        for (let i = visualEffects.length - 1; i >= 0; i--) {
-            if (visualEffects[i].isBossArenaEffect || 
-                (visualEffects[i].boss && visualEffects[i].boss === this.currentBoss)) {
-                visualEffects[i].isGarbage = true;
-            }
-        }
-        
-        // 清理Boss产生的危害区域
-        for (let i = hazards.length - 1; i >= 0; i--) {
-            if (hazards[i].owner === this.currentBoss) {
-                hazards[i].isGarbage = true;
-            }
-        }
-        
-        // 清理敌人投射物
-        for (let i = enemyProjectiles.length - 1; i >= 0; i--) {
-            if (enemyProjectiles[i].owner === this.currentBoss) {
-                enemyProjectiles[i].isGarbage = true;
-            }
-        }
-        
-        // 重置存储的效果引用
+        // 清理本地引用
         this.bossArenaEffect = null;
         
-        // 清除全局引用
-        if (window.bossArenaEffect) {
-            window.bossArenaEffect = null;
-            console.log("Boss战场视觉效果全局引用已清除");
+        // 一次性彻底清理所有相关视觉效果
+        let removedEffectCount = 0;
+        
+        // 使用直接删除而不是标记为垃圾，以确保立即生效
+        for (let i = visualEffects.length - 1; i >= 0; i--) {
+            const effect = visualEffects[i];
+            // 检查是否为Boss战场效果或与当前Boss相关的效果
+            if (effect && (
+                effect.isBossArenaEffect || 
+                (effect.boss && this.currentBoss && effect.boss === this.currentBoss)
+            )) {
+                visualEffects.splice(i, 1);
+                removedEffectCount++;
+            }
         }
+        
+        console.log(`已直接移除 ${removedEffectCount} 个Boss相关视觉效果`);
+        
+        // 再次检查是否有残余的Boss战场效果
+        const remainingBossEffects = visualEffects.filter(effect => 
+            effect && effect.isBossArenaEffect);
+        if (remainingBossEffects.length > 0) {
+            console.warn(`警告: 仍有 ${remainingBossEffects.length} 个Boss战场效果未清理，强制清理`);
+            for (let i = visualEffects.length - 1; i >= 0; i--) {
+                if (visualEffects[i] && visualEffects[i].isBossArenaEffect) {
+                    visualEffects.splice(i, 1);
+                }
+            }
+        }
+        
+        // 清理Boss产生的危害区域和投射物
+        if (this.currentBoss) {
+            let removedHazards = 0;
+            for (let i = hazards.length - 1; i >= 0; i--) {
+                if (hazards[i] && hazards[i].owner === this.currentBoss) {
+                    hazards.splice(i, 1);
+                    removedHazards++;
+                }
+            }
+            
+            if (removedHazards > 0) {
+                console.log(`已直接移除 ${removedHazards} 个Boss产生的危害区域`);
+            }
+            
+            let removedProjectiles = 0;
+            for (let i = enemyProjectiles.length - 1; i >= 0; i--) {
+                if (enemyProjectiles[i] && enemyProjectiles[i].owner === this.currentBoss) {
+                    enemyProjectiles.splice(i, 1);
+                    removedProjectiles++;
+                }
+            }
+            
+            if (removedProjectiles > 0) {
+                console.log(`已直接移除 ${removedProjectiles} 个Boss投射物`);
+            }
+        }
+        
+        console.log("Boss战场效果清理完成");
     }
 };
 

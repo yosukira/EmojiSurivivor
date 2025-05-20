@@ -202,6 +202,26 @@ const cameraManager = {
  * @param {number} radius - 战场半径
  */
 function createBossArenaEffect(x, y, radius) {
+    console.log("创建新的Boss战场边界效果...");
+    
+    // 首先清理可能存在的任何Boss战场效果
+    // 防止重复创建导致的效果堆叠问题
+    removeBossArenaEffect();
+    
+    // 检查visualEffects中是否有残留的Boss战场效果
+    if (typeof visualEffects !== 'undefined') {
+        let existingEffects = visualEffects.filter(effect => effect && effect.isBossArenaEffect);
+        if (existingEffects.length > 0) {
+            console.warn(`警告: 在创建新效果前仍有 ${existingEffects.length} 个Boss战场效果未清理`);
+            // 强制清理
+            for (let i = visualEffects.length - 1; i >= 0; i--) {
+                if (visualEffects[i] && visualEffects[i].isBossArenaEffect) {
+                    visualEffects.splice(i, 1);
+                }
+            }
+        }
+    }
+    
     // 创建边界效果对象
     const arenaEffect = {
         x: x,
@@ -209,14 +229,21 @@ function createBossArenaEffect(x, y, radius) {
         radius: radius,
         isGarbage: false,
         isBossArenaEffect: true, // 添加标识，方便后续移除
+        createdAt: Date.now(), // 添加创建时间戳，便于调试
         
         // 更新方法（目前没有特别需要更新的，但保留接口）
         update: function(dt) {
-            // 可以在这里添加动态效果
+            // 确保状态一致性
+            if (!cameraManager.bossArenaActive && !this.isGarbage) {
+                console.log("检测到异常：Boss战场已停用但效果仍然存在，标记为移除");
+                this.isGarbage = true;
+            }
         },
         
         // 绘制方法
         draw: function(ctx) {
+            if (this.isGarbage) return; // 如果已标记为垃圾，不绘制
+            
             const screenPos = cameraManager.worldToScreen(this.x, this.y);
             const screenRadius = this.radius;
             
@@ -239,7 +266,9 @@ function createBossArenaEffect(x, y, radius) {
     // 添加到视觉效果列表
     window.bossArenaEffect = arenaEffect;
     visualEffects.push(arenaEffect);
-    console.log("Boss战场视觉边界效果已创建");
+    console.log("Boss战场视觉边界效果已创建，ID:", arenaEffect.createdAt);
+    
+    return arenaEffect; // 返回创建的效果对象
 }
 
 /**
@@ -248,18 +277,32 @@ function createBossArenaEffect(x, y, radius) {
 function removeBossArenaEffect() {
     if (window.bossArenaEffect) {
         window.bossArenaEffect.isGarbage = true;
+        console.log("Boss战场视觉效果已标记为垃圾");
+        
+        // 直接从visualEffects数组中移除，而不只是标记
+        if (typeof visualEffects !== 'undefined') {
+            const index = visualEffects.indexOf(window.bossArenaEffect);
+            if (index !== -1) {
+                visualEffects.splice(index, 1);
+                console.log("Boss战场视觉效果已从visualEffects数组中直接移除");
+            }
+        }
+        
+        // 清除全局引用
         window.bossArenaEffect = null;
-        console.log("Boss战场视觉效果已移除");
+        console.log("Boss战场视觉效果全局引用已清除");
     } else {
         console.log("没有找到Boss战场效果需要移除");
     }
     
-    // 确保visualEffects数组中的所有bossArenaEffect都被标记为垃圾
+    // 确保所有具有isBossArenaEffect标记的效果都被移除
     if (typeof visualEffects !== 'undefined') {
-        visualEffects.forEach(effect => {
-            if (effect.isBossArenaEffect) {
-                effect.isGarbage = true;
+        // 使用倒序遍历安全地删除多个元素
+        for (let i = visualEffects.length - 1; i >= 0; i--) {
+            if (visualEffects[i] && visualEffects[i].isBossArenaEffect) {
+                console.log("移除额外的Boss战场边界效果");
+                visualEffects.splice(i, 1);
             }
-        });
+        }
     }
 }
