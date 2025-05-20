@@ -200,13 +200,17 @@ const cameraManager = {
  * @param {number} x - 战场中心X坐标
  * @param {number} y - 战场中心Y坐标
  * @param {number} radius - 战场半径
+ * @returns {Object} 创建的边界效果对象
  */
 function createBossArenaEffect(x, y, radius) {
     console.log("创建新的Boss战场边界效果...");
     
     // 首先清理可能存在的任何Boss战场效果
     // 防止重复创建导致的效果堆叠问题
-    removeBossArenaEffect();
+    if (window.bossArenaEffect) {
+        console.log("发现现有Boss战场效果，先清理...");
+        removeBossArenaEffect();
+    }
     
     // 检查visualEffects中是否有残留的Boss战场效果
     if (typeof visualEffects !== 'undefined') {

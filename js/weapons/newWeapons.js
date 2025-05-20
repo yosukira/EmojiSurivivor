@@ -59,7 +59,11 @@ class BubbleWandWeapon extends Weapon {
         
         // 限制屏幕上泡泡总数
         const currentBubbleCount = projectiles.filter(p => p instanceof BubbleProjectile).length;
-        if (currentBubbleCount > 100) return; // 如果已经有太多泡泡，不再发射新的
+        if (currentBubbleCount > 50) return; // 降低限制从100到50
+        
+        // 获取玩家精确位置，作为所有泡泡的发射起点
+        const startX = owner.x;
+        const startY = owner.y;
 
         // 寻找目标，与匕首武器索敌逻辑一致
         let target = owner.findNearestEnemy(GAME_WIDTH * 1.5) || {
@@ -68,8 +72,8 @@ class BubbleWandWeapon extends Weapon {
         };
         
         // 计算方向
-        const dx = target.x - owner.x;
-        const dy = target.y - owner.y;
+        const dx = target.x - startX;
+        const dy = target.y - startY;
         const dist = Math.sqrt(dx * dx + dy * dy);
         const dirX = dist > 0 ? dx / dist : owner.lastMoveDirection.x;
         const dirY = dist > 0 ? dy / dist : owner.lastMoveDirection.y;
@@ -93,7 +97,7 @@ class BubbleWandWeapon extends Weapon {
             
             // 创建泡泡投射物，确保从玩家位置发射
             const bubble = new BubbleProjectile(
-                owner.x, owner.y, size, vx, vy, damage, duration, 
+                startX, startY, size, vx, vy, damage, duration, 
                 ownerStats, trapDuration, splitOnBurst
             );
             

@@ -97,7 +97,7 @@ class BubbleProjectile extends Projectile {
             
             // 边界检查：如果泡泡位置离开了有效区域，强制销毁
             const worldSize = Math.max(GAME_WIDTH, GAME_HEIGHT);
-            if (Math.abs(this.x) > worldSize * 2 || Math.abs(this.y) > worldSize * 2) {
+            if (Math.abs(this.x) > worldSize * 1.5 || Math.abs(this.y) > worldSize * 1.5) {
                 console.log("泡泡强制销毁：超出边界");
                 this.isGarbage = true;
                 this.isActive = false;
@@ -327,18 +327,22 @@ class BubbleProjectile extends Projectile {
         if (bubbleCount > 50) return; // 限制屏幕上最多50个泡泡
         
         // 创建分裂泡泡，减少数量从3个改为2个
-        for (let i = 0; i < 2; i++) {
-            const angle = Math.PI * 2 * i / 2 + Math.random() * 0.5;
-            const speed = 80 + Math.random() * 40;
+        const splitCount = 2;
+        
+        // 计算分裂泡泡的速度和角度
+        for (let i = 0; i < splitCount; i++) {
+            // 随机角度
+            const angle = Math.random() * Math.PI * 2;
+            // 随机速度，但比原泡泡慢
+            const speed = Math.max(Math.abs(this.originalVx), Math.abs(this.originalVy)) * 0.7 * (0.8 + Math.random() * 0.4);
             
-            // 计算速度
             const vx = Math.cos(angle) * speed;
             const vy = Math.sin(angle) * speed;
             
             // 创建小泡泡
             const smallBubble = new BubbleProjectile(
-                this.x, this.y, this.size * 0.6, vx, vy,
-                this.damage * 0.7, this.duration * 0.5, 
+                this.x, this.y, this.size * 0.75, vx, vy, 
+                this.damage * 0.6, this.duration * 0.7, 
                 this.ownerStats, this.trapDuration * 0.7, false // 不允许小泡泡再次分裂
             );
             
