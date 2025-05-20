@@ -1045,33 +1045,81 @@ const PASSIVE_ITEMS = [
     AncientTreeSap
 ];
 
-// 将新的被动道具添加到BASE_PASSIVES数组
-if (typeof BASE_PASSIVES !== 'undefined') {
-    // 添加新的被动道具
-    if (typeof EmptyBottle === 'function') BASE_PASSIVES.push(EmptyBottle);
-    if (typeof Gargoyle === 'function') BASE_PASSIVES.push(Gargoyle);
-    if (typeof MagicCrystal === 'function') BASE_PASSIVES.push(MagicCrystal);
-    if (typeof MysteryCard === 'function') BASE_PASSIVES.push(MysteryCard);
-    if (typeof OccultCharm === 'function') BASE_PASSIVES.push(OccultCharm);
-    if (typeof BarrierRune === 'function') BASE_PASSIVES.push(BarrierRune);
-    if (typeof FrostHeart === 'function') BASE_PASSIVES.push(FrostHeart);
-    if (typeof DragonSpice === 'function') BASE_PASSIVES.push(DragonSpice);
-    if (typeof ThunderAmulet === 'function') BASE_PASSIVES.push(ThunderAmulet);
-    if (typeof PoisonOrb === 'function') BASE_PASSIVES.push(PoisonOrb);
-    if (typeof MagnetSphere === 'function') BASE_PASSIVES.push(MagnetSphere);
-    if (typeof AncientTreeSap === 'function') BASE_PASSIVES.push(AncientTreeSap);
-    if (typeof SoulRelic === 'function') BASE_PASSIVES.push(SoulRelic); // 添加 SoulRelic
+// 定义一个明确的函数，确保关键被动物品被添加到BASE_PASSIVES中
+function registerCriticalPassives() {
+    console.log("开始从passiveItems.js中注册关键被动物品...");
+    
+    // 确保BASE_PASSIVES存在
+    if (typeof window.BASE_PASSIVES === 'undefined') {
+        console.log("BASE_PASSIVES不存在，创建新数组");
+        window.BASE_PASSIVES = [];
+    }
+    
+    // 直接引用关键被动物品类
+    const criticalClasses = [
+        { ref: Spinach, name: "Spinach" },
+        { ref: Wings, name: "Wings" },
+        { ref: Bracer, name: "Bracer" },
+        { ref: HollowHeart, name: "HollowHeart" },
+        { ref: AncientTreeSap, name: "AncientTreeSap" }
+    ];
+    
+    // 检查已有的类名
+    const existingClassNames = BASE_PASSIVES.map(cls => cls.name);
+    console.log("当前BASE_PASSIVES中的类:", existingClassNames);
+    
+    // 添加缺失的关键类
+    criticalClasses.forEach(cls => {
+        if (!cls.ref) {
+            console.error(`错误：${cls.name}类引用无效`);
+            return;
+        }
+        
+        if (!existingClassNames.includes(cls.name)) {
+            console.log(`添加关键被动物品到BASE_PASSIVES: ${cls.name}`);
+            BASE_PASSIVES.push(cls.ref);
+        } else {
+            console.log(`类${cls.name}已存在于BASE_PASSIVES中`);
+        }
+    });
+    
+    // 将新的被动道具添加到BASE_PASSIVES数组
+    const otherClasses = [
+        { ref: EmptyBottle, name: "EmptyBottle" },
+        { ref: Gargoyle, name: "Gargoyle" },
+        { ref: MagicCrystal, name: "MagicCrystal" },
+        { ref: MysteryCard, name: "MysteryCard" },
+        { ref: OccultCharm, name: "OccultCharm" },
+        { ref: BarrierRune, name: "BarrierRune" },
+        { ref: FrostHeart, name: "FrostHeart" },
+        { ref: DragonSpice, name: "DragonSpice" },
+        { ref: ThunderAmulet, name: "ThunderAmulet" },
+        { ref: PoisonOrb, name: "PoisonOrb" },
+        { ref: MagnetSphere, name: "MagnetSphere" },
+        { ref: SoulRelic, name: "SoulRelic" }
+    ];
+    
+    // 添加其他类
+    otherClasses.forEach(cls => {
+        if (cls.ref && !existingClassNames.includes(cls.name)) {
+            console.log(`添加非关键被动物品到BASE_PASSIVES: ${cls.name}`);
+            BASE_PASSIVES.push(cls.ref);
+        }
+    });
+    
+    console.log(`注册完成, BASE_PASSIVES现在有 ${BASE_PASSIVES.length} 个类`);
+    return BASE_PASSIVES;
+}
 
-    console.log('New passive items added to BASE_PASSIVES:', 
-        BASE_PASSIVES.filter(p => 
-            p !== Spinach && 
-            p !== Bracer && 
-            p !== HollowHeart && 
-            p !== Wings
-        ).map(p => p.name)
-    );
+// 检查并添加被动物品到BASE_PASSIVES
+if (typeof BASE_PASSIVES !== 'undefined') {
+    // 调用注册函数
+    registerCriticalPassives();
 } else {
-    console.error('BASE_PASSIVES not found! Make sure passiveItem.js is loaded first.');
+    console.error('BASE_PASSIVES未定义！确保先在game.js中创建此数组。');
+    // 尝试在全局作用域创建
+    window.BASE_PASSIVES = [];
+    registerCriticalPassives();
 }
 
 /**

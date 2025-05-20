@@ -122,6 +122,10 @@ const enemyManager = {
         // 根据游戏时间和Boss击败情况获取可用敌人类型
         let availableEnemies;
         
+        // 第一个Boss是否已击败
+        const firstBossDefeated = bossManager.defeatedBossCount > 0;
+        console.log(`当前游戏时间: ${Math.floor(gameTime)}秒, 第一个Boss已击败: ${firstBossDefeated}`);
+        
         // 根据游戏时间和Boss击败情况筛选敌人类型
         if (gameTime < 60) {
             // 1分钟内只刷史莱姆
@@ -131,17 +135,23 @@ const enemyManager = {
             availableEnemies = ENEMY_TYPES.filter(enemy => 
                 enemy.name === "史莱姆" || enemy.name === "骷髅"
             );
-        } else if (gameTime < 180 || !bossManager.isFirstBossDefeated()) {
-            // 2-3分钟或第一个Boss未击败前，刷史莱姆、骷髅和蝙蝠
+        } else if (gameTime < 180) {
+            // 2-3分钟，刷史莱姆、骷髅和蝙蝠
+            availableEnemies = ENEMY_TYPES.filter(enemy => 
+                enemy.name === "史莱姆" || enemy.name === "骷髅" || enemy.name === "蝙蝠"
+            );
+        } else if (!firstBossDefeated) {
+            // 3分钟后但第一个Boss尚未击败，维持相同敌人组合
             availableEnemies = ENEMY_TYPES.filter(enemy => 
                 enemy.name === "史莱姆" || enemy.name === "骷髅" || enemy.name === "蝙蝠"
             );
         } else if (gameTime < 300) {
-            // 第一个Boss击败后至5分钟，刷史莱姆、骷髅、蝙蝠和僵尸
+            // 第一个Boss已击败至5分钟，增加僵尸
             availableEnemies = ENEMY_TYPES.filter(enemy => 
                 enemy.name === "史莱姆" || enemy.name === "骷髅" || 
                 enemy.name === "蝙蝠" || enemy.name === "僵尸"
             );
+            console.log("解锁僵尸类型敌人");
         } else if (gameTime < 360) {
             // 5-6分钟增加幽灵
             availableEnemies = ENEMY_TYPES.filter(enemy => 
@@ -149,17 +159,30 @@ const enemyManager = {
                 enemy.name === "蝙蝠" || enemy.name === "僵尸" ||
                 enemy.name === "幽灵"
             );
+            console.log("解锁幽灵类型敌人");
         } else {
-            // 6分钟后根据游戏时间解锁所有敌人，包括炸弹、法师等
+            // 6分钟后，根据minTime属性解锁所有敌人
+            // 将可用敌人类型添加到列表中
             availableEnemies = ENEMY_TYPES.filter(enemy => {
-                // 直接使用enemy.minTime属性判断是否应该出现
-                return !enemy.minTime || gameTime >= enemy.minTime;
+                // 检查敌人是否有minTime属性且游戏时间已超过该时间
+                const shouldUnlock = !enemy.minTime || gameTime >= enemy.minTime;
+                if (shouldUnlock && gameTime % 60 < 1) {
+                    console.log(`解锁敌人类型: ${enemy.name}, minTime: ${enemy.minTime || 0}`);
+                }
+                return shouldUnlock;
             });
         }
         
-        // 打印可用敌人，用于调试
-        if (bossManager.isFirstBossDefeated() && gameTime % 60 < 1) {
-            console.log(`当前游戏时间: ${Math.floor(gameTime)}秒, 可用敌人:`, availableEnemies.map(e => e.name).join(', '));
+        // 打印详细的可用敌人列表，但只在每隔60秒时记录一次，避免日志过多
+        if (gameTime % 60 < 1) {
+            console.log(`当前游戏时间: ${Math.floor(gameTime)}秒, 可用敌人有 ${availableEnemies.length} 种:`);
+            console.log(availableEnemies.map(e => e.name).join(', '));
+        }
+        
+        // 如果没有可用敌人，使用史莱姆作为后备选择
+        if (availableEnemies.length === 0) {
+            console.warn("没有找到符合条件的敌人类型，使用史莱姆作为后备");
+            availableEnemies = ENEMY_TYPES.filter(enemy => enemy.name === "史莱姆");
         }
         
         // 计算总权重
@@ -383,6 +406,18 @@ const bossManager = {
 
     // 清理Boss相关的所有视觉效果
     cleanupBossEffects() {
+        // 确保Boss战场被停用
+        cameraManager.bossArenaActive = false;
+        
+        // 直接从visualEffects数组中删除所有Boss战场边界效果
+        for (let i = visualEffects.length - 1; i >= 0; i--) {
+            if (visualEffects[i].isBossArenaEffect || 
+                (visualEffects[i].boss && visualEffects[i].boss === this.currentBoss)) {
+                visualEffects.splice(i, 1); // 直接从数组中移除，而不仅是标记为垃圾
+                console.log("已直接移除Boss战场效果");
+            }
+        }
+        
         // 清理标记为Boss战场效果的视觉效果
         for (let i = visualEffects.length - 1; i >= 0; i--) {
             if (visualEffects[i].isBossArenaEffect || 
@@ -407,6 +442,12 @@ const bossManager = {
         
         // 重置存储的效果引用
         this.bossArenaEffect = null;
+        
+        // 清除全局引用
+        if (window.bossArenaEffect) {
+            window.bossArenaEffect = null;
+            console.log("Boss战场视觉效果全局引用已清除");
+        }
     }
 };
 
@@ -1204,27 +1245,80 @@ function getAvailableUpgrades(player) {
 
     // 添加新被动物品选项
     if (player.passiveItems.length < player.maxPassives) {
+        console.log("检查可用的被动物品...");
+        // 调试输出：检查BASE_PASSIVES中的内容
+        console.log("BASE_PASSIVES包含:", BASE_PASSIVES.map(cls => cls ? (cls.name || "未命名类") : "无效类"));
+        
+        // 调试：检查玩家已有的被动物品
+        console.log("玩家已有被动物品:", player.passiveItems.map(p => p.constructor.name));
+        
+        // 创建已有被动物品的名称集合
+        const playerHasPassives = new Set();
+        player.passiveItems.forEach(p => {
+            if (p && p.constructor) {
+                playerHasPassives.add(p.constructor.name);
+                // 也添加类的显示名称，防止命名不一致
+                if (p.name) playerHasPassives.add(p.name);
+            }
+        });
+        
+        console.log("玩家已有被动物品集合:", Array.from(playerHasPassives));
+        
         BASE_PASSIVES.forEach(PassiveClass => {
-            if (PassiveClass && !player.passiveItems.some(p => p instanceof PassiveClass)) {
-                if (typeof PassiveClass === 'function' && PassiveClass.prototype) {
-                    try {
-                const passive = new PassiveClass();
-                options.push({
-                    item: passive,
-                            classRef: PassiveClass,
-                    type: 'new_passive',
-                            text: `获得 ${passive.name || PassiveClass.name || '未知被动'}`,
-                            description: passive.getInitialDescription ? passive.getInitialDescription() : (PassiveClass.Description || '选择一个新被动道具。'),
-                            icon: passive.emoji || PassiveClass.Emoji || '❓',
-                    action: () => {
-                                player.addPassive(new PassiveClass());
-                            }
-                        });
-                    } catch (e) {
-                        console.error(`Error instantiating passive ${PassiveClass.name}:`, e);
+            if (!PassiveClass) {
+                console.warn("BASE_PASSIVES中存在无效的被动物品类");
+                return;
+            }
+            
+            // 仅尝试实例化函数类型
+            if (typeof PassiveClass !== 'function') {
+                console.warn(`无法实例化非函数类型:`, PassiveClass);
+                return;
+            }
+            
+            // 确保类有原型
+            if (!PassiveClass.prototype) {
+                console.warn(`类没有原型:`, PassiveClass);
+                return;
+            }
+            
+            // 检查玩家是否已经拥有此类被动物品
+            // 通过名称匹配和instanceof双重检查
+            const className = PassiveClass.name;
+            const alreadyHas = playerHasPassives.has(className) || 
+                              player.passiveItems.some(p => p instanceof PassiveClass);
+            
+            console.log(`检查被动物品 ${className}: ${alreadyHas ? "玩家已拥有" : "玩家未拥有"}`);
+            
+            if (!alreadyHas) {
+                try {
+                    // 尝试实例化被动物品
+                    const passive = new PassiveClass();
+                    
+                    // 双重检查：确保这不是已经拥有的另一个名称的物品
+                    if (passive.name && playerHasPassives.has(passive.name)) {
+                        console.log(`玩家已拥有名为 ${passive.name} 的物品，跳过`);
+                        return;
                     }
-                } else {
-                     console.warn('Encountered non-constructable item in BASE_PASSIVES:', PassiveClass);
+                    
+                    console.log(`添加被动物品选项: ${passive.name || className}`);
+                    
+                    options.push({
+                        item: passive,
+                        classRef: PassiveClass,
+                        type: 'new_passive',
+                        text: `获得 ${passive.name || className || '未知被动'}`,
+                        description: passive.getInitialDescription ? 
+                                     passive.getInitialDescription() : 
+                                     (PassiveClass.Description || '选择一个新被动道具。'),
+                        icon: passive.emoji || PassiveClass.Emoji || '❓',
+                        action: () => {
+                            console.log(`玩家选择了被动物品: ${passive.name || className}`);
+                            player.addPassive(new PassiveClass());
+                        }
+                    });
+                } catch (e) {
+                    console.error(`实例化被动物品 ${className} 时出错:`, e);
                 }
             }
         });
@@ -1897,22 +1991,74 @@ Object.keys(passiveClasses).forEach(className => {
 
 // 显式确保关键被动物品被添加
 const criticalPassives = ["Spinach", "Wings", "Bracer", "HollowHeart", "AncientTreeSap"];
+console.log("开始注册关键被动物品类...");
+
+// 清理过程：确保没有重复
+const existingClassNames = BASE_PASSIVES.map(cls => cls.name);
+console.log("当前已注册被动物品类:", existingClassNames);
+
+// 直接检查并添加这些关键类
 criticalPassives.forEach(className => {
-    // 检查是否已存在于BASE_PASSIVES中
-    const exists = BASE_PASSIVES.some(PassiveClass => 
-        PassiveClass.name === className || 
-        (PassiveClass.prototype && PassiveClass.prototype.constructor && PassiveClass.prototype.constructor.name === className)
-    );
+    // 检查是否已经存在于数组中
+    if (existingClassNames.includes(className)) {
+        console.log(`${className}已存在于BASE_PASSIVES中，无需重复添加`);
+        return;
+    }
     
-    if (!exists && typeof window[className] !== 'undefined') {
-        console.log(`强制添加关键被动物品: ${className}`);
+    // 检查全局对象中是否存在这个类
+    if (typeof window[className] === 'function') {
+        console.log(`直接添加${className}到BASE_PASSIVES数组`);
         BASE_PASSIVES.push(window[className]);
-    } else if (!exists) {
-        console.error(`无法添加关键被动物品 ${className}，该类不存在或无法访问`);
+    } else {
+        console.error(`错误：全局空间中没有找到${className}类`);
+        
+        // 尝试创建类（针对特殊情况）
+        try {
+            // 针对菠菜类特殊处理
+            if (className === "Spinach" && Spinach) {
+                console.log("找到Spinach类，直接添加");
+                BASE_PASSIVES.push(Spinach);
+            } 
+            // 针对翅膀类特殊处理
+            else if (className === "Wings" && Wings) {
+                console.log("找到Wings类，直接添加");
+                BASE_PASSIVES.push(Wings);
+            }
+            // 针对护腕类特殊处理
+            else if (className === "Bracer" && Bracer) {
+                console.log("找到Bracer类，直接添加");
+                BASE_PASSIVES.push(Bracer);
+            }
+            // 针对空心胸甲类特殊处理
+            else if (className === "HollowHeart" && HollowHeart) {
+                console.log("找到HollowHeart类，直接添加");
+                BASE_PASSIVES.push(HollowHeart);
+            }
+            // 针对古树精华类特殊处理
+            else if (className === "AncientTreeSap" && AncientTreeSap) {
+                console.log("找到AncientTreeSap类，直接添加");
+                BASE_PASSIVES.push(AncientTreeSap);
+            }
+        } catch (e) {
+            console.error(`尝试特殊处理${className}类时出错:`, e);
+        }
     }
 });
 
-console.log('Final BASE_PASSIVES array:', BASE_PASSIVES.map(p => p.name));
+// 确保类名匹配
+BASE_PASSIVES.forEach(cls => {
+    if (cls && typeof cls === 'function' && cls.prototype) {
+        if (!cls.name) {
+            console.warn(`警告：BASE_PASSIVES中存在未命名类`);
+        } else {
+            console.log(`确认：成功添加${cls.name}类`);
+        }
+    } else {
+        console.warn(`警告：BASE_PASSIVES中存在无效类对象:`, cls);
+    }
+});
+
+console.log('最终BASE_PASSIVES数组:', BASE_PASSIVES.map(p => p && p.name ? p.name : 'UnknownClass'));
 
 function spawnRandomPickup(x, y) {
     const rand = Math.random();

@@ -167,38 +167,79 @@ class Player extends Character {
         // 加成加值
         let additive = 0;
 
+        // 特殊属性映射
+        const specialStatMappings = {
+            'speed': ['speed'], // 移动速度，对应Wings被动
+            'health': ['health', 'maxHealth'], // 最大生命值，对应HollowHeart被动
+            'regenAmount': ['regenAmount', 'regen'] // 生命恢复，对应AncientTreeSap被动
+        };
+
+        // 获取可能的特殊属性名称
+        const statNames = specialStatMappings[statName] || [statName];
+
         // 应用被动物品加成
+        console.log(`查询属性: ${statName}, 可能的名称: ${statNames.join(', ')}`);
+        
         this.passiveItems.forEach(item => {
             // 确保 item 和 item.bonuses 存在
-            if (!item || !item.bonuses) return;
+            if (!item || !item.bonuses) {
+                console.log(`跳过未初始化的被动物品: ${item ? item.name : 'undefined'}`);
+                return;
+            }
             
-            // 直接应用来自被动物品的加成
-            if (item.bonuses[statName] !== undefined) {
-                // 乘法属性（以Multiplier结尾）
-                if (statName.endsWith('Multiplier') || statName === 'speedMultiplier') {
-                    multiplier *= item.bonuses[statName];
-                } 
-                // 加法属性（以Bonus结尾）
-                else if (statName.endsWith('Bonus') || statName === 'armor' || statName === 'regen' || 
-                         statName === 'health' || statName === 'maxHealthBonus' || 
-                         statName === 'pickupRadius' || statName === 'projectileCountBonus') {
-                    additive += item.bonuses[statName];
+            console.log(`检查被动物品 ${item.name} 等级 ${item.level} 的加成...`);
+            
+            // 针对每个可能的属性名称
+            for (const possibleStatName of statNames) {
+                // 检查被动是否有这个属性的加成
+                if (item.bonuses[possibleStatName] !== undefined) {
+                    const bonus = item.bonuses[possibleStatName];
+                    console.log(`发现属性 ${possibleStatName} 加成: ${bonus}`);
+                    
+                    // 乘法属性（以Multiplier结尾）
+                    if (possibleStatName.endsWith('Multiplier')) {
+                        multiplier *= bonus;
+                        console.log(`更新乘数: ${multiplier}`);
+                    } 
+                    // 加法属性
+                    else {
+                        additive += bonus;
+                        console.log(`更新加值: ${additive}`);
+                    }
                 }
             }
             
             // 特殊处理：如果查询最大生命值，也考虑maxHealthMultiplier
-            if (statName === 'health' && item.bonuses.maxHealthMultiplier !== undefined) {
+            if ((statName === 'health' || statName === 'maxHealth') && item.bonuses.maxHealthMultiplier !== undefined) {
                 multiplier *= item.bonuses.maxHealthMultiplier;
+                console.log(`应用最大生命值乘数: ${item.bonuses.maxHealthMultiplier}, 新乘数: ${multiplier}`);
             }
             
             // 特殊处理：如果查询拾取半径，也考虑pickupRadiusBonus
             if (statName === 'pickupRadius' && item.bonuses.pickupRadiusBonus !== undefined) {
                 additive += item.bonuses.pickupRadiusBonus;
+                console.log(`应用拾取半径加成: ${item.bonuses.pickupRadiusBonus}, 新加值: ${additive}`);
+            }
+            
+            // 特殊处理：如果查询速度，也考虑speed直接量
+            if (statName === 'speed' && item.bonuses.speed !== undefined) {
+                additive += item.bonuses.speed;
+                console.log(`应用速度直接加成: ${item.bonuses.speed}, 新加值: ${additive}`);
+            }
+            
+            // 特殊处理：如果查询生命恢复，确保regenAmount被正确处理
+            if (statName === 'regenAmount' && item.bonuses.regenAmount !== undefined) {
+                additive += item.bonuses.regenAmount;
+                console.log(`应用生命恢复加成: ${item.bonuses.regenAmount}, 新加值: ${additive}`);
             }
         });
 
         // 计算最终属性值
-        return Math.max(0, (baseStat + additive) * multiplier);
+        let finalStat = (baseStat + additive) * multiplier;
+        
+        console.log(`最终 ${statName} 值: ${finalStat} (基础: ${baseStat}, 加值: ${additive}, 乘数: ${multiplier})`);
+        
+        return finalStat;
     }
 
     /**
