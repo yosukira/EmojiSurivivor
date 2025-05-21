@@ -59,49 +59,76 @@ class BubbleWandWeapon extends Weapon {
         
         // 限制屏幕上泡泡总数
         const currentBubbleCount = projectiles.filter(p => p instanceof BubbleProjectile).length;
-        if (currentBubbleCount > 50) return; // 降低限制从100到50
+        if (currentBubbleCount > 30) return; // 进一步降低限制从50到30
         
-        // 获取玩家精确位置，作为所有泡泡的发射起点
-        const startX = owner.x;
-        const startY = owner.y;
-
-        // 寻找目标，与匕首武器索敌逻辑一致
-        let target = owner.findNearestEnemy(GAME_WIDTH * 1.5) || {
-            x: owner.x + owner.lastMoveDirection.x * 100,
-            y: owner.y + owner.lastMoveDirection.y * 100
-        };
+        // 强制使用玩家的确切位置作为起点，不添加任何偏移
+        const exactPlayerX = owner.x;
+        const exactPlayerY = owner.y;
         
-        // 计算方向
-        const dx = target.x - startX;
-        const dy = target.y - startY;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const dirX = dist > 0 ? dx / dist : owner.lastMoveDirection.x;
-        const dirY = dist > 0 ? dy / dist : owner.lastMoveDirection.y;
+        // 打印调试信息，无论泡泡数量都记录起始位置
+        console.log(`泡泡武器触发：玩家位置(${exactPlayerX.toFixed(1)}, ${exactPlayerY.toFixed(1)})，当前泡泡数量: ${currentBubbleCount}，要发射: ${projectileCount}`);
         
-        // 计算角度和扇形范围
-        const baseAngle = Math.atan2(dirY, dirX);
-        const angleSpread = Math.PI * 0.6; // 60度扇形范围
-
-        // 随机方向发射泡泡
+        // 找目标（仅用于决定发射方向，不影响起始位置）
+        let targetAngle;
+        const nearestEnemy = owner.findNearestEnemy(GAME_WIDTH); // 使用正确的方法名
+        
+        if (nearestEnemy) {
+            // 有目标，计算朝向目标的角度
+            const dx = nearestEnemy.x - exactPlayerX;
+            const dy = nearestEnemy.y - exactPlayerY;
+            targetAngle = Math.atan2(dy, dx);
+        } else if (owner.lastMoveDirection && (owner.lastMoveDirection.x !== 0 || owner.lastMoveDirection.y !== 0)) {
+            // 没有目标但有移动方向，使用移动方向
+            targetAngle = Math.atan2(owner.lastMoveDirection.y, owner.lastMoveDirection.x);
+        } else {
+            // 默认向右发射
+            targetAngle = 0;
+        }
+        
+        // 计算基础角度和角度范围
+        const baseAngle = targetAngle;
+        const angleSpread = Math.min(Math.PI * 0.3, Math.PI / Math.max(2, projectileCount)); // 减小角度扩散
+        
+        console.log(`泡泡发射：玩家精确位置(${exactPlayerX}, ${exactPlayerY})，目标角度:${(baseAngle * 180 / Math.PI).toFixed(1)}度`);
+        
+        // 生成泡泡
         for (let i = 0; i < projectileCount; i++) {
-            // 计算发射角度，在敌人方向的扇形范围内
-            const randomAngle = baseAngle + (Math.random() - 0.5) * angleSpread;
+            // 计算发射角度 - 均匀分布在扇形内
+            let angle;
+            if (projectileCount > 1) {
+                angle = baseAngle + angleSpread * (i / (projectileCount - 1) - 0.5);
+            } else {
+                angle = baseAngle;
+            }
             
-            const dirX = Math.cos(randomAngle);
-            const dirY = Math.sin(randomAngle);
+            // 减少随机性，使发射更可控
+            angle += (Math.random() - 0.5) * 0.1; // 减少偏移量
             
-            // 添加一点随机性到速度
-            const speedVariation = 0.8 + Math.random() * 0.4; // 速度在80%-120%之间变化
+            // 计算方向向量
+            const dirX = Math.cos(angle);
+            const dirY = Math.sin(angle);
+            
+            // 计算速度，保持一致性
+            const speedVariation = 0.95 + Math.random() * 0.1; // 减少速度变化范围95%-105%
             const vx = dirX * speed * speedVariation;
             const vy = dirY * speed * speedVariation;
             
-            // 创建泡泡投射物，确保从玩家位置发射
+            // 每个泡泡都必须从玩家精确位置发射
             const bubble = new BubbleProjectile(
-                startX, startY, size, vx, vy, damage, duration, 
+                exactPlayerX, exactPlayerY, size, vx, vy, damage, duration, 
                 ownerStats, trapDuration, splitOnBurst
             );
             
+            // 强制设置所有者和起始位置
             bubble.owner = owner;
+            bubble.exactStartX = exactPlayerX;
+            bubble.exactStartY = exactPlayerY;
+            
+            // 确保泡泡的初始位置被正确设置，避免任何可能的覆盖
+            bubble.x = exactPlayerX;
+            bubble.y = exactPlayerY;
+            
+            // 添加到投射物数组
             projectiles.push(bubble);
         }
     }
