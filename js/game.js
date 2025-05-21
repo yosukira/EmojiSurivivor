@@ -57,7 +57,7 @@ let projectiles = [];
 let enemyProjectiles = []; // 敌人投射物
 let xpGems = [];
 let worldObjects = [];
-let visualEffects = [];// 确保全局可访问window.visualEffects = visualEffects;
+let visualEffects = [];
 let damageNumbers = [];
 let activeGhosts = []; // 新增：用于存储活动的幽灵
 let hazards = []; // 新增：用于存储持续性危害物，如藤蔓、火山等
@@ -408,11 +408,52 @@ const bossManager = {
     cleanupBossEffects() {
         console.log("开始清理Boss战场效果和相关视觉效果...");
 
-        // 先进行强力清理
-        this.forceCleanupBossArena();
+        // 确保全局引用被清除
+        if (window.bossArenaEffect) {
+            console.log("发现全局Boss战场效果引用，准备清除");
+            window.bossArenaEffect.isGarbage = true;
+            window.bossArenaEffect = null;
+            console.log("全局Boss战场效果引用已清除");
+        }
         
-        // 确保停用相机管理器中的战场
-        cameraManager.deactivateBossArena();
+        // 确保Boss战场被停用
+        cameraManager.bossArenaActive = false;
+        console.log("Boss战场标记已重置: bossArenaActive = false");
+        
+        // 清理本地引用
+        this.bossArenaEffect = null;
+        
+        // 一次性彻底清理所有相关视觉效果 - 使用直接删除方式
+        let removedEffectCount = 0;
+        
+        // 先找出所有需要删除的效果
+        const effectsToRemove = [];
+        for (let i = 0; i < visualEffects.length; i++) {
+            const effect = visualEffects[i];
+            // 检查是否为Boss战场效果或与当前Boss相关的效果
+            if (effect && (
+                effect.isBossArenaEffect || 
+                (effect.boss && this.currentBoss && effect.boss === this.currentBoss)
+            )) {
+                effectsToRemove.push(i);
+            }
+        }
+        
+        // 从后向前删除，避免索引问题
+        for (let i = effectsToRemove.length - 1; i >= 0; i--) {
+            visualEffects.splice(effectsToRemove[i], 1);
+            removedEffectCount++;
+        }
+        
+        console.log(`已直接移除 ${removedEffectCount} 个Boss相关视觉效果`);
+        
+        // 确保所有战场效果都被清理
+        for (let i = visualEffects.length - 1; i >= 0; i--) {
+            if (visualEffects[i] && visualEffects[i].isBossArenaEffect) {
+                console.log("移除残留的Boss战场效果:", visualEffects[i]);
+                visualEffects.splice(i, 1);
+            }
+        }
         
         // 清理Boss产生的危害区域和投射物
         if (this.currentBoss) {
@@ -454,41 +495,12 @@ const bossManager = {
         // 掉落宝箱
         worldObjects.push(new Chest(boss.x, boss.y));
         
-        // 立即清理战场效果 - 更强力的清理顺序
-        this.forceCleanupBossArena();
+        // 立即清理战场效果
+        this.cleanupBossEffects();
         
-        // 确保取消Boss战场限制 - 再次调用以确保
+        // 确保取消Boss战场限制
         cameraManager.deactivateBossArena();
-    },
-
-    // 新增：强力清理战场函数
-    forceCleanupBossArena() {
-        console.log("强力清理Boss战场...");
-        
-        // 强力清理步骤1: 直接清除Boss战场视觉效果
-        if (window.bossArenaEffect) {
-            window.bossArenaEffect.isGarbage = true;
-            window.bossArenaEffect = null;
-        }
-        
-        // 强力清理步骤2: 清除游戏中存储的所有战场引用
-        this.bossArenaEffect = null;
-        
-        // 强力清理步骤3: 重置相机管理器中的战场状态
-        cameraManager.bossArenaActive = false;
-        cameraManager.bossArenaRadius = 0;
-        
-        // 强力清理步骤4: 直接从视觉效果数组中删除所有战场效果
-        if (visualEffects) {
-            for (let i = visualEffects.length - 1; i >= 0; i--) {
-                if (visualEffects[i] && visualEffects[i].isBossArenaEffect) {
-                    visualEffects.splice(i, 1);
-                }
-            }
-        }
-        
-        console.log("Boss战场强力清理完成");
-    },
+    }
 };
 
 /**
@@ -562,7 +574,7 @@ function init() {
     enemyManager.spawnTimer = 0;
     enemyManager.currentSpawnInterval = 3.5; // 使用更长的初始生成间隔
     enemyManager.difficultyTimer = 0;
-    bossManager.nextBossTime = FIRST_BOSS_TIME; // 修改：使用FIRST_BOSS_TIME作为第一个Boss的刷新时间
+    bossManager.nextBossTime = BOSS_INTERVAL;
     bossManager.currentBoss = null;
     bossManager.bossWarningTimer = 0;
     bossManager.showingWarning = false;
@@ -2202,7 +2214,18 @@ function resetGame() {
     deltaTime = 0;
     killCount = 0;
     
-        // 重置对象数组    player = null;    enemies = [];    projectiles = [];    enemyProjectiles = [];    xpGems = [];    worldObjects = [];        // 重置视觉效果数组并确保全局引用一致    visualEffects = [];    window.visualEffects = visualEffects;        damageNumbers = [];    activeGhosts = [];    hazards = [];    particles = [];
+    // 重置对象数组
+    player = null;
+    enemies = [];
+    projectiles = [];
+    enemyProjectiles = [];
+    xpGems = [];
+    worldObjects = [];
+    visualEffects = [];
+    damageNumbers = [];
+    activeGhosts = [];
+    hazards = [];
+    particles = [];
     
     // 重置对象池
     inactiveProjectiles = [];

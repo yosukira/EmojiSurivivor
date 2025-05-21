@@ -3,10 +3,6 @@
  * 这个文件包含新武器的投射物实现
  */
 
-// 从URL参数中获取调试模式设置
-const urlParams = new URLSearchParams(window.location.search);
-const DEBUG_MODE = urlParams.get('debug') === 'true';
-
 /**
  * 泡泡投射物类
  * 泡泡魔棒的投射物
@@ -16,18 +12,40 @@ class BubbleProjectile extends Projectile {
      * 构造函数
      * @param {number} x - X坐标
      * @param {number} y - Y坐标
-     * @param {string} emoji - 表情
      * @param {number} size - 大小
      * @param {number} vx - X方向速度
      * @param {number} vy - Y方向速度
      * @param {number} damage - 伤害值
-     * @param {number} pierce - 穿透次数
      * @param {number} duration - 持续时间
      * @param {Object} ownerStats - 拥有者属性
      * @param {number} trapDuration - 困敌时间
      * @param {boolean} splitOnBurst - 是否爆炸分裂
      */
-        constructor(x, y, size, vx, vy, damage, duration, ownerStats, trapDuration, splitOnBurst) {        super(x, y, "🧼", size, vx, vy, damage, 0, duration, ownerStats);                // 强制记录原始坐标，确保不会被父类构造函数改变        this.originalX = x;        this.originalY = y;                // 直接强制更新位置，防止父类构造函数中的任何可能的位置偏移        this.x = x;        this.y = y;                // 额外属性        this.trapDuration = trapDuration;        this.splitOnBurst = splitOnBurst;                // 泡泡状态        this.trapped = null;  // 被困住的敌人        this.burstTimer = 0;  // 爆炸计时器        this.burstDelay = 0.2;  // 爆炸延迟        this.isBursting = false;  // 是否正在爆炸                // 视觉效果        this.oscillation = Math.random() * Math.PI * 2;  // 随机初相位        this.oscillationSpeed = 1 + Math.random() * 0.5;  // 振荡速度        this.originalVx = vx;        this.originalVy = vy;        this.maxOscillationDist = 5;  // 最大振荡距离        this.prevOscX = 0;        this.prevOscY = 0;                // 安全设置：强制销毁计时器        this.forceDestroyTimer = 0;        this.maxExistTime = 15; // 泡泡存在的最大时间（秒）                // 防止位置初始化问题        this.positionInitialized = false;
+    constructor(x, y, size, vx, vy, damage, duration, ownerStats, trapDuration, splitOnBurst) {
+        super(x, y, "🧼", size, vx, vy, damage, 0, duration, ownerStats);
+        
+        // 额外属性
+        this.trapDuration = trapDuration;
+        this.splitOnBurst = splitOnBurst;
+        
+        // 泡泡状态
+        this.trapped = null;  // 被困住的敌人
+        this.burstTimer = 0;  // 爆炸计时器
+        this.burstDelay = 0.2;  // 爆炸延迟
+        this.isBursting = false;  // 是否正在爆炸
+        
+        // 视觉效果
+        this.oscillation = Math.random() * Math.PI * 2;  // 随机初相位
+        this.oscillationSpeed = 1 + Math.random() * 0.5;  // 振荡速度
+        this.originalVx = vx;
+        this.originalVy = vy;
+        this.maxOscillationDist = 5;  // 最大振荡距离
+        this.prevOscX = 0;
+        this.prevOscY = 0;
+        
+        // 安全设置：强制销毁计时器
+        this.forceDestroyTimer = 0;
+        this.maxExistTime = 15; // 泡泡存在的最大时间（秒）
     }
 
     /**
@@ -38,9 +56,7 @@ class BubbleProjectile extends Projectile {
         // 如果投射物不活动或已标记为垃圾，不更新
         if (!this.isActive || this.isGarbage) return;
         
-                // 第一帧特殊处理：确保初始位置绝对正确        if (!this.positionInitialized || this.lifetime === 0) {            // 强制使用构造函数中保存的原始位置            if (this.originalX !== undefined && this.originalY !== undefined) {                this.x = this.originalX;                this.y = this.originalY;                console.log(`泡泡强制初始化位置: (${this.x.toFixed(1)}, ${this.y.toFixed(1)})`);            }            // 如果有记录的精确起始位置，再次确保使用它            else if (this.exactStartX !== undefined && this.exactStartY !== undefined) {                this.x = this.exactStartX;                this.y = this.exactStartY;                console.log(`泡泡使用精确起始位置: (${this.x.toFixed(1)}, ${this.y.toFixed(1)})`);            }                        // 标记位置已初始化            this.positionInitialized = true;        }
-        
-        // 更新振荡效果 - 减弱振荡以防止位置偏移过大
+        // 更新振荡效果
         this.oscillation += dt * this.oscillationSpeed;
         
         // 安全检查：强制销毁计时器
@@ -51,7 +67,12 @@ class BubbleProjectile extends Projectile {
             return;
         }
         
-                // 设置一个强制最大生命周期，确保泡泡永远不会无限存在        const MAX_LIFETIME = 8; // 将最大生命周期从10秒减少到8秒        if (this.lifetime > MAX_LIFETIME) {            console.log("泡泡强制销毁：超过最大生命周期限制");            this.burst();            return;        }
+        // 设置一个强制最大生命周期，确保泡泡永远不会无限存在
+        const MAX_LIFETIME = 10; // 10秒的绝对最大生命周期
+        if (this.lifetime > MAX_LIFETIME) {
+            this.burst();
+            return;
+        }
         
         if (this.trapped) {
             // 已困住敌人，检查敌人状态
@@ -85,24 +106,20 @@ class BubbleProjectile extends Projectile {
         } else {
             // 自由移动的泡泡
             
-            // 添加非常微小的正弦振荡，仅作为视觉效果，不影响主要运动轨迹
-            const oscX = Math.sin(this.oscillation) * (this.maxOscillationDist * 0.3); // 减小振幅
-            const oscY = Math.cos(this.oscillation * 0.7) * (this.maxOscillationDist * 0.3); // 减小振幅
+            // 添加正弦振荡移动，但减小振幅
+            const oscX = Math.sin(this.oscillation) * (this.maxOscillationDist * 0.6);
+            const oscY = Math.cos(this.oscillation * 0.7) * (this.maxOscillationDist * 0.6);
             
-            // 计算新位置：主要遵循速度矢量，振荡仅作为微小扰动
-            const newX = this.x + (this.vx * dt);
-            const newY = this.y + (this.vy * dt);
-            
-            // 振荡作为视觉效果，不影响实际位置
-            this.visualOffsetX = oscX;
-            this.visualOffsetY = oscY;
+            // 计算新位置
+            const newX = this.x + (this.vx * dt) + (oscX - this.prevOscX);
+            const newY = this.y + (this.vy * dt) + (oscY - this.prevOscY);
             
             // 边界检查 - 如果泡泡将要离开游戏区域，就改变方向
             const margin = this.size;
-            const worldMinX = -GAME_WIDTH * 0.5 + margin;  // 缩小范围
-            const worldMaxX = GAME_WIDTH * 1.2 - margin;   // 缩小范围
-            const worldMinY = -GAME_HEIGHT * 0.5 + margin; // 缩小范围
-            const worldMaxY = GAME_HEIGHT * 1.2 - margin;  // 缩小范围
+            const worldMinX = -GAME_WIDTH/2 + margin;
+            const worldMaxX = GAME_WIDTH*1.5 - margin;
+            const worldMinY = -GAME_HEIGHT/2 + margin;
+            const worldMaxY = GAME_HEIGHT*1.5 - margin;
             
             // 检查是否超出边界，如果是则反弹
             if (newX < worldMinX || newX > worldMaxX) {
@@ -117,17 +134,20 @@ class BubbleProjectile extends Projectile {
             this.x = Math.max(worldMinX, Math.min(worldMaxX, newX));
             this.y = Math.max(worldMinY, Math.min(worldMaxY, newY));
             
+            // 记录上一帧的振荡值
+            this.prevOscX = oscX;
+            this.prevOscY = oscY;
+            
             // 自然减速
             this.vx *= 0.99;
             this.vy *= 0.99;
             
             // 速度太低时判定为静止，避免泡泡卡住
-            const minSpeed = 15; // 进一步提高最小速度阈值到15
+            const minSpeed = 5;
             if (Math.abs(this.vx) < minSpeed && Math.abs(this.vy) < minSpeed) {
                 this.staticTimer = (this.staticTimer || 0) + dt;
-                // 如果静止时间过长，爆炸，进一步减少等待时间
-                if (this.staticTimer > 0.8) { // 从1秒减少到0.8秒
-                    console.log("泡泡静止时间过长，触发爆炸");
+                // 如果静止时间过长，爆炸
+                if (this.staticTimer > 2) {
                     this.burst();
                     return;
                 }
@@ -302,31 +322,24 @@ class BubbleProjectile extends Projectile {
      * 当泡泡爆炸时，创建多个小泡泡
      */
     createSplitBubbles() {
-        // 更严格限制同屏泡泡数量，如果已经太多泡泡，就不再分裂
+        // 限制同屏泡泡数量，如果已经太多泡泡，就不再分裂
         const bubbleCount = projectiles.filter(p => p instanceof BubbleProjectile).length;
-        if (bubbleCount > 30) {
-            console.log("泡泡数量过多，不再分裂");
-            return; // 限制屏幕上最多30个泡泡
-        }
+        if (bubbleCount > 50) return; // 限制屏幕上最多50个泡泡
         
-        // 创建分裂泡泡，减少数量从2个改为1个，降低性能压力
-        const splitCount = 1;
-        console.log(`泡泡分裂: 位置(${this.x}, ${this.y})`);
+        // 创建分裂泡泡，减少数量从3个改为2个
+        const splitCount = 2;
         
-        // 计算分裂泡泡的速度和角度 - 使用固定角度而非随机
-        const angles = [Math.PI * 0.5]; // 垂直向上的固定角度
-        
+        // 计算分裂泡泡的速度和角度
         for (let i = 0; i < splitCount; i++) {
-            // 使用固定角度
-            const angle = angles[i];
-            
-            // 速度减少，比原泡泡慢
-            const speed = 60;
+            // 随机角度
+            const angle = Math.random() * Math.PI * 2;
+            // 随机速度，但比原泡泡慢
+            const speed = Math.max(Math.abs(this.originalVx), Math.abs(this.originalVy)) * 0.7 * (0.8 + Math.random() * 0.4);
             
             const vx = Math.cos(angle) * speed;
             const vy = Math.sin(angle) * speed;
             
-            // 创建小泡泡 - 从准确的爆炸位置发射
+            // 创建小泡泡
             const smallBubble = new BubbleProjectile(
                 this.x, this.y, this.size * 0.75, vx, vy, 
                 this.damage * 0.6, this.duration * 0.7, 
@@ -334,8 +347,6 @@ class BubbleProjectile extends Projectile {
             );
             
             smallBubble.owner = this.owner;
-            smallBubble.startX = this.x; // 记录起始位置用于调试
-            smallBubble.startY = this.y;
             projectiles.push(smallBubble);
         }
     }
@@ -348,14 +359,8 @@ class BubbleProjectile extends Projectile {
         if (this.isGarbage || !this.isActive) return;
         
         try {
-            // 获取屏幕坐标，考虑视觉偏移
+            // 获取屏幕坐标
             const screenPos = cameraManager.worldToScreen(this.x, this.y);
-            
-            // 应用视觉偏移（如果有）
-            if (this.visualOffsetX !== undefined && this.visualOffsetY !== undefined) {
-                screenPos.x += this.visualOffsetX;
-                screenPos.y += this.visualOffsetY;
-            }
             
             if (this.isBursting) {
                 // 绘制爆炸效果
@@ -444,9 +449,6 @@ class BubbleProjectile extends Projectile {
                     );
                     ctx.stroke();
                 }
-                
-                // 添加调试代码，绘制起始位置，方便查看泡泡是否正确从玩家位置发射
-                                // 调试代码已移除
             }
         } catch (e) {
             console.error("泡泡绘制错误:", e);
@@ -910,7 +912,7 @@ class ChaosDiceProjectile extends Projectile {
                 const chainCount = Math.floor(2 * this.effectPower);
                 const chainRange = 100 * this.effectPower;
                 
-                // 链式伤害                if (typeof this.chainLightning === 'function') {                    this.chainLightning(enemy, chainDamage, chainCount, chainRange);                }                break;
+                                // 链式伤害                if (typeof this.chainLightning === 'function') {                    this.chainLightning(enemy, chainDamage, chainCount, chainRange);                }                break;
                 
             case "击退":
                 // 应用击退效果
@@ -1093,96 +1095,44 @@ class ChaosDiceProjectile extends Projectile {
             // 获取屏幕坐标
             const screenPos = cameraManager.worldToScreen(this.x, this.y);
             
-            if (this.isBursting) {
-                // 绘制爆炸效果
-                const burstProgress = this.burstTimer / this.burstDelay;
-                // 如果爆炸进度超过80%，开始淡出
-                if (burstProgress > 0.8) {
-                    const alpha = 1 - (burstProgress - 0.8) * 5; // 快速淡出
-                    if (alpha <= 0) {
-                        // 完全透明就不绘制，并标记为垃圾清理
-                        this.isGarbage = true;
-                        this.isActive = false;
-                        return;
-                    }
-                    
-                    // 爆炸效果淡出
-                    const burstSize = this.size * (1 + burstProgress * 1.5);
-                    
-                    // 绘制爆炸光环
-                    ctx.fillStyle = `rgba(200, 230, 255, ${alpha * 0.5})`;
-                    ctx.beginPath();
-                    ctx.arc(screenPos.x, screenPos.y, burstSize, 0, Math.PI * 2);
-                    ctx.fill();
-                    
-                    // 绘制爆炸中心
-                    ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.7})`;
-                    ctx.beginPath();
-                    ctx.arc(screenPos.x, screenPos.y, burstSize * 0.6, 0, Math.PI * 2);
-                    ctx.fill();
-                } else {
-                    // 正常爆炸动画
-                    const burstSize = this.size * (1 + burstProgress * 1.5);
-                    const alpha = 1 - burstProgress;
-                    
-                    // 绘制爆炸光环
-                    ctx.fillStyle = `rgba(200, 230, 255, ${alpha * 0.5})`;
-                    ctx.beginPath();
-                    ctx.arc(screenPos.x, screenPos.y, burstSize, 0, Math.PI * 2);
-                    ctx.fill();
-                    
-                    // 绘制爆炸中心
-                    ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.7})`;
-                    ctx.beginPath();
-                    ctx.arc(screenPos.x, screenPos.y, burstSize * 0.6, 0, Math.PI * 2);
-                    ctx.fill();
-                }
+            if (this.exploded) {
+                // 不绘制爆炸体本身，爆炸效果通过visualEffects处理
+                return;
+            }
+            
+            // 保存上下文
+            ctx.save();
+            
+            // 设置旋转
+            ctx.translate(screenPos.x, screenPos.y);
+            ctx.rotate(this.rotation);
+            
+            if (this.isRolling) {
+                // 绘制骰子
+                ctx.font = `${this.size}px 'Segoe UI Emoji', Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText("🎲", 0, 0);
             } else {
-                // 常规绘制
-                // 计算泡泡脉动
-                const pulseScale = 1 + Math.sin(this.oscillation) * 0.1;
-                const drawSize = this.size * pulseScale;
+                // 绘制静止的骰子和效果
+                ctx.font = `${this.size * 0.8}px 'Segoe UI Emoji', Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
                 
-                // 绘制泡泡边缘
-                ctx.strokeStyle = 'rgba(200, 230, 255, 0.7)';
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                ctx.arc(screenPos.x, screenPos.y, drawSize, 0, Math.PI * 2);
-                ctx.stroke();
+                // 绘制效果1
+                ctx.fillText(this.effect1Emoji, 0, 0);
                 
-                // 绘制泡泡内部
-                ctx.fillStyle = 'rgba(200, 230, 255, 0.2)';
-                ctx.beginPath();
-                ctx.arc(screenPos.x, screenPos.y, drawSize, 0, Math.PI * 2);
-                ctx.fill();
-                
-                // 绘制泡泡高光
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-                ctx.beginPath();
-                ctx.arc(
-                    screenPos.x - drawSize * 0.3,
-                    screenPos.y - drawSize * 0.3,
-                    drawSize * 0.2,
-                    0, Math.PI * 2
-                );
-                ctx.fill();
-                
-                // 如果困住了敌人，绘制困住效果
-                if (this.trapped) {
-                    // 绘制包围效果
-                    const trapScale = 1.5;
-                    ctx.strokeStyle = 'rgba(150, 200, 255, 0.6)';
-                    ctx.lineWidth = 3;
-                    ctx.beginPath();
-                    ctx.arc(
-                        screenPos.x, screenPos.y,
-                        drawSize * trapScale, 0, Math.PI * 2
-                    );
-                    ctx.stroke();
+                // 如果有效果2，绘制效果2旁边
+                if (this.effect2Emoji) {
+                    ctx.font = `${this.size * 0.6}px 'Segoe UI Emoji', Arial`;
+                    ctx.fillText(this.effect2Emoji, this.size * 0.5, -this.size * 0.5);
                 }
             }
+            
+            // 恢复上下文
+            ctx.restore();
         } catch (e) {
-            console.error("泡泡绘制错误:", e);
+            console.error("绘制骰子投射物时出错:", e);
         }
     }
 }

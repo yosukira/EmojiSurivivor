@@ -96,30 +96,13 @@ const cameraManager = {
      * @param {number} radius - 战场半径
      */
     activateBossArena(x, y, radius) {
-        console.log("激活Boss战场:", x, y, radius);
-        
-        // 先确保彻底清理之前的战场效果
-        this.deactivateBossArena();
-        
-        // 设置新的战场参数
         this.bossArenaActive = true;
         this.bossArenaX = x;
         this.bossArenaY = y;
         this.bossArenaRadius = radius;
         
-        // 确保visualEffects已初始化
-        if (typeof window.visualEffects === 'undefined' || !Array.isArray(window.visualEffects)) {
-            console.warn("visualEffects数组未初始化或不是数组，将初始化一个新数组");
-            window.visualEffects = [];
-        }
-        
         // 创建战场视觉边界效果
         createBossArenaEffect(x, y, radius);
-        
-        console.log("Boss战场激活完成，参数:", 
-                   {x, y, radius, 
-                    active: this.bossArenaActive, 
-                    effectsCount: window.visualEffects.length});
     },
     
     /**
@@ -217,13 +200,17 @@ const cameraManager = {
  * @param {number} x - 战场中心X坐标
  * @param {number} y - 战场中心Y坐标
  * @param {number} radius - 战场半径
+ * @returns {Object} 创建的边界效果对象
  */
 function createBossArenaEffect(x, y, radius) {
     console.log("创建新的Boss战场边界效果...");
     
     // 首先清理可能存在的任何Boss战场效果
     // 防止重复创建导致的效果堆叠问题
-    removeBossArenaEffect();
+    if (window.bossArenaEffect) {
+        console.log("发现现有Boss战场效果，先清理...");
+        removeBossArenaEffect();
+    }
     
     // 检查visualEffects中是否有残留的Boss战场效果
     if (typeof visualEffects !== 'undefined') {
@@ -254,12 +241,6 @@ function createBossArenaEffect(x, y, radius) {
             if (!cameraManager.bossArenaActive && !this.isGarbage) {
                 console.log("检测到异常：Boss战场已停用但效果仍然存在，标记为移除");
                 this.isGarbage = true;
-                
-                // 从视觉效果列表中直接移除
-                const index = visualEffects.indexOf(this);
-                if (index !== -1) {
-                    visualEffects.splice(index, 1);
-                }
             }
         },
         
@@ -288,23 +269,8 @@ function createBossArenaEffect(x, y, radius) {
     
     // 添加到视觉效果列表
     window.bossArenaEffect = arenaEffect;
-    try {
-        if (typeof visualEffects === 'undefined' || !Array.isArray(visualEffects)) {
-            console.error("视觉效果数组未定义或不是数组，重新初始化");
-            window.visualEffects = window.visualEffects || [];
-            visualEffects = window.visualEffects;
-        }
-        visualEffects.push(arenaEffect);
-        console.log("Boss战场视觉边界效果已创建，ID:", arenaEffect.createdAt);
-    } catch (e) {
-        console.error("添加Boss战场效果失败:", e);
-    }
-    
-    // 添加安全检查，确保效果确实被添加到了数组中
-    const effectAdded = visualEffects && visualEffects.some(e => e === arenaEffect);
-    if (!effectAdded) {
-        console.error("Boss战场效果未能成功添加到视觉效果数组");
-    }
+    visualEffects.push(arenaEffect);
+    console.log("Boss战场视觉边界效果已创建，ID:", arenaEffect.createdAt);
     
     return arenaEffect; // 返回创建的效果对象
 }
@@ -313,41 +279,34 @@ function createBossArenaEffect(x, y, radius) {
  * 移除Boss战场视觉边界效果
  */
 function removeBossArenaEffect() {
-    console.log("执行removeBossArenaEffect - 彻底移除Boss战场效果");
-    
-    // 立即停用相机管理器中的标志
-    cameraManager.bossArenaActive = false;
-    cameraManager.bossArenaRadius = 0;
-    
-    // 清理全局引用
     if (window.bossArenaEffect) {
-        console.log("发现全局Boss战场效果引用，准备清除");
         window.bossArenaEffect.isGarbage = true;
-        window.bossArenaEffect = null;
-        console.log("全局Boss战场效果引用已清除");
-    }
-    
-    // 直接强制清理所有战场效果
-    if (typeof visualEffects !== 'undefined') {
-        let removedCount = 0;
-        // 找出所有Boss战场效果
-        const arenaEffects = [];
-        for (let i = 0; i < visualEffects.length; i++) {
-            if (visualEffects[i] && visualEffects[i].isBossArenaEffect) {
-                arenaEffects.push(i);
+        console.log("Boss战场视觉效果已标记为垃圾");
+        
+        // 直接从visualEffects数组中移除，而不只是标记
+        if (typeof visualEffects !== 'undefined') {
+            const index = visualEffects.indexOf(window.bossArenaEffect);
+            if (index !== -1) {
+                visualEffects.splice(index, 1);
+                console.log("Boss战场视觉效果已从visualEffects数组中直接移除");
             }
         }
         
-        // 从后往前移除，避免索引变化问题
-        for (let i = arenaEffects.length - 1; i >= 0; i--) {
-            visualEffects.splice(arenaEffects[i], 1);
-            removedCount++;
-        }
-        
-        if (removedCount > 0) {
-            console.log(`成功移除${removedCount}个Boss战场边界效果`);
-        } else {
-            console.log("没有找到需要移除的Boss战场效果");
+        // 清除全局引用
+        window.bossArenaEffect = null;
+        console.log("Boss战场视觉效果全局引用已清除");
+    } else {
+        console.log("没有找到Boss战场效果需要移除");
+    }
+    
+    // 确保所有具有isBossArenaEffect标记的效果都被移除
+    if (typeof visualEffects !== 'undefined') {
+        // 使用倒序遍历安全地删除多个元素
+        for (let i = visualEffects.length - 1; i >= 0; i--) {
+            if (visualEffects[i] && visualEffects[i].isBossArenaEffect) {
+                console.log("移除额外的Boss战场边界效果");
+                visualEffects.splice(i, 1);
+            }
         }
     }
 }
