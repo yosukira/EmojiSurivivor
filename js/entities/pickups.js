@@ -1,13 +1,4 @@
 /**
- * 拾取物类文件
- * 包含经验宝石、拾取物和宝箱等
- */
-
-// 从URL参数中获取调试模式设置
-const urlParams = new URLSearchParams(window.location.search);
-const DEBUG_MODE = urlParams.get('debug') === 'true';
-
-/**
  * 经验宝石类
  * 玩家可以收集的经验宝石
  */
@@ -19,7 +10,7 @@ class ExperienceGem extends GameObject {
      * @param {number} value - 经验值
      */
     constructor(x, y, value) {
-        super(x, y, null, GAME_FONT_SIZE * 0.7);
+        super(x, y, "✨", GAME_FONT_SIZE * 0.7);
         // 经验值
         this.value = value;
 
@@ -38,23 +29,6 @@ class ExperienceGem extends GameObject {
 
         // 摩擦系数
         this.friction = 0.95;
-        
-        // 加载图片
-        if (!ExperienceGem.image) {
-            ExperienceGem.image = new Image();
-            ExperienceGem.image.src = 'assets/xp1.png';
-            console.log("加载经验宝石图片: assets/xp1.png");
-        }
-        
-        // 设置旋转效果
-        this.rotation = Math.random() * Math.PI * 2; // 随机初始角度
-        this.rotationSpeed = (Math.random() - 0.5) * 2; // 随机旋转速度
-        
-        // 设置大小
-        this.scale = 0.7 + Math.random() * 0.3; // 随机缩放因子
-        
-        // 碰撞半径（比视觉大小稍小，只检测核心部分）
-        this.collisionRadius = this.size * 0.6;
     }
 
     /**
@@ -65,9 +39,6 @@ class ExperienceGem extends GameObject {
     update(dt, player) {
         // 如果经验宝石不活动或已标记为垃圾，不更新
         if (!this.isActive || this.isGarbage) return;
-
-        // 更新旋转
-        this.rotation += this.rotationSpeed * dt;
 
         // 计算到玩家的距离
         const dx = player.x - this.x;
@@ -119,26 +90,11 @@ class ExperienceGem extends GameObject {
         this.y += this.vy * dt;
 
         // 检查与玩家的碰撞 (如果上面没有因为距离过近而收集)
-        if (this.checkCollisionWithPlayer(player)) {
+        if (this.checkCollision(player)) {
             player.gainXP(this.value);
             this.isGarbage = true;
             this.isActive = false;
         }
-    }
-    
-    /**
-     * 与玩家的碰撞检测，只检测图像的非透明部分
-     * @param {Player} player - 玩家
-     * @returns {boolean} 是否碰撞
-     */
-    checkCollisionWithPlayer(player) {
-        // 计算两个对象之间的距离
-        const dx = this.x - player.x;
-        const dy = this.y - player.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-
-        // 使用较小的碰撞半径，只检测宝石的核心部分
-        return distance < (this.collisionRadius + player.size / 2);
     }
 
     /**
@@ -148,69 +104,10 @@ class ExperienceGem extends GameObject {
     draw(ctx) {
         // 如果经验宝石不活动或已标记为垃圾，不绘制
         if (!this.isActive || this.isGarbage) return;
-        
-        // 确保图片已加载
-        if (ExperienceGem.image && ExperienceGem.image.complete) {
-            try {
-                // 获取屏幕坐标
-                const screenPos = cameraManager.worldToScreen(this.x, this.y);
-                
-                // 保存当前绘图状态
-                ctx.save();
-                
-                // 移动到宝石位置
-                ctx.translate(screenPos.x, screenPos.y);
-                
-                // 应用旋转
-                ctx.rotate(this.rotation);
-                
-                // 应用缩放
-                const actualSize = this.size * this.scale;
-                
-                // 绘制图片（居中对齐）
-                ctx.drawImage(
-                    ExperienceGem.image, 
-                    -actualSize / 2,  // 左上角X坐标 
-                    -actualSize / 2,  // 左上角Y坐标
-                    actualSize,       // 宽度
-                    actualSize        // 高度
-                );
-                
-                // 恢复绘图状态
-                ctx.restore();
-                
-                // 调试模式下绘制碰撞半径
-                if (DEBUG_MODE) {
-                    ctx.save();
-                    ctx.strokeStyle = 'rgba(0, 255, 255, 0.5)';
-                    ctx.beginPath();
-                    ctx.arc(screenPos.x, screenPos.y, this.collisionRadius, 0, Math.PI * 2);
-                    ctx.stroke();
-                    ctx.restore();
-                }
-            } catch (error) {
-                console.error("绘制经验宝石时出错:", error);
-            }
-        } else if (!ExperienceGem.imageLoadAttempted) {
-            // 如果图片未加载，尝试重新加载一次
-            ExperienceGem.image = new Image();
-            ExperienceGem.image.src = 'assets/xp1.png';
-            ExperienceGem.imageLoadAttempted = true;
-            
-            // 回退到使用emoji
-            super.draw(ctx);
-        } else {
-            // 使用父类的默认绘制方法（emoji）作为回退
-            this.emoji = "💎"; // 临时设置emoji
-            super.draw(ctx);
-            this.emoji = null; // 恢复null
-        }
+        // 调用父类绘制方法
+        super.draw(ctx);
     }
 }
-
-// 静态图片对象
-ExperienceGem.image = null;
-ExperienceGem.imageLoadAttempted = false;
 
 /**
  * 拾取物类
