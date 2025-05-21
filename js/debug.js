@@ -175,17 +175,46 @@ window.DebugPanel = {
                     return;
                 }
 
-                let spawnX = cameraManager.x + canvas.width / 2 / cameraManager.zoom;
-                let spawnY = cameraManager.y; 
-
-                if (player) {
-                    spawnX = player.x + (Math.random() * 100 - 50);
-                    spawnY = player.y - 250;
+                // 获取合适的生成位置
+                const angle = Math.random() * Math.PI * 2;
+                const distance = 300; // 与游戏中相同的生成距离
+                let spawnX = player.x + Math.cos(angle) * distance;
+                let spawnY = player.y + Math.sin(angle) * distance;
+                
+                // 调用bossManager中的显示Boss警告函数
+                if (bossManager && typeof bossManager.showBossWarning === 'function') {
+                    bossManager.showBossWarning(bossType.name);
+                    bossManager.showingWarning = true;
+                    bossManager.bossWarningTimer = 0;
+                } else {
+                    // 后备警告方法
+                    showBossWarning(bossType.name);
                 }
                 
-                const newBoss = new BossEnemy(spawnX, spawnY, bossType);
-                enemies.push(newBoss);
-                console.log(`Debug: Spawned Boss ${bossType.name} at (${spawnX.toFixed(0)}, ${spawnY.toFixed(0)})`);
+                // 延迟生成Boss，模拟警告后生成
+                setTimeout(() => {
+                    // 创建新Boss
+                    const newBoss = new BossEnemy(spawnX, spawnY, bossType);
+                    
+                    // 将Boss添加到敌人数组
+                    enemies.push(newBoss);
+                    
+                    // 记录到bossManager
+                    if (bossManager) {
+                        bossManager.currentBoss = newBoss;
+                        
+                        // 创建Boss战场，限制玩家移动范围
+                        const bossArenaRadius = 800; // 与游戏中相同的战场半径
+                        cameraManager.activateBossArena(spawnX, spawnY, bossArenaRadius);
+                        
+                        // 播放Boss出现的屏幕震动效果
+                        if (typeof triggerScreenShake === 'function') {
+                            triggerScreenShake(10, 1.5);
+                        }
+                    }
+                    
+                    console.log(`Debug: Spawned Boss ${bossType.name} at (${spawnX.toFixed(0)}, ${spawnY.toFixed(0)})`);
+                }, 3000); // 警告持续3秒
             });
         });
     },
