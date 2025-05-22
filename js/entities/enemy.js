@@ -417,6 +417,17 @@ class Enemy extends Character {
         const dy = this.target.y - this.y;
         const distSq = dx * dx + dy * dy;
         
+        // 如果是炸弹敌人，检查是否玩家进入爆炸范围，如果是则爆炸
+        if (this.type && this.type.name === "炸弹") {
+            const explodeRadius = this.type.explodeRadius || 150;
+            if (distSq <= explodeRadius * explodeRadius * 0.7) { // 使用70%的爆炸半径作为触发距离
+                // 立即引爆
+                this.health = 0; // 将血量设为0，触发死亡处理
+                this.onDeath(this.target); // 调用死亡处理程序，传入玩家作为击杀者
+                return;
+            }
+        }
+        
         // 如果是远程敌人且在攻击范围内，保持距离
         if (this.isRanged && distSq <= this.attackRange * this.attackRange) {
             // 远程敌人会试图保持在一定距离外
@@ -1021,6 +1032,16 @@ class Enemy extends Character {
         // 如果是光环伤害，并且伤害量很小 (例如小于0.01)，则不显示伤害数字
         if (!isAuraDamage || Math.abs(actualDamage) >= 0.01) {
              spawnDamageNumber(this.x, this.y - this.size / 2, damageText, damageColor); 
+        }
+
+        // 检查炸弹敌人被攻击时是否应该爆炸
+        if (this.type && this.type.name === "炸弹" && source instanceof Player) {
+            // 如果炸弹被玩家击中且剩余血量很低，则立即爆炸
+            if (this.health <= this.maxHealth * 0.3) {
+                this.health = 0; // 立即致死，触发爆炸
+                this.onDeath(source); // 调用死亡处理
+                return true;
+            }
         }
 
         if (this.health <= 0) {

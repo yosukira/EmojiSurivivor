@@ -13,7 +13,16 @@ window.DebugPanel = {
         console.log("Initializing Debug Panel...");
         this.createPanel();
         this.addCoreControls();
+        this.addCollapseExpandButton();
+        
+        // 创建主要内容区域，默认折叠状态
+        this.mainContent = document.createElement('div');
+        this.mainContent.id = 'debug-panel-content';
+        this.mainContent.style.display = 'none'; // 默认折叠
+        this.panel.appendChild(this.mainContent);
+        
         this.addBossSpawningControls();
+        this.addEnemySpawningControls(); // 新增小怪生成控制
         this.addItemsSection();
         this.addGlobalSettingsControls();
 
@@ -51,7 +60,7 @@ window.DebugPanel = {
         this.panel.style.position = 'fixed';
         this.panel.style.top = '10px';
         this.panel.style.right = '10px';
-        this.panel.style.width = '250px';
+        this.panel.style.width = '300px'; // 改为300px，便于放置多列
         this.panel.style.backgroundColor = 'rgba(30,30,30,0.9)';
         this.panel.style.color = 'white';
         this.panel.style.padding = '10px';
@@ -97,6 +106,31 @@ window.DebugPanel = {
             this.isDragging = false;
             this.panel.style.cursor = 'default';
         };
+    },
+    
+    // 添加折叠/展开按钮
+    addCollapseExpandButton: function() {
+        const button = document.createElement('button');
+        button.textContent = '展开/折叠面板';
+        button.style.display = 'block';
+        button.style.width = '100%';
+        button.style.marginBottom = '8px';
+        button.style.padding = '8px';
+        button.style.backgroundColor = '#444';
+        button.style.color = 'white';
+        button.style.border = '1px solid #666';
+        button.style.borderRadius = '3px';
+        button.style.cursor = 'pointer';
+        button.onclick = () => {
+            if (this.mainContent.style.display === 'none') {
+                this.mainContent.style.display = 'block';
+                button.textContent = '折叠面板';
+            } else {
+                this.mainContent.style.display = 'none';
+                button.textContent = '展开面板';
+            }
+        };
+        this.panel.appendChild(button);
     },
 
     addButtonToElement: function(parentElement, text, onClick, id = null) {
@@ -151,19 +185,20 @@ window.DebugPanel = {
     },
 
     addBossSpawningControls: function() {
-        this.addSectionTitle(this.panel, "生成首领 (Spawn Boss)");
+        const { section, content } = this.createCollapsibleSection("生成首领 (Spawn Boss)");
+        this.mainContent.appendChild(section);
 
         if (typeof BOSS_TYPES === 'undefined' || BOSS_TYPES.length === 0) {
             const noBossMsg = document.createElement('p');
             noBossMsg.textContent = "未找到首领类型 (No boss types defined).";
             noBossMsg.style.fontSize = '11px';
             noBossMsg.style.fontStyle = 'italic';
-            this.panel.appendChild(noBossMsg);
+            content.appendChild(noBossMsg);
             return;
         }
 
         BOSS_TYPES.forEach(bossType => {
-            this.addButtonToElement(this.panel, `生成 ${bossType.name} (Spawn ${bossType.name})`, () => {
+            this.addButtonToElement(content, `生成 ${bossType.name} (Spawn ${bossType.name})`, () => {
                 if (typeof BossEnemy === 'undefined' || typeof enemies === 'undefined') {
                     console.warn("Debug: Cannot spawn boss. BossEnemy class or enemies array not found.");
                     alert("Boss spawning prerequisites missing (BossEnemy or enemies).");
@@ -193,6 +228,116 @@ window.DebugPanel = {
                 }
             });
         });
+    },
+    
+    // 添加小怪生成控制
+    addEnemySpawningControls: function() {
+        const { section, content } = this.createCollapsibleSection("生成小怪 (Spawn Enemies)");
+        this.mainContent.appendChild(section);
+        
+        if (typeof ENEMY_TYPES === 'undefined' || ENEMY_TYPES.length === 0) {
+            const noEnemyMsg = document.createElement('p');
+            noEnemyMsg.textContent = "未找到小怪类型 (No enemy types defined).";
+            noEnemyMsg.style.fontSize = '11px';
+            noEnemyMsg.style.fontStyle = 'italic';
+            content.appendChild(noEnemyMsg);
+            return;
+        }
+        
+        // 创建一个两列布局容器
+        const gridContainer = document.createElement('div');
+        gridContainer.style.display = 'grid';
+        gridContainer.style.gridTemplateColumns = '1fr 1fr';
+        gridContainer.style.gap = '8px';
+        content.appendChild(gridContainer);
+        
+        // 每类小怪添加一个生成按钮
+        ENEMY_TYPES.forEach(enemyType => {
+            const button = document.createElement('button');
+            button.textContent = enemyType.name;
+            button.style.padding = '6px 4px';
+            button.style.backgroundColor = '#555';
+            button.style.color = 'white';
+            button.style.border = '1px solid #777';
+            button.style.borderRadius = '3px';
+            button.style.cursor = 'pointer';
+            button.style.fontSize = '12px';
+            button.style.overflow = 'hidden';
+            button.style.textOverflow = 'ellipsis';
+            button.style.whiteSpace = 'nowrap';
+            
+            button.onmouseover = () => button.style.backgroundColor = '#666';
+            button.onmouseout = () => button.style.backgroundColor = '#555';
+            button.onclick = () => {
+                if (!player) {
+                    alert("玩家未就绪，无法生成怪物");
+                    return;
+                }
+                
+                // 计算生成位置（玩家周围随机位置）
+                const angle = Math.random() * Math.PI * 2;
+                const distance = 150 + Math.random() * 50;
+                const x = player.x + Math.cos(angle) * distance;
+                const y = player.y + Math.sin(angle) * distance;
+                
+                // 创建并添加敌人
+                const enemy = new Enemy(x, y, enemyType);
+                enemies.push(enemy);
+                console.log(`Debug: Spawned enemy ${enemyType.name} at (${x.toFixed(0)}, ${y.toFixed(0)})`);
+            };
+            
+            gridContainer.appendChild(button);
+        });
+        
+        // 添加一个生成多个随机敌人的按钮
+        const spawnMultipleContainer = document.createElement('div');
+        spawnMultipleContainer.style.gridColumn = '1 / span 2';
+        spawnMultipleContainer.style.marginTop = '10px';
+        gridContainer.appendChild(spawnMultipleContainer);
+        
+        const spawnCountInput = document.createElement('input');
+        spawnCountInput.type = 'number';
+        spawnCountInput.value = '5';
+        spawnCountInput.min = '1';
+        spawnCountInput.max = '50';
+        spawnCountInput.style.width = '60px';
+        spawnCountInput.style.marginRight = '8px';
+        spawnMultipleContainer.appendChild(spawnCountInput);
+        
+        const spawnRandomButton = document.createElement('button');
+        spawnRandomButton.textContent = '生成随机小怪';
+        spawnRandomButton.style.padding = '6px 8px';
+        spawnRandomButton.style.backgroundColor = '#4a4';
+        spawnRandomButton.style.color = 'white';
+        spawnRandomButton.style.border = '1px solid #6c6';
+        spawnRandomButton.style.borderRadius = '3px';
+        spawnRandomButton.style.cursor = 'pointer';
+        spawnRandomButton.onclick = () => {
+            if (!player) {
+                alert("玩家未就绪，无法生成怪物");
+                return;
+            }
+            
+            const count = parseInt(spawnCountInput.value);
+            if (isNaN(count) || count < 1) {
+                alert("请输入有效的数量");
+                return;
+            }
+            
+            for (let i = 0; i < count; i++) {
+                const randomType = ENEMY_TYPES[Math.floor(Math.random() * ENEMY_TYPES.length)];
+                const angle = Math.random() * Math.PI * 2;
+                const distance = 150 + Math.random() * 100;
+                const x = player.x + Math.cos(angle) * distance;
+                const y = player.y + Math.sin(angle) * distance;
+                
+                const enemy = new Enemy(x, y, randomType);
+                enemies.push(enemy);
+            }
+            
+            console.log(`Debug: Spawned ${count} random enemies`);
+        };
+        spawnMultipleContainer.appendChild(spawnRandomButton);
     },
 
     toggleInvincibility: function() {
@@ -285,58 +430,17 @@ window.DebugPanel = {
     },
 
     addItemsSection: function() {
-        this.addSectionTitle(this.panel, "添加/升级物品 (Add/Upgrade Items)");
-        const itemsDiv = this.panel;
+        const { section, content } = this.createCollapsibleSection("添加/升级物品 (Add/Upgrade Items)", true);
+        this.mainContent.appendChild(section);
+        const itemsDiv = content;
 
         const knownItems = this.getKnownItemClasses();
 
-        // 添加折叠/展开功能的助手函数
-        const createCollapsibleSection = (title, initiallyCollapsed = false) => {
-            const section = document.createElement('div');
-            section.className = 'debug-collapsible-section';
-            
-            const header = document.createElement('div');
-            header.className = 'debug-section-header';
-            header.style.cursor = 'pointer';
-            header.style.padding = '5px';
-            header.style.backgroundColor = '#444';
-            header.style.borderRadius = '3px';
-            header.style.marginTop = '10px';
-            header.style.marginBottom = '5px';
-            header.style.display = 'flex';
-            header.style.justifyContent = 'space-between';
-            header.style.alignItems = 'center';
-            
-            const headerText = document.createElement('span');
-            headerText.textContent = title;
-            headerText.style.fontWeight = 'bold';
-            header.appendChild(headerText);
-            
-            const indicator = document.createElement('span');
-            indicator.textContent = initiallyCollapsed ? '▶' : '▼';
-            indicator.style.fontSize = '10px';
-            header.appendChild(indicator);
-            
-            const content = document.createElement('div');
-            content.className = 'debug-section-content';
-            content.style.display = initiallyCollapsed ? 'none' : 'block';
-            content.style.paddingLeft = '10px';
-            
-            section.appendChild(header);
-            section.appendChild(content);
-            
-            header.onclick = () => {
-                const isCollapsed = content.style.display === 'none';
-                content.style.display = isCollapsed ? 'block' : 'none';
-                indicator.textContent = isCollapsed ? '▼' : '▶';
-            };
-            
-            return { section, content };
-        };
+        // 使用已存在的createCollapsibleSection方法不变
 
         const createOrUpdateItemButtons = (type, classes, headerText) => {
             if (Object.keys(classes).length > 0) {
-                const { section, content } = createCollapsibleSection(headerText, false);
+                const { section, content } = this.createCollapsibleSection(headerText, false);
                 itemsDiv.appendChild(section);
 
                 for (const itemName in classes) {
@@ -447,51 +551,43 @@ window.DebugPanel = {
                                 console.error(`Debug: Error adding new ${type} ${itemName}:`, e);
                             }
                         }
-                        if (typeof updateUI === 'function') updateUI();
                     });
                 }
-            } else {
-                const noItemsMsg = document.createElement('p');
-                noItemsMsg.textContent = `未找到${type === 'weapon' ? '武器' : '被动'}类型定义。(No ${type} classes found).`;
-                noItemsMsg.style.fontSize = '11px';
-                noItemsMsg.style.fontStyle = 'italic';
-                itemsDiv.appendChild(noItemsMsg);
             }
         };
-        
-        // 添加武器和被动道具按钮
+
+        // 创建武器按钮
         createOrUpdateItemButtons('weapon', knownItems.weapons, "武器 (Weapons)");
-        createOrUpdateItemButtons('passive', knownItems.passives, "被动 (Passives)");
-        
-        // 添加进化组合信息
+
+        // 创建被动道具按钮
+        createOrUpdateItemButtons('passive', knownItems.passives, "被动道具 (Passive Items)");
+
+        // 创建进化组合信息
         if (Object.keys(knownItems.evolutions).length > 0) {
-            const { section, content } = createCollapsibleSection("进化组合 (Evolutions)", true);
+            const { section, content } = this.createCollapsibleSection("进化组合 (Evolutions)", true);
             itemsDiv.appendChild(section);
-            
-            const evolutionsList = document.createElement('div');
-            evolutionsList.style.fontSize = '12px';
-            evolutionsList.style.maxHeight = '200px';
-            evolutionsList.style.overflowY = 'auto';
-            evolutionsList.style.border = '1px solid #555';
-            evolutionsList.style.padding = '5px';
-            evolutionsList.style.marginTop = '5px';
-            evolutionsList.style.marginBottom = '10px';
-            evolutionsList.style.backgroundColor = 'rgba(0,0,0,0.2)';
-            content.appendChild(evolutionsList);
-            
+
+            const evoList = document.createElement('ul');
+            evoList.style.listStyle = 'none';
+            evoList.style.padding = '0';
+            evoList.style.margin = '0';
+
             for (const [combo, result] of Object.entries(knownItems.evolutions)) {
-                const item = document.createElement('div');
-                item.textContent = `${combo} → ${result}`;
-                item.style.padding = '3px 0';
-                item.style.borderBottom = '1px dotted #444';
-                evolutionsList.appendChild(item);
+                const li = document.createElement('li');
+                li.style.padding = '5px';
+                li.style.borderBottom = '1px dotted #444';
+                li.innerHTML = `<span style="color:#aaf">${combo}</span> → <span style="color:#faa">${result}</span>`;
+                evoList.appendChild(li);
             }
+            content.appendChild(evoList);
         }
     },
 
     addGlobalSettingsControls: function() {
-        this.addSectionTitle(this.panel, "全局设置 (Global Settings)");
-        this.addButtonToElement(this.panel, "设置物品上限为100 (Set Item Limits to 100)", () => {
+        const { section, content } = this.createCollapsibleSection("全局设置 (Global Settings)");
+        this.mainContent.appendChild(section);
+        
+        this.addButtonToElement(content, "设置物品上限为100 (Set Item Limits to 100)", () => {
             if (player) {
                 const oldMaxWeapons = player.maxWeapons;
                 const oldMaxPassives = player.maxPassiveItems;
@@ -505,7 +601,7 @@ window.DebugPanel = {
         });
         
         // 添加游戏时间+1分钟的按钮
-        this.addButtonToElement(this.panel, "游戏时间+1分钟 (Add 1 min)", () => {
+        this.addButtonToElement(content, "游戏时间+1分钟 (Add 1 min)", () => {
             if (typeof gameTime !== 'undefined') {
                 const oldTime = gameTime;
                 gameTime += 60; // 增加60秒
@@ -515,6 +611,50 @@ window.DebugPanel = {
                 alert("游戏未运行，无法调整时间 (Game not running).");
             }
         });
+    },
+    
+    // 添加创建折叠部分的辅助函数
+    createCollapsibleSection: function(title, initiallyCollapsed = false) {
+        const section = document.createElement('div');
+        section.className = 'debug-collapsible-section';
+        
+        const header = document.createElement('div');
+        header.className = 'debug-section-header';
+        header.style.cursor = 'pointer';
+        header.style.padding = '5px';
+        header.style.backgroundColor = '#444';
+        header.style.borderRadius = '3px';
+        header.style.marginTop = '10px';
+        header.style.marginBottom = '5px';
+        header.style.display = 'flex';
+        header.style.justifyContent = 'space-between';
+        header.style.alignItems = 'center';
+        
+        const headerText = document.createElement('span');
+        headerText.textContent = title;
+        headerText.style.fontWeight = 'bold';
+        header.appendChild(headerText);
+        
+        const indicator = document.createElement('span');
+        indicator.textContent = initiallyCollapsed ? '▶' : '▼';
+        indicator.style.fontSize = '10px';
+        header.appendChild(indicator);
+        
+        const content = document.createElement('div');
+        content.className = 'debug-section-content';
+        content.style.display = initiallyCollapsed ? 'none' : 'block';
+        content.style.paddingLeft = '10px';
+        
+        section.appendChild(header);
+        section.appendChild(content);
+        
+        header.onclick = () => {
+            const isCollapsed = content.style.display === 'none';
+            content.style.display = isCollapsed ? 'block' : 'none';
+            indicator.textContent = isCollapsed ? '▼' : '▶';
+        };
+        
+        return { section, content };
     }
 };
 
