@@ -43,6 +43,10 @@ class BubbleProjectile extends Projectile {
         this.prevOscX = 0;
         this.prevOscY = 0;
         
+        // 记录初始发射位置
+        this.sourceX = x;
+        this.sourceY = y;
+        
         // 安全设置：强制销毁计时器
         this.forceDestroyTimer = 0;
         this.maxExistTime = 15; // 泡泡存在的最大时间（秒）
@@ -111,28 +115,35 @@ class BubbleProjectile extends Projectile {
             const oscY = Math.cos(this.oscillation * 0.7) * (this.maxOscillationDist * 0.6);
             
             // 计算新位置
-            const newX = this.x + (this.vx * dt) + (oscX - this.prevOscX);
-            const newY = this.y + (this.vy * dt) + (oscY - this.prevOscY);
+            let newX = this.x + (this.vx * dt) + (oscX - this.prevOscX);
+            let newY = this.y + (this.vy * dt) + (oscY - this.prevOscY);
             
-            // 边界检查 - 如果泡泡将要离开游戏区域，就改变方向
-            const margin = this.size;
-            const worldMinX = -GAME_WIDTH/2 + margin;
-            const worldMaxX = GAME_WIDTH*1.5 - margin;
-            const worldMinY = -GAME_HEIGHT/2 + margin;
-            const worldMaxY = GAME_HEIGHT*1.5 - margin;
-            
-            // 检查是否超出边界，如果是则反弹
-            if (newX < worldMinX || newX > worldMaxX) {
-                this.vx = -this.vx * 0.8; // 反向并减少速度
+            // 基于相机视野进行边界检查
+            const margin = this.size / 2;
+            // 获取相机视图的边界 (世界坐标)
+            const viewLeft = cameraManager.x - (GAME_WIDTH / 2 / cameraManager.zoom) - margin;
+            const viewRight = cameraManager.x + (GAME_WIDTH / 2 / cameraManager.zoom) + margin;
+            const viewTop = cameraManager.y - (GAME_HEIGHT / 2 / cameraManager.zoom) - margin;
+            const viewBottom = cameraManager.y + (GAME_HEIGHT / 2 / cameraManager.zoom) + margin;
+
+            // 设定一个更大的活动范围，例如相机视野的1.5倍，允许泡泡飘出视野一些距离后再反弹或消失
+            const activityRangeFactor = 1.5;
+            const activeLeft = cameraManager.x - (GAME_WIDTH * activityRangeFactor / 2 / cameraManager.zoom) - margin;
+            const activeRight = cameraManager.x + (GAME_WIDTH * activityRangeFactor / 2 / cameraManager.zoom) + margin;
+            const activeTop = cameraManager.y - (GAME_HEIGHT * activityRangeFactor / 2 / cameraManager.zoom) - margin;
+            const activeBottom = cameraManager.y + (GAME_HEIGHT * activityRangeFactor / 2 / cameraManager.zoom) + margin;
+
+            // 如果泡泡超出了活动范围，则标记为垃圾进行回收，而不是反弹
+            if (newX < activeLeft || newX > activeRight || newY < activeTop || newY > activeBottom) {
+                // console.log(`泡泡 (${this.x.toFixed(0)},${this.y.toFixed(0)}) 超出活动范围，标记为垃圾。相机: (${cameraManager.x.toFixed(0)},${cameraManager.y.toFixed(0)})`);
+                this.isGarbage = true;
+                this.isActive = false;
+                return;
             }
             
-            if (newY < worldMinY || newY > worldMaxY) {
-                this.vy = -this.vy * 0.8; // 反向并减少速度
-            }
-            
-            // 应用最终位置，确保在边界内
-            this.x = Math.max(worldMinX, Math.min(worldMaxX, newX));
-            this.y = Math.max(worldMinY, Math.min(worldMaxY, newY));
+            // 应用最终位置 (之前的反弹和强制位置限制逻辑被移除，改为超出活动范围则消失)
+            this.x = newX;
+            this.y = newY;
             
             // 记录上一帧的振荡值
             this.prevOscX = oscX;

@@ -175,17 +175,22 @@ window.DebugPanel = {
                     return;
                 }
 
-                let spawnX = cameraManager.x + canvas.width / 2 / cameraManager.zoom;
-                let spawnY = cameraManager.y; 
-
-                if (player) {
-                    spawnX = player.x + (Math.random() * 100 - 50);
-                    spawnY = player.y - 250;
+                // 确保先清理现有的Boss
+                if (bossManager.currentBoss && !bossManager.currentBoss.isGarbage) {
+                    bossManager.currentBoss.health = 0;
+                    bossManager.cleanupBossEffects();
+                    bossManager.currentBoss = null;
+                    cameraManager.deactivateBossArena();
                 }
                 
-                const newBoss = new BossEnemy(spawnX, spawnY, bossType);
-                enemies.push(newBoss);
-                console.log(`Debug: Spawned Boss ${bossType.name} at (${spawnX.toFixed(0)}, ${spawnY.toFixed(0)})`);
+                // 使用bossManager的spawnBoss方法来生成Boss
+                if (player) {
+                    bossManager.spawnBoss(player, bossType);
+                    console.log(`Debug: Spawned Boss ${bossType.name} using bossManager`);
+                } else {
+                    console.warn("Debug: Player not found, cannot spawn boss");
+                    alert("Player not found, cannot spawn boss");
+                }
             });
         });
     },

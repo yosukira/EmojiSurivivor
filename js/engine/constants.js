@@ -62,14 +62,7 @@ const WORLD_SIZE = 10000; // 世界大小
 // EMOJI definition removed, js/constants.js will be the source of truth
 
 // 基础武器和被动道具
-const BASE_WEAPONS = [
-    'DaggerWeapon',
-    'GarlicWeapon',
-    'WhipWeapon',
-    'FireDaggerWeapon',
-    'StormBladeWeapon',
-    'HandshakeWeapon'
-];
+const BASE_WEAPONS = []; // 初始化为空数组，武器类在各自文件中添加
 
 const BASE_PASSIVES = [
     'Spinach',

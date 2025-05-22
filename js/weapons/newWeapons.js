@@ -80,7 +80,7 @@ class BubbleWandWeapon extends Weapon {
         
         // 计算角度和扇形范围
         const baseAngle = Math.atan2(dirY, dirX);
-        const angleSpread = Math.PI * 0.6; // 60度扇形范围
+        const angleSpread = Math.PI * 0.6;
 
         // 随机方向发射泡泡
         for (let i = 0; i < projectileCount; i++) {
@@ -101,7 +101,10 @@ class BubbleWandWeapon extends Weapon {
                 ownerStats, trapDuration, splitOnBurst
             );
             
+            // 设置所有者和初始位置确认
             bubble.owner = owner;
+            bubble.sourceX = startX;
+            bubble.sourceY = startY;
             projectiles.push(bubble);
         }
     }

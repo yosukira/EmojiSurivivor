@@ -119,59 +119,22 @@ const enemyManager = {
         const halfWidth = GAME_WIDTH / 2;
         const halfHeight = GAME_HEIGHT / 2;
         
-        // 根据游戏时间和Boss击败情况获取可用敌人类型
+        // 根据游戏时间获取可用敌人类型
         let availableEnemies;
         
-        // 第一个Boss是否已击败
-        const firstBossDefeated = bossManager.defeatedBossCount > 0;
-        console.log(`当前游戏时间: ${Math.floor(gameTime)}秒, 第一个Boss已击败: ${firstBossDefeated}`);
+        // 移除 firstBossDefeated 的判断
+        // const firstBossDefeated = bossManager.isFirstBossDefeated(); 
+        // console.log(`SpawnEnemies Check - GameTime: ${Math.floor(gameTime)}s, FirstBossDefeated: ${firstBossDefeated}`);
         
-        // 根据游戏时间和Boss击败情况筛选敌人类型
-        if (gameTime < 60) {
-            // 1分钟内只刷史莱姆
-            availableEnemies = ENEMY_TYPES.filter(enemy => enemy.name === "史莱姆");
-        } else if (gameTime < 120) {
-            // 1-2分钟刷史莱姆和骷髅
-            availableEnemies = ENEMY_TYPES.filter(enemy => 
-                enemy.name === "史莱姆" || enemy.name === "骷髅"
-            );
-        } else if (gameTime < 180) {
-            // 2-3分钟，刷史莱姆、骷髅和蝙蝠
-            availableEnemies = ENEMY_TYPES.filter(enemy => 
-                enemy.name === "史莱姆" || enemy.name === "骷髅" || enemy.name === "蝙蝠"
-            );
-        } else if (!firstBossDefeated) {
-            // 3分钟后但第一个Boss尚未击败，维持相同敌人组合
-            availableEnemies = ENEMY_TYPES.filter(enemy => 
-                enemy.name === "史莱姆" || enemy.name === "骷髅" || enemy.name === "蝙蝠"
-            );
-        } else if (gameTime < 300) {
-            // 第一个Boss已击败至5分钟，增加僵尸
-            availableEnemies = ENEMY_TYPES.filter(enemy => 
-                enemy.name === "史莱姆" || enemy.name === "骷髅" || 
-                enemy.name === "蝙蝠" || enemy.name === "僵尸"
-            );
-            console.log("解锁僵尸类型敌人");
-        } else if (gameTime < 360) {
-            // 5-6分钟增加幽灵
-            availableEnemies = ENEMY_TYPES.filter(enemy => 
-                enemy.name === "史莱姆" || enemy.name === "骷髅" || 
-                enemy.name === "蝙蝠" || enemy.name === "僵尸" ||
-                enemy.name === "幽灵"
-            );
-            console.log("解锁幽灵类型敌人");
-        } else {
-            // 6分钟后，根据minTime属性解锁所有敌人
-            // 将可用敌人类型添加到列表中
-            availableEnemies = ENEMY_TYPES.filter(enemy => {
-                // 检查敌人是否有minTime属性且游戏时间已超过该时间
-                const shouldUnlock = !enemy.minTime || gameTime >= enemy.minTime;
-                if (shouldUnlock && gameTime % 60 < 1) {
-                    console.log(`解锁敌人类型: ${enemy.name}, minTime: ${enemy.minTime || 0}`);
-                }
-                return shouldUnlock;
-            });
-        }
+        // 根据游戏时间筛选敌人类型
+        availableEnemies = ENEMY_TYPES.filter(enemy => {
+            // 基本条件：游戏时间必须大于等于敌人的最小出现时间
+            if (gameTime < (enemy.minTime || 0)) {
+                return false;
+            }
+            // 移除与 firstBossDefeated 相关的判断逻辑，完全依赖 minTime
+            return true; 
+        });
         
         // 打印详细的可用敌人列表，但只在每隔60秒时记录一次，避免日志过多
         if (gameTime % 60 < 1) {
@@ -270,20 +233,20 @@ const bossManager = {
         // 如果之前有Boss且现在没有了，表示Boss被击败
         if (this.currentBoss && this.currentBoss.isGarbage) {
             this.defeatedBossCount++;
-            console.log(`Boss已击败! 总计击败: ${this.defeatedBossCount}`);
+            console.log(`[GameLog] BossManager: Boss ${this.currentBoss.name} 被判定为已击败! defeatedBossCount: ${this.defeatedBossCount}`);
             
             // 立即执行Boss战场清理，并做彻底检查
-            this.cleanupBossEffects();
+            this.cleanupBossEffects(); // 这个方法会调用 cameraManager.deactivateBossArena()
             
-            // 取消Boss战场限制 - 确保在cameraManager中停用
-            cameraManager.deactivateBossArena();
-            console.log("Boss战场已解除!");
-            
+            // 额外确认 cameraManager 状态
+            console.log(`[GameLog] BossManager: Boss击败后，cameraManager.bossArenaActive = ${cameraManager.bossArenaActive}`);
+
             // 播放胜利音效或视觉效果
             triggerScreenShake(5, 0.8);
             
             // 重置当前Boss
             this.currentBoss = null;
+            console.log("[GameLog] BossManager: currentBoss已设为null");
         }
 
         // 如果正在显示警告，更新警告计时器
@@ -406,19 +369,21 @@ const bossManager = {
 
     // 清理Boss相关的所有视觉效果
     cleanupBossEffects() {
-        console.log("开始清理Boss战场效果和相关视觉效果...");
+        console.log("[GameLog] BossManager: cleanupBossEffects 开始");
+        console.log(`[GameLog] BossManager: 调用前 cameraManager.bossArenaActive = ${cameraManager.bossArenaActive}`);
+        console.log(`[GameLog] BossManager: 调用前 window.bossArenaEffect = ${window.bossArenaEffect ? JSON.stringify(window.bossArenaEffect.isGarbage) : 'null'}`);
+        console.log(`[GameLog] BossManager: 调用前 visualEffects 包含bossArenaEffect: ${visualEffects.some(e => e && e.isBossArenaEffect)}`);
 
         // 确保全局引用被清除
         if (window.bossArenaEffect) {
-            console.log("发现全局Boss战场效果引用，准备清除");
+            console.log("[GameLog] BossManager: 清除 window.bossArenaEffect");
             window.bossArenaEffect.isGarbage = true;
             window.bossArenaEffect = null;
-            console.log("全局Boss战场效果引用已清除");
         }
         
-        // 确保Boss战场被停用
-        cameraManager.bossArenaActive = false;
-        console.log("Boss战场标记已重置: bossArenaActive = false");
+        // 确保Boss战场被停用 - 这是关键
+        cameraManager.deactivateBossArena(); // 调用cameraManager的方法来停用
+        console.log(`[GameLog] BossManager:调用 cameraManager.deactivateBossArena() 后, cameraManager.bossArenaActive = ${cameraManager.bossArenaActive}`);
         
         // 清理本地引用
         this.bossArenaEffect = null;
@@ -487,7 +452,7 @@ const bossManager = {
     
     // 处理Boss死亡
     handleBossDeath(boss, killer) {
-        console.log(`Boss ${boss.name} 被击败!`);
+        console.log(`[GameLog] BossManager: handleBossDeath for ${boss.name} 开始`);
         
         // 增加击杀计数
         killCount++;
@@ -496,10 +461,16 @@ const bossManager = {
         worldObjects.push(new Chest(boss.x, boss.y));
         
         // 立即清理战场效果
+        console.log("[GameLog] BossManager: handleBossDeath 调用 this.cleanupBossEffects()");
         this.cleanupBossEffects();
         
-        // 确保取消Boss战场限制
-        cameraManager.deactivateBossArena();
+        // 确保取消Boss战场限制 - cleanupBossEffects 内部会调用 cameraManager.deactivateBossArena()
+        // cameraManager.deactivateBossArena(); // 这行是多余的，因为 cleanupBossEffects 做了
+        console.log(`[GameLog] BossManager: handleBossDeath 后, cameraManager.bossArenaActive = ${cameraManager.bossArenaActive}`);
+        
+        // 将Boss标记为垃圾，确保不会再次触发其他处理
+        boss.isGarbage = true;
+        console.log(`[GameLog] BossManager: ${boss.name}标记为 isGarbage.`);
     }
 };
 
@@ -574,10 +545,12 @@ function init() {
     enemyManager.spawnTimer = 0;
     enemyManager.currentSpawnInterval = 3.5; // 使用更长的初始生成间隔
     enemyManager.difficultyTimer = 0;
-    bossManager.nextBossTime = BOSS_INTERVAL;
+    bossManager.nextBossTime = FIRST_BOSS_TIME; // <--- 修改这里
     bossManager.currentBoss = null;
     bossManager.bossWarningTimer = 0;
     bossManager.showingWarning = false;
+    bossManager.defeatedBossCount = 0; // 确保重置Boss击败计数
+    bossManager.pendingBossType = null; // 确保重置待生成的Boss类型
 
     // 重置UI
     document.getElementById('gameOverScreen').classList.add('hidden');
