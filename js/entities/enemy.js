@@ -374,6 +374,25 @@ class Enemy extends Character {
             target.statusEffects = {};
         }
         
+        // 检查玩家是否有减速免疫（如翅膀10级）
+        if (target.getStat && target.getStat('slowImmunity') === true) {
+            // 玩家完全免疫减速，不应用效果
+            return;
+        }
+        
+        // 检查玩家是否有减速抗性（如翅膀5级）
+        let slowResistance = 0;
+        if (target.getStat && typeof target.getStat('slowResistance') === 'number') {
+            slowResistance = target.getStat('slowResistance'); // 0到1之间的值
+        }
+        
+        // 应用减速抗性，降低减速效果
+        if (slowResistance > 0) {
+            // 减速因子接近1表示减速效果更弱
+            // 所以我们要让计算后的slowFactor更接近1
+            slowFactor = 1 - (1 - slowFactor) * (1 - slowResistance);
+        }
+        
         // 保存原有速度（如果没有已存在的减速效果）
         let originalSpeed = target.statusEffects.slow ? 
                           target.statusEffects.slow.originalSpeed : 

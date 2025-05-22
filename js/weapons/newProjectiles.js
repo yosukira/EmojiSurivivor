@@ -1106,7 +1106,7 @@ class ChaosDiceProjectile extends Projectile {
             // 获取屏幕坐标
             const screenPos = cameraManager.worldToScreen(this.x, this.y);
             
-            if (this.exploded) {
+            if (this.isBursting) {
                 // 不绘制爆炸体本身，爆炸效果通过visualEffects处理
                 return;
             }
@@ -3610,6 +3610,7 @@ class VolcanoEruption {
             damageInterval: 0.5,
             damage: this.damage * 0.3,
             isGarbage: false,
+            parentVolcano: this, // 存储父火山引用以便清理
             
             update: function(dt, volcano) {
                 this.timer += dt;
@@ -3618,8 +3619,12 @@ class VolcanoEruption {
                 // 如果寿命结束，标记为垃圾
                 if (this.timer >= this.lifetime) {
                     this.isGarbage = true;
-                    volcano.isGarbage = true;
-                    volcano.isActive = false;
+                    // 确保清理父火山
+                    if (this.parentVolcano) {
+                        this.parentVolcano.isGarbage = true;
+                        this.parentVolcano.isActive = false;
+                        this.parentVolcano = null; // 清除引用
+                    }
                     return;
                 }
                 
@@ -3641,12 +3646,10 @@ class VolcanoEruption {
                         // 如果在范围内，造成伤害
                         if (distSq <= this.radius * this.radius) {
                             // 造成伤害
-                            enemy.takeDamage(this.damage, volcano.owner);
+                            enemy.takeDamage(this.damage, volcano ? volcano.owner : null);
                             
                             // 应用燃烧效果
-                            volcano.applyBurnEffect(enemy);
-                            
-                                                        // 减速效果                            this.applySlowEffect(enemy, volcano);
+                            if (volcano) volcano.applyBurnEffect(enemy);
                         }
                     });
                 }

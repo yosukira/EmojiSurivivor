@@ -374,8 +374,8 @@ const BOSS_TYPES = [
             specialAttackWaves: 4,
             projectilesPerWaveSpecial: 8,
             specialAttackWaveDelay: 0.3,
-            sizeFactorNormal: 0.25,
-            sizeFactorSpecial: 0.3
+            sizeFactorNormal: 0.35,
+            sizeFactorSpecial: 0.4
         }
     },
     {
@@ -387,7 +387,9 @@ const BOSS_TYPES = [
         xpMult: 5.0,
         attackPattern: "aoe",
         minTime: 660, // 11分钟出现(第三个Boss)
-        displaySizeMultiplier: 3.2
+        displaySizeMultiplier: 3.4,
+        poisonAuraRadiusMultiplier: 2.6,
+        toxicPoolRadiusMultiplier: 1.3
     },
     {
         name: "恶魔领主",

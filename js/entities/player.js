@@ -171,7 +171,12 @@ class Player extends Character {
         const specialStatMappings = {
             'speed': ['speed'], // 移动速度，对应Wings被动
             'health': ['health', 'maxHealth'], // 最大生命值，对应HollowHeart被动
-            'regenAmount': ['regenAmount', 'regen'] // 生命恢复，对应AncientTreeSap被动
+            'regenAmount': ['regenAmount', 'regen'], // 生命恢复，对应AncientTreeSap被动
+            'maxHealth': ['maxHealth', 'maxHealthBonus', 'health'], // 最大生命值，对应HollowHeart被动
+            'damageMultiplier': ['damageMultiplier'], // 伤害乘数，对应Spinach被动
+            'projectileCount': ['projectileCount', 'projectileCountBonus'], // 投射物数量，对应Gargoyle被动
+            'regen': ['regen', 'regenAmount'], // 生命恢复，对应AncientTreeSap被动
+            'pickupRadius': ['pickupRadius', 'pickupRadiusBonus'] // 拾取范围，对应EmptyBottle被动
         };
 
         // 获取可能的特殊属性名称

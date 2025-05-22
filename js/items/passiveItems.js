@@ -265,18 +265,18 @@ class Spinach extends PassiveItem {
      */
     getBonuses() {
         // 修改：确保1级就有明显的伤害加成
-        let damageBonus = 0.1 + (this.level - 1) * 0.1; // 1级时10%伤害加成，每升一级再增加10%
+        let damageBonus = 0.15 + (this.level - 1) * 0.1; // 1级时15%伤害加成，每升一级再增加10%
         
         // 10级特殊效果：额外增加15%伤害和5%暴击率
         if (this.level === 10) {
             return {
-                damageMultiplier: 1 + damageBonus + 0.15,
+                damageMultiplier: damageBonus + 0.15 + 1.0,
                 critChance: 0.05
             };
         }
         
         return {
-            damageMultiplier: 1 + damageBonus
+            damageMultiplier: damageBonus + 1.0 // 修改：确保是1.0+加成值
         };
     }
 }
@@ -337,13 +337,13 @@ class HollowHeart extends PassiveItem {
         // 10级特殊效果：额外增加生命值和少量生命恢复
         if (this.level === 10) {
             return {
-                maxHealth: healthBonus + 50,  // 额外增加50点生命值
+                maxHealth: healthBonus + 50,  // 修改：使用maxHealth
                 regenAmount: 0.5 // 每秒回复0.5点生命值
             };
         }
         
         return {
-            maxHealth: healthBonus // 确保返回的是maxHealth而不是health
+            maxHealth: healthBonus // 修改：使用maxHealth而不是maxHealthBonus
         };
     }
 }
@@ -368,10 +368,19 @@ class Wings extends PassiveItem {
         // 修复：确保有正确的速度加成
         let speedBonus = 20 + (this.level - 1) * 5; // 基础20点速度，每级增加5点
         
-        // 10级特殊效果：短暂冲刺能力
+        // 5级特殊效果：50%减速免疫
+        if (this.level >= 5 && this.level < 10) {
+            return {
+                speed: speedBonus,
+                slowResistance: 0.5 // 50%减速抗性
+            };
+        }
+        
+        // 10级特殊效果：完全免疫减速和短暂冲刺能力
         if (this.level === 10) {
             return {
                 speed: speedBonus + 30, // 额外30点速度
+                slowImmunity: true, // 完全免疫减速
                 dashChance: 0.2, // 20%几率在受伤时获得2秒冲刺能力
                 dashDuration: 2.0,
                 dashSpeedMultiplier: 1.5
@@ -784,20 +793,20 @@ class AncientTreeSap extends PassiveItem {
      */
     getBonuses() {
         // 增强生命回复：确保1级有更强的基础回复效果
-        let regenAmount = 1.0 + (this.level - 1) * 0.3; // 基础1.0点恢复，每级增加0.3点
-        let maxHealthPercent = 0.02 + (this.level - 1) * 0.03; // 从1级就有2%最大生命值加成，每级增加3%
+        let regenAmount = 1.5 + (this.level - 1) * 0.3; // 基础1.5点恢复，每级增加0.3点
+        let maxHealthPercent = 0.05 + (this.level - 1) * 0.03; // 从1级就有5%最大生命值加成，每级增加3%
         
         // 10级特殊效果：额外恢复和生命值，并在生命危急时提供保护
         if (this.level === 10) {
             return {
-                regenAmount: regenAmount + 1.5, // 增加到1.5额外加成
+                regen: regenAmount + 1.5, // 修改：使用regen而不是regenAmount
                 maxHealthMultiplier: 1 + maxHealthPercent + 0.15, // 增加到15%额外生命值
                 emergencyShield: 0.15 // 生命值低于15%时获得4秒无敌(原10%和3秒)
             };
         }
         
         return {
-            regenAmount: regenAmount,
+            regen: regenAmount, // 修改：使用regen而不是regenAmount
             maxHealthMultiplier: 1 + maxHealthPercent // 确保1级就有生命值加成
         };
     }
@@ -1084,8 +1093,8 @@ function registerCriticalPassives() {
             console.log(`类${cls.name}已存在于BASE_PASSIVES中`);
         }
     });
-    
-    // 将新的被动道具添加到BASE_PASSIVES数组
+
+// 将新的被动道具添加到BASE_PASSIVES数组
     const otherClasses = [
         { ref: EmptyBottle, name: "EmptyBottle" },
         { ref: Gargoyle, name: "Gargoyle" },

@@ -4,6 +4,7 @@ window.debugCommands = window.debugCommands || {};
 
 window.DebugPanel = {
     panel: null,
+    leftStatsPanel: null, // 左侧属性面板
     invincibleButton: null,
     isDragging: false,
     offsetX: 0,
@@ -21,12 +22,16 @@ window.DebugPanel = {
         this.mainContent.style.display = 'none'; // 默认折叠
         this.panel.appendChild(this.mainContent);
         
+        this.addPlayerStatsPanel(); // 新增玩家属性面板
         this.addBossSpawningControls();
         this.addEnemySpawningControls(); // 新增小怪生成控制
         this.addItemsSection();
         this.addGlobalSettingsControls();
 
         this.applyInitialDebugSettings();
+        
+        // 创建左侧玩家属性面板
+        this.createLeftPlayerStatsPanel();
 
         if (typeof player === 'undefined') {
             console.warn("Debug Panel: Player object not found at init. Some controls might not work until player is initialized.");
@@ -655,6 +660,293 @@ window.DebugPanel = {
         };
         
         return { section, content };
+    },
+
+    /**
+     * 添加玩家属性面板
+     */
+    addPlayerStatsPanel: function() {
+        // 创建折叠面板
+        const section = this.createCollapsibleSection("玩家属性", true);
+        this.mainContent.appendChild(section.section);
+        
+        // 创建属性显示容器
+        const statsContainer = document.createElement('div');
+        statsContainer.style.display = 'grid';
+        statsContainer.style.gridTemplateColumns = 'repeat(2, 1fr)'; // 两列布局
+        statsContainer.style.gap = '5px';
+        statsContainer.style.padding = '5px';
+        section.content.appendChild(statsContainer);
+        
+        // 创建属性显示项
+        const statsItems = [
+            { name: "基础伤害加成", stat: "damageMultiplier", format: (val) => `${((val-1)*100).toFixed(0)}%` },
+            { name: "移动速度", stat: "speed", format: (val) => val.toFixed(0) },
+            { name: "回血速度", stat: "regenAmount", format: (val) => `${val.toFixed(1)}/秒` },
+            { name: "基础投射物数量", stat: "projectileCount", format: (val) => val.toFixed(0) },
+            { name: "基础攻击间隔", stat: "cooldownMultiplier", format: (val) => `${(val*100).toFixed(0)}%` },
+            { name: "基础燃烧伤害", stat: "burnDamage", format: (val) => val.toFixed(1) },
+            { name: "基础闪电伤害", stat: "lightningDamage", format: (val) => val.toFixed(1) },
+            { name: "基础毒素伤害", stat: "poisonDamage", format: (val) => val.toFixed(1) },
+            { name: "基础暴击率", stat: "critChance", format: (val) => `${(val*100).toFixed(0)}%` },
+            { name: "基础暴击伤害", stat: "critDamage", format: (val) => `${((val-1)*100).toFixed(0)}%` },
+            { name: "基础拾取范围", stat: "pickupRange", format: (val) => val.toFixed(0) },
+            { name: "基础经验加成", stat: "xpMultiplier", format: (val) => `${((val-1)*100).toFixed(0)}%` }
+        ];
+        
+        // 创建所有属性显示元素
+        const statElements = {};
+        statsItems.forEach(item => {
+            const statItem = document.createElement('div');
+            statItem.style.display = 'flex';
+            statItem.style.justifyContent = 'space-between';
+            statItem.style.padding = '2px 5px';
+            statItem.style.backgroundColor = 'rgba(0, 0, 0, 0.2)';
+            statItem.style.borderRadius = '3px';
+            
+            const nameSpan = document.createElement('span');
+            nameSpan.textContent = item.name;
+            
+            const valueSpan = document.createElement('span');
+            valueSpan.style.fontWeight = 'bold';
+            valueSpan.style.color = '#4CAF50';
+            
+            statItem.appendChild(nameSpan);
+            statItem.appendChild(valueSpan);
+            statsContainer.appendChild(statItem);
+            
+            // 保存对值元素的引用，以便更新
+            statElements[item.stat] = {
+                element: valueSpan,
+                format: item.format
+            };
+        });
+        
+        // 创建更新按钮
+        const updateButton = document.createElement('button');
+        updateButton.textContent = '刷新属性';
+        updateButton.style.width = '100%';
+        updateButton.style.marginTop = '5px';
+        updateButton.style.padding = '5px';
+        updateButton.style.backgroundColor = '#2196F3';
+        updateButton.style.color = 'white';
+        updateButton.style.border = 'none';
+        updateButton.style.borderRadius = '3px';
+        updateButton.style.cursor = 'pointer';
+        section.content.appendChild(updateButton);
+        
+        // 更新属性值的函数
+        const updateStats = () => {
+            if (!window.player) return;
+            
+            Object.entries(statElements).forEach(([stat, info]) => {
+                const value = player.getStat(stat);
+                info.element.textContent = info.format(value);
+            });
+        };
+        
+        // 添加更新按钮点击事件
+        updateButton.addEventListener('click', updateStats);
+        
+        // 初始更新
+        updateStats();
+        
+        // 设置定时更新（每秒更新一次）
+        setInterval(updateStats, 1000);
+    },
+
+    /**
+     * 创建左侧玩家属性面板
+     */
+    createLeftPlayerStatsPanel: function() {
+        // 创建左侧面板容器
+        this.leftStatsPanel = document.createElement('div');
+        this.leftStatsPanel.id = 'left-stats-panel';
+        this.leftStatsPanel.style.position = 'fixed';
+        this.leftStatsPanel.style.top = '100px';
+        this.leftStatsPanel.style.left = '10px';
+        this.leftStatsPanel.style.width = '220px';
+        this.leftStatsPanel.style.backgroundColor = 'rgba(30,30,30,0.8)';
+        this.leftStatsPanel.style.color = 'white';
+        this.leftStatsPanel.style.padding = '10px';
+        this.leftStatsPanel.style.borderRadius = '5px';
+        this.leftStatsPanel.style.zIndex = '9999';
+        this.leftStatsPanel.style.fontFamily = 'Arial, sans-serif';
+        this.leftStatsPanel.style.fontSize = '13px';
+        this.leftStatsPanel.style.cursor = 'move'; // 添加移动光标样式
+        document.body.appendChild(this.leftStatsPanel);
+        
+        // 添加拖动功能
+        let isDragging = false;
+        let offsetX, offsetY;
+        
+        this.leftStatsPanel.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            offsetX = e.clientX - this.leftStatsPanel.getBoundingClientRect().left;
+            offsetY = e.clientY - this.leftStatsPanel.getBoundingClientRect().top;
+            this.leftStatsPanel.style.cursor = 'grabbing';
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            
+            const x = e.clientX - offsetX;
+            const y = e.clientY - offsetY;
+            
+            this.leftStatsPanel.style.left = `${Math.max(0, x)}px`;
+            this.leftStatsPanel.style.top = `${Math.max(0, y)}px`;
+        });
+        
+        document.addEventListener('mouseup', () => {
+            isDragging = false;
+            this.leftStatsPanel.style.cursor = 'move';
+        });
+        
+        // 创建标题和折叠按钮
+        const header = document.createElement('div');
+        header.style.display = 'flex';
+        header.style.justifyContent = 'space-between';
+        header.style.alignItems = 'center';
+        header.style.marginBottom = '8px';
+        header.style.padding = '5px';
+        header.style.backgroundColor = '#333';
+        header.style.borderRadius = '3px';
+        this.leftStatsPanel.appendChild(header);
+        
+        const title = document.createElement('span');
+        title.textContent = '玩家属性';
+        title.style.fontWeight = 'bold';
+        header.appendChild(title);
+        
+        const toggleButton = document.createElement('span');
+        toggleButton.textContent = '▼';
+        toggleButton.style.cursor = 'pointer';
+        toggleButton.style.fontSize = '10px';
+        toggleButton.style.padding = '3px';
+        header.appendChild(toggleButton);
+        
+        // 创建内容区域
+        const content = document.createElement('div');
+        content.id = 'left-stats-content';
+        this.leftStatsPanel.appendChild(content);
+        
+        // 折叠功能
+        toggleButton.onclick = (e) => {
+            e.stopPropagation(); // 防止触发拖动
+            const isVisible = content.style.display !== 'none';
+            content.style.display = isVisible ? 'none' : 'block';
+            toggleButton.textContent = isVisible ? '▶' : '▼';
+        };
+        
+        // 添加属性显示
+        const statsItems = [
+            { name: "基础伤害加成", stat: "damageMultiplier", format: (val) => `${((val-1)*100).toFixed(0)}%` },
+            { name: "移动速度", stat: "speed", format: (val) => val.toFixed(0) },
+            { name: "回血速度", stat: "regen", format: (val) => `${val.toFixed(1)}/秒` }, // 修改：regenAmount -> regen
+            { name: "基础投射物数量", stat: "projectileCountBonus", format: (val) => val.toFixed(0) }, // 修改：projectileCount -> projectileCountBonus
+            { name: "基础攻击间隔", stat: "cooldownMultiplier", format: (val) => `${(val*100).toFixed(0)}%` },
+            { name: "基础燃烧伤害", stat: "burnDamage", format: (val) => val.toFixed(1) },
+            { name: "基础闪电伤害", stat: "lightningDamage", format: (val) => val.toFixed(1) },
+            { name: "基础毒素伤害", stat: "poisonDamage", format: (val) => val.toFixed(1) },
+            { name: "最大生命值", stat: "maxHealth", format: (val) => val.toFixed(0) }, // 新增：显示最大生命值
+            { name: "护甲值", stat: "armor", format: (val) => val.toFixed(1) }, // 新增：显示护甲值
+            { name: "基础暴击率", stat: "critChance", format: (val) => `${(val*100).toFixed(0)}%` }, // 新增：显示暴击率
+            { name: "拾取范围", stat: "pickupRadius", format: (val) => val.toFixed(0) } // 新增：显示拾取范围
+        ];
+        
+        // 创建属性项
+        const statElements = {};
+        statsItems.forEach(item => {
+            const row = document.createElement('div');
+            row.style.display = 'flex';
+            row.style.justifyContent = 'space-between';
+            row.style.padding = '4px 8px';
+            row.style.borderBottom = '1px solid #444';
+            
+            const label = document.createElement('span');
+            label.textContent = item.name;
+            
+            const value = document.createElement('span');
+            value.style.fontWeight = 'bold';
+            value.style.color = '#4CAF50';
+            
+            row.appendChild(label);
+            row.appendChild(value);
+            content.appendChild(row);
+            
+            statElements[item.stat] = {
+                element: value,
+                format: item.format
+            };
+        });
+        
+        // 添加调试按钮：输出所有玩家属性
+        const debugButton = document.createElement('button');
+        debugButton.textContent = '调试属性';
+        debugButton.style.width = '100%';
+        debugButton.style.marginTop = '8px';
+        debugButton.style.padding = '5px';
+        debugButton.style.backgroundColor = '#555';
+        debugButton.style.color = 'white';
+        debugButton.style.border = 'none';
+        debugButton.style.borderRadius = '3px';
+        debugButton.style.cursor = 'pointer';
+        content.appendChild(debugButton);
+        
+        debugButton.onclick = (e) => {
+            e.stopPropagation(); // 防止触发拖动
+            if (!window.player || !player.stats) {
+                console.log("玩家或玩家属性不存在");
+                return;
+            }
+            
+            console.log("所有玩家属性：", player.stats);
+            console.log("被动道具：", player.passiveItems);
+            
+            // 输出所有getStat值
+            statsItems.forEach(item => {
+                const value = player.getStat ? player.getStat(item.stat) : undefined;
+                console.log(`${item.name} (${item.stat}): ${value}`);
+            });
+            
+            alert("已在控制台输出玩家属性");
+        };
+        
+        // 添加更新定时器
+        const updateStats = () => {
+            if (!window.player) return;
+            
+            Object.entries(statElements).forEach(([stat, info]) => {
+                let value;
+                try {
+                    value = player.getStat(stat);
+                    // 检查数值是否合理
+                    if (value === undefined || value === null || isNaN(value)) {
+                        value = player.stats ? player.stats[stat] : 0;
+                    }
+                } catch (e) {
+                    console.error(`获取属性${stat}时出错:`, e);
+                    value = 0;
+                }
+                
+                // 格式化并显示值
+                try {
+                    info.element.textContent = info.format(value);
+                } catch (e) {
+                    console.error(`格式化属性${stat}时出错:`, e);
+                    info.element.textContent = 'ERROR';
+                }
+            });
+        };
+        
+        // 初始更新
+        updateStats();
+        
+        // 定时更新（每秒）
+        setInterval(updateStats, 1000);
+        
+        // 返回面板引用以便可能的后续操作
+        return this.leftStatsPanel;
     }
 };
 
