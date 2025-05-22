@@ -233,20 +233,20 @@ const bossManager = {
         // 如果之前有Boss且现在没有了，表示Boss被击败
         if (this.currentBoss && this.currentBoss.isGarbage) {
             this.defeatedBossCount++;
-            console.log(`[GameLog] BossManager: Boss ${this.currentBoss.name} 被判定为已击败! defeatedBossCount: ${this.defeatedBossCount}`);
+            console.log(`Boss已击败! 总计击败: ${this.defeatedBossCount}`);
             
             // 立即执行Boss战场清理，并做彻底检查
-            this.cleanupBossEffects(); // 这个方法会调用 cameraManager.deactivateBossArena()
+            this.cleanupBossEffects();
             
-            // 额外确认 cameraManager 状态
-            console.log(`[GameLog] BossManager: Boss击败后，cameraManager.bossArenaActive = ${cameraManager.bossArenaActive}`);
-
+            // 取消Boss战场限制 - 确保在cameraManager中停用
+            cameraManager.deactivateBossArena();
+            console.log("Boss战场已解除!");
+            
             // 播放胜利音效或视觉效果
             triggerScreenShake(5, 0.8);
             
             // 重置当前Boss
             this.currentBoss = null;
-            console.log("[GameLog] BossManager: currentBoss已设为null");
         }
 
         // 如果正在显示警告，更新警告计时器
@@ -369,21 +369,19 @@ const bossManager = {
 
     // 清理Boss相关的所有视觉效果
     cleanupBossEffects() {
-        console.log("[GameLog] BossManager: cleanupBossEffects 开始");
-        console.log(`[GameLog] BossManager: 调用前 cameraManager.bossArenaActive = ${cameraManager.bossArenaActive}`);
-        console.log(`[GameLog] BossManager: 调用前 window.bossArenaEffect = ${window.bossArenaEffect ? JSON.stringify(window.bossArenaEffect.isGarbage) : 'null'}`);
-        console.log(`[GameLog] BossManager: 调用前 visualEffects 包含bossArenaEffect: ${visualEffects.some(e => e && e.isBossArenaEffect)}`);
+        console.log("开始清理Boss战场效果和相关视觉效果...");
 
         // 确保全局引用被清除
         if (window.bossArenaEffect) {
-            console.log("[GameLog] BossManager: 清除 window.bossArenaEffect");
+            console.log("发现全局Boss战场效果引用，准备清除");
             window.bossArenaEffect.isGarbage = true;
             window.bossArenaEffect = null;
+            console.log("全局Boss战场效果引用已清除");
         }
         
-        // 确保Boss战场被停用 - 这是关键
-        cameraManager.deactivateBossArena(); // 调用cameraManager的方法来停用
-        console.log(`[GameLog] BossManager:调用 cameraManager.deactivateBossArena() 后, cameraManager.bossArenaActive = ${cameraManager.bossArenaActive}`);
+        // 确保Boss战场被停用
+        cameraManager.bossArenaActive = false;
+        console.log("Boss战场标记已重置: bossArenaActive = false");
         
         // 清理本地引用
         this.bossArenaEffect = null;
@@ -452,7 +450,7 @@ const bossManager = {
     
     // 处理Boss死亡
     handleBossDeath(boss, killer) {
-        console.log(`[GameLog] BossManager: handleBossDeath for ${boss.name} 开始`);
+        console.log(`Boss ${boss.name} 被击败!`);
         
         // 增加击杀计数
         killCount++;
@@ -461,16 +459,13 @@ const bossManager = {
         worldObjects.push(new Chest(boss.x, boss.y));
         
         // 立即清理战场效果
-        console.log("[GameLog] BossManager: handleBossDeath 调用 this.cleanupBossEffects()");
         this.cleanupBossEffects();
         
-        // 确保取消Boss战场限制 - cleanupBossEffects 内部会调用 cameraManager.deactivateBossArena()
-        // cameraManager.deactivateBossArena(); // 这行是多余的，因为 cleanupBossEffects 做了
-        console.log(`[GameLog] BossManager: handleBossDeath 后, cameraManager.bossArenaActive = ${cameraManager.bossArenaActive}`);
+        // 确保取消Boss战场限制
+        cameraManager.deactivateBossArena();
         
         // 将Boss标记为垃圾，确保不会再次触发其他处理
         boss.isGarbage = true;
-        console.log(`[GameLog] BossManager: ${boss.name}标记为 isGarbage.`);
     }
 };
 
@@ -1832,15 +1827,185 @@ class EnemyProjectile {
                     
                     // 创建命中特效
                     this.createHitEffect();
+                    
+                    // 应用效果处理
+                    
+                    // 如果是蜘蛛敌人的投射物，应用减速效果并显示蜘蛛网特效
+                    if (this.owner && this.owner.type && this.owner.type.name === "蜘蛛") {
+                        // 应用减速效果
+                        const slowFactor = 0.8; // 减速到80%（降低幅度从60%减为20%）
+                        const slowDuration = 2.0; // 持续2秒
+                        
+                        // 应用减速效果（不叠加，取最强效果）
+                        this.applySlowToPlayer(slowFactor, slowDuration);
+                        
+                        // 创建蜘蛛网视觉效果
+                        this.createSpiderWebEffect();
+                    }
+                    // 如果是巫师敌人的投射物，应用更强的减速效果
+                    else if (this.owner && this.owner.type && this.owner.type.name === "巫师") {
+                        // 应用减速效果
+                        const slowFactor = 0.5; // 减速到50%（降低幅度50%）
+                        const slowDuration = 3.0; // 持续3秒
+                        
+                        // 应用减速效果（不叠加，取最强效果）
+                        this.applySlowToPlayer(slowFactor, slowDuration);
+                        
+                        // 创建魔法减速视觉效果
+                        this.createMagicSlowEffect();
+                    }
                 }
             }
         }
     }
     
     /**
+     * 对玩家应用减速效果（不叠加，取最强效果）
+     * @param {number} slowFactor - 减速因子
+     * @param {number} slowDuration - 减速持续时间
+     */
+    applySlowToPlayer(slowFactor, slowDuration) {
+        if (!player || !player.stats) return;
+        
+        // 确保玩家有statusEffects对象
+        if (!player.statusEffects) {
+            player.statusEffects = {};
+        }
+        
+        // 保存原有速度（如果没有已存在的减速效果）
+        let originalSpeed = player.statusEffects.slow ? 
+                          player.statusEffects.slow.originalSpeed : 
+                          player.stats.speed;
+        
+        // 检查是否已有减速效果
+        if (player.statusEffects.slow) {
+            // 已有减速效果，取最强的效果（更低的factor值表示更强的减速）
+            if (slowFactor <= player.statusEffects.slow.factor) {
+                // 新的减速效果更强或相同，更新减速系数
+                player.statusEffects.slow.factor = slowFactor;
+                // 重置玩家速度为原速度×新减速系数
+                player.stats.speed = originalSpeed * slowFactor;
+            }
+            // 不管新效果是否更强，都刷新持续时间（取较长的）
+            player.statusEffects.slow.duration = Math.max(player.statusEffects.slow.duration, slowDuration);
+        } else {
+            // 没有已存在的减速效果，直接应用
+            player.stats.speed *= slowFactor;
+            
+            player.statusEffects.slow = {
+                factor: slowFactor,
+                duration: slowDuration,
+                originalSpeed: originalSpeed,
+                source: this.owner,
+                icon: '🐌' // 确保有蜗牛图标
+            };
+        }
+    }
+    
+    /**
+     * 创建魔法减速视觉效果
+     */
+    createMagicSlowEffect() {
+        // 创建围绕玩家的魔法减速效果
+        const effect = {
+            x: player.x,
+            y: player.y,
+            size: player.size * 2.5,
+            lifetime: 3.0, // 与减速效果持续时间一致
+            timer: 0,
+            isGarbage: false,
+            
+            update: function(dt) {
+                this.timer += dt;
+                if (this.timer >= this.lifetime) {
+                    this.isGarbage = true;
+                    return;
+                }
+                
+                // 跟随玩家移动
+                this.x = player.x;
+                this.y = player.y;
+            },
+            
+            draw: function(ctx) {
+                if (this.isGarbage) return;
+                
+                const alpha = 0.4 - (this.timer / this.lifetime) * 0.4; // 逐渐消失
+                const screenPos = cameraManager.worldToScreen(this.x, this.y);
+                
+                // 绘制魔法减速效果
+                ctx.save();
+                ctx.globalAlpha = alpha;
+                
+                // 绘制魔法光环
+                const gradientRadius = this.size / 2;
+                const gradient = ctx.createRadialGradient(
+                    screenPos.x, screenPos.y, 0,
+                    screenPos.x, screenPos.y, gradientRadius
+                );
+                
+                gradient.addColorStop(0, 'rgba(80, 60, 220, 0.1)');
+                gradient.addColorStop(0.4, 'rgba(120, 100, 255, 0.2)');
+                gradient.addColorStop(0.8, 'rgba(80, 60, 220, 0.1)');
+                gradient.addColorStop(1, 'rgba(80, 60, 220, 0)');
+                
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(screenPos.x, screenPos.y, gradientRadius, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // 绘制魔法符文
+                const runeCount = 6;
+                const runeSize = this.size * 0.1;
+                const runeOrbitRadius = this.size * 0.3;
+                const runeAngleOffset = this.timer * 0.5; // 随时间旋转
+                
+                ctx.fillStyle = 'rgba(150, 130, 255, ' + alpha * 1.5 + ')';
+                ctx.strokeStyle = 'rgba(200, 200, 255, ' + alpha * 1.5 + ')';
+                ctx.lineWidth = 1;
+                
+                for (let i = 0; i < runeCount; i++) {
+                    const angle = (Math.PI * 2 / runeCount) * i + runeAngleOffset;
+                    const runeX = screenPos.x + Math.cos(angle) * runeOrbitRadius;
+                    const runeY = screenPos.y + Math.sin(angle) * runeOrbitRadius;
+                    
+                    // 绘制魔法符文（简化为小星星）
+                    ctx.beginPath();
+                    for (let j = 0; j < 5; j++) {
+                        const starAngle = (Math.PI * 2 / 5) * j - Math.PI / 2;
+                        const x = runeX + Math.cos(starAngle) * runeSize * (j % 2 === 0 ? 1 : 0.5);
+                        const y = runeY + Math.sin(starAngle) * runeSize * (j % 2 === 0 ? 1 : 0.5);
+                        
+                        if (j === 0) {
+                            ctx.moveTo(x, y);
+                        } else {
+                            ctx.lineTo(x, y);
+                        }
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+                }
+                
+                ctx.restore();
+            }
+        };
+        
+        visualEffects.push(effect);
+    }
+    
+    /**
      * 创建命中特效
      */
     createHitEffect() {
+        // 确定效果颜色
+        let effectColor = 'rgba(255, 50, 50, ${alpha})'; // 默认红色
+        
+        // 如果是蜘蛛敌人的投射物，使用白色
+        if (this.owner && this.owner.type && this.owner.type.name === "蜘蛛") {
+            effectColor = 'rgba(255, 255, 255, ${alpha})';
+        }
+        
         // 创建爆炸效果
         const effect = {
             x: this.x,
@@ -1850,6 +2015,7 @@ class EnemyProjectile {
             lifetime: 0.3,
             timer: 0,
             isGarbage: false,
+            effectColor: effectColor,
             
             update: function(dt) {
                 this.timer += dt;
@@ -1867,7 +2033,8 @@ class EnemyProjectile {
                 const alpha = 0.5 - (this.timer / this.lifetime) * 0.5;
                 const screenPos = cameraManager.worldToScreen(this.x, this.y);
                 
-                ctx.fillStyle = `rgba(255, 50, 50, ${alpha})`;
+                // 使用动态颜色
+                ctx.fillStyle = this.effectColor.replace('${alpha}', alpha);
                 ctx.beginPath();
                 ctx.arc(screenPos.x, screenPos.y, this.radius, 0, Math.PI * 2);
                 ctx.fill();
@@ -1878,40 +2045,118 @@ class EnemyProjectile {
     }
     
     /**
+     * 创建蜘蛛网视觉效果
+     */
+    createSpiderWebEffect() {
+        const webEffect = {
+            x: player.x,
+            y: player.y,
+            size: player.size * 2.0, // 蜘蛛网比玩家大一倍
+            lifetime: 2.0, // 持续2秒，与减速效果一致
+            timer: 0,
+            isGarbage: false,
+            
+            update: function(dt) {
+                this.timer += dt;
+                if (this.timer >= this.lifetime) {
+                    this.isGarbage = true;
+                    return;
+                }
+            },
+            
+            draw: function(ctx) {
+                if (this.isGarbage) return;
+                
+                const alpha = Math.max(0, 0.7 - (this.timer / this.lifetime) * 0.7); // 逐渐消失
+                const screenPos = cameraManager.worldToScreen(this.x, this.y);
+                
+                // 绘制蜘蛛网
+                ctx.save();
+                ctx.globalAlpha = alpha;
+                
+                // 绘制蜘蛛网的放射线
+                ctx.strokeStyle = "white";
+                ctx.lineWidth = 1;
+                const segments = 8;
+                const radius = this.size / 2;
+                
+                // 绘制放射状线条
+                for (let i = 0; i < segments; i++) {
+                    const angle = (Math.PI * 2) / segments * i;
+                    ctx.beginPath();
+                    ctx.moveTo(screenPos.x, screenPos.y);
+                    ctx.lineTo(
+                        screenPos.x + Math.cos(angle) * radius,
+                        screenPos.y + Math.sin(angle) * radius
+                    );
+                    ctx.stroke();
+                }
+                
+                // 绘制同心圆
+                const rings = 3;
+                for (let i = 1; i <= rings; i++) {
+                    const ringRadius = radius * (i / rings);
+                    ctx.beginPath();
+                    ctx.arc(screenPos.x, screenPos.y, ringRadius, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+                
+                ctx.restore();
+            }
+        };
+        
+        visualEffects.push(webEffect);
+    }
+    
+    /**
      * 绘制投射物
      * @param {CanvasRenderingContext2D} ctx - 画布上下文
      */
     draw(ctx) {
         // 如果投射物不活动或已标记为垃圾，不绘制
-        if (this.isGarbage || !this.isActive) return;
+        if (!this.isActive || this.isGarbage) return;
         
+        // 获取屏幕坐标
         const screenPos = cameraManager.worldToScreen(this.x, this.y);
         
-        if (this.emoji) {
-            ctx.font = `${this.size}px 'Segoe UI Emoji', Arial`;
+        // 如果是蜘蛛敌人的投射物，绘制白色蛛网球
+        if (this.owner && this.owner.type && this.owner.type.name === "蜘蛛") {
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(screenPos.x, screenPos.y, this.size / 2, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // 画一些简单的蛛丝线条
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 1;
+            
+            for (let i = 0; i < 4; i++) {
+                const angle = Math.PI / 4 * i;
+                const length = this.size / 2;
+                
+                ctx.beginPath();
+                ctx.moveTo(screenPos.x, screenPos.y);
+                ctx.lineTo(
+                    screenPos.x + Math.cos(angle) * length,
+                    screenPos.y + Math.sin(angle) * length
+                );
+                ctx.stroke();
+            }
+        } 
+        // 其他敌人的投射物保持原样
+        else if (this.emoji) {
+            // 绘制emoji
+            ctx.font = `${this.size}px Arial`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(this.emoji, screenPos.x, screenPos.y);
         } else {
-            // 默认绘制：紫色圆形
-            ctx.fillStyle = 'purple'; 
-        ctx.beginPath();
-        ctx.arc(screenPos.x, screenPos.y, this.size / 2, 0, Math.PI * 2);
-        ctx.fill();
+            // 绘制圆形
+            ctx.fillStyle = 'red';
+            ctx.beginPath();
+            ctx.arc(screenPos.x, screenPos.y, this.size / 2, 0, Math.PI * 2);
+            ctx.fill();
         }
-        
-        // 移除轨迹绘制，如果使用emoji则轨迹可能不合适
-        /*
-        ctx.strokeStyle = 'rgba(128, 0, 128, 0.4)'; 
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(screenPos.x, screenPos.y);
-        ctx.lineTo(
-            screenPos.x - this.vx / 10,
-            screenPos.y - this.vy / 10
-        );
-        ctx.stroke();
-        */
     }
 }
 

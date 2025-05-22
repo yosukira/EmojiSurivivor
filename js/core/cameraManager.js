@@ -113,7 +113,30 @@ const cameraManager = {
         
         // 移除战场视觉边界效果
         removeBossArenaEffect();
-        console.log("相机管理器：Boss战场已停用");
+        
+        // 添加额外的清理步骤
+        if (typeof visualEffects !== 'undefined' && Array.isArray(visualEffects)) {
+            // 再次检查并清理所有Boss战场相关效果
+            let remainingEffects = 0;
+            for (let i = visualEffects.length - 1; i >= 0; i--) {
+                const effect = visualEffects[i];
+                if (effect && (effect.isBossArenaEffect || effect.type === 'bossArena')) {
+                    visualEffects.splice(i, 1);
+                    remainingEffects++;
+                }
+            }
+            if (remainingEffects > 0) {
+                console.log(`额外清理了${remainingEffects}个遗留的Boss战场效果`);
+            }
+        }
+        
+        // 确保全局引用被清除
+        if (window.bossArenaEffect) {
+            window.bossArenaEffect.isGarbage = true;
+            window.bossArenaEffect = null;
+        }
+        
+        console.log("相机管理器：Boss战场已停用并完全清理");
     },
 
     /**
@@ -241,6 +264,28 @@ function createBossArenaEffect(x, y, radius) {
             if (!cameraManager.bossArenaActive && !this.isGarbage) {
                 console.log("检测到异常：Boss战场已停用但效果仍然存在，标记为移除");
                 this.isGarbage = true;
+                // 立即进行一次完整清理
+                removeBossArenaEffect();
+                return;
+            }
+            
+            // 额外检查：如果Boss已经被击败，但效果还存在
+            if (bossManager && bossManager.currentBoss === null && cameraManager.bossArenaActive) {
+                console.log("检测到异常：Boss已被击败但战场效果仍然活跃，停用战场");
+                cameraManager.deactivateBossArena();
+                this.isGarbage = true;
+                return;
+            }
+            
+            // 定期检查战场效果一致性 (每5秒)
+            if (!this._lastConsistencyCheck || Date.now() - this._lastConsistencyCheck > 5000) {
+                this._lastConsistencyCheck = Date.now();
+                
+                // 检查全局引用一致性
+                if (window.bossArenaEffect !== this && window.bossArenaEffect !== null) {
+                    console.warn("检测到异常：存在多个Boss战场效果实例，进行清理");
+                    removeBossArenaEffect();
+                }
             }
         },
         

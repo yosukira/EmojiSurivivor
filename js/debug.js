@@ -503,6 +503,18 @@ window.DebugPanel = {
                 alert("玩家未就绪，无法设置物品上限 (Player not ready).");
             }
         });
+        
+        // 添加游戏时间+1分钟的按钮
+        this.addButtonToElement(this.panel, "游戏时间+1分钟 (Add 1 min)", () => {
+            if (typeof gameTime !== 'undefined') {
+                const oldTime = gameTime;
+                gameTime += 60; // 增加60秒
+                console.log(`Debug: 游戏时间从 ${Math.floor(oldTime)}秒 增加到 ${Math.floor(gameTime)}秒`);
+                if (typeof updateUI === 'function') updateUI();
+            } else {
+                alert("游戏未运行，无法调整时间 (Game not running).");
+            }
+        });
     }
 };
 
@@ -843,7 +855,7 @@ if (typeof PoisonVialWeapon === 'undefined') {
             // 对每个毒瓶
             for (let i = 0; i < this.stats.count; i++) {
                 // 寻找目标
-                const target = owner.findRandomEnemy(400);
+                const target = owner.findRandomEnemy(300);
                 
                 // 确定方向
                 let dirX, dirY;
@@ -989,7 +1001,7 @@ if (typeof FrostStaffWeapon === 'undefined') {
             // 如果有enemies数组
             if (typeof enemies !== 'undefined') {
                 // 获取可视范围内的敌人
-                const maxRange = 800; // 最大索敌范围
+                const maxRange = 300; // 最大索敌范围，改为300与飞刀一致
                 
                 // 筛选视野内的敌人
                 const visibleEnemies = enemies.filter(enemy => {

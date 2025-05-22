@@ -349,7 +349,7 @@ const BOSS_TYPES = [
         earthquakeDuration: 2.0,
         specialAbilityCooldown: 4.5,
         specialAttackWarningDuration: 1.0,
-        displaySizeMultiplier: 2.0
+        displaySizeMultiplier: 3.0
     },
     {
         name: "幽灵领主",
@@ -363,7 +363,7 @@ const BOSS_TYPES = [
         minTime: 420, // 7分钟出现(第二个Boss)
         specialAbilityCooldown: 6.0,
         specialAttackWarningDuration: 1.5,
-        displaySizeMultiplier: 2.0,
+        displaySizeMultiplier: 2.8,
         projectileInfo: {
             emoji: EMOJI.PROJECTILE_GHOST_ALT,
             emojiSpecial: EMOJI.PROJECTILE_GHOST_SPECIAL,
@@ -387,7 +387,7 @@ const BOSS_TYPES = [
         xpMult: 5.0,
         attackPattern: "aoe",
         minTime: 660, // 11分钟出现(第三个Boss)
-        displaySizeMultiplier: 2.2
+        displaySizeMultiplier: 3.2
     },
     {
         name: "恶魔领主",
@@ -398,7 +398,7 @@ const BOSS_TYPES = [
         xpMult: 2.0,
         attackPattern: "summon",
         minTime: 900, // 15分钟出现(第四个Boss)
-        displaySizeMultiplier: 2.5
+        displaySizeMultiplier: 3.4
     },
     {
         name: "远古巨龙",
@@ -412,7 +412,7 @@ const BOSS_TYPES = [
         projectileSpeed: 200,
         laserWidth: 40,
         laserDamage: 20,
-        displaySizeMultiplier: 2.6
+        displaySizeMultiplier: 3.6
     }
 ];
 

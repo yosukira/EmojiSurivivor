@@ -8,6 +8,29 @@ function getEnemyTypeByName(name) {
 }
 
 /**
+ * 添加从点到线段距离的平方计算函数
+ * @param {number} px - 点的X坐标
+ * @param {number} py - 点的Y坐标
+ * @param {number} x1 - 线段的起点X坐标
+ * @param {number} y1 - 线段的起点Y坐标
+ * @param {number} x2 - 线段的终点X坐标
+ * @param {number} y2 - 线段的终点Y坐标
+ * @returns {number} 从点到线段的距离平方
+ */
+function pointToLineDistanceSq(px, py, x1, y1, x2, y2) {
+    const lengthSq = ((x2 - x1) * (x2 - x1)) + ((y2 - y1) * (y2 - y1));
+    if (lengthSq === 0) return ((px - x1) * (px - x1)) + ((py - y1) * (py - y1));
+    
+    let t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / lengthSq;
+    t = Math.max(0, Math.min(1, t));
+    
+    const nearestX = x1 + t * (x2 - x1);
+    const nearestY = y1 + t * (y2 - y1);
+    
+    return ((px - nearestX) * (px - nearestX)) + ((py - nearestY) * (py - nearestY));
+}
+
+/**
  * 敌人类
  * 游戏中的敌人角色
  */
@@ -23,7 +46,7 @@ class Enemy extends Character {
         super(
             x, y,
             type.emoji || EMOJI.ENEMY_NORMAL,
-            GAME_FONT_SIZE * 0.7, // 将尺寸改为原来的70%
+            GAME_FONT_SIZE * 0.7, // 将尺寸改回原来的70%，之前改成了50%
             {
                 health: ENEMY_BASE_STATS.health * (type.healthMult || 1),
                 speed: ENEMY_BASE_STATS.speed * (type.speedMult || 1),
@@ -331,22 +354,53 @@ class Enemy extends Character {
             
             // 应用减速效果
             if (this.type.slowFactor) {
-                if (!this.target.statusEffects) {
-                    this.target.statusEffects = {};
-                }
-                
-                // 保存原有速度
-                const originalSpeed = this.target.speed;
-                // 减速
-                this.target.speed *= this.type.slowFactor;
-                
-                this.target.statusEffects.slow = {
-                    factor: this.type.slowFactor,
-                    duration: 1.0, // 持续1秒
-                    originalSpeed: originalSpeed,
-                    source: this
-                };
+                // 使用新的减速效果应用逻辑
+                this.applySlowEffect(this.target, this.type.slowFactor, 1.0); // 持续1秒
             }
+        }
+    }
+    
+    /**
+     * 应用减速效果（不叠加，取最强效果）
+     * @param {Character} target - 目标角色
+     * @param {number} slowFactor - 减速因子
+     * @param {number} slowDuration - 减速持续时间
+     */
+    applySlowEffect(target, slowFactor, slowDuration) {
+        if (!target || !target.stats) return;
+        
+        // 确保目标有statusEffects对象
+        if (!target.statusEffects) {
+            target.statusEffects = {};
+        }
+        
+        // 保存原有速度（如果没有已存在的减速效果）
+        let originalSpeed = target.statusEffects.slow ? 
+                          target.statusEffects.slow.originalSpeed : 
+                          target.stats.speed;
+        
+        // 检查是否已有减速效果
+        if (target.statusEffects.slow) {
+            // 已有减速效果，取最强的效果（更低的factor值表示更强的减速）
+            if (slowFactor <= target.statusEffects.slow.factor) {
+                // 新的减速效果更强或相同，更新减速系数
+                target.statusEffects.slow.factor = slowFactor;
+                // 重置目标速度为原速度×新减速系数
+                target.stats.speed = originalSpeed * slowFactor;
+            }
+            // 不管新效果是否更强，都刷新持续时间（取较长的）
+            target.statusEffects.slow.duration = Math.max(target.statusEffects.slow.duration, slowDuration);
+        } else {
+            // 没有已存在的减速效果，直接应用
+            target.stats.speed *= slowFactor;
+            
+            target.statusEffects.slow = {
+                factor: slowFactor,
+                duration: slowDuration,
+                originalSpeed: originalSpeed,
+                source: this,
+                icon: '🐌' // 确保有蜗牛图标
+            };
         }
     }
 
@@ -446,17 +500,8 @@ class Enemy extends Character {
                 const slowFactor = this.type.slowFactor || 0.6;
                 const slowDuration = this.type.slowDuration || 2;
                 
-                // 保存原有速度
-                const originalSpeed = target.speed;
-                // 减速
-                target.speed *= slowFactor;
-                
-                target.statusEffects.slow = {
-                    factor: slowFactor,
-                    duration: slowDuration,
-                    originalSpeed: originalSpeed,
-                    source: this
-                };
+                // 不再直接修改速度，而是使用新的应用减速效果的逻辑
+                this.applySlowEffect(target, slowFactor, slowDuration);
             }
             
             // 处理眩晕效果 (雷电精灵)
@@ -1099,6 +1144,9 @@ class BossEnemy extends Enemy {
         // 包括 Character.draw 中的 emoji 绘制，以及 BossEnemy.drawBossHealthBar 中的血条宽度
         // 剑的 swordReach 和 swordDisplaySize 也依赖 this.size，它们也会相应变大
 
+        // Boss控制免疫属性
+        this.isControlImmune = true;
+        
         // 骷髅王特定属性 (保留)
         this.isSwingingSword = false;
         this.swordSwingTimer = 0;
@@ -1119,7 +1167,7 @@ class BossEnemy extends Enemy {
         if (this.type.name === "幽灵领主") {
             this.ghostLordSpecialAttackWaveTimer = 0;
             this.ghostLordCurrentWave = 0;
-    }
+        }
 
         // --- 巨型僵尸 (GiantZombie) 特定属性 ---
         if (this.type.name === "巨型僵尸") {
@@ -1143,6 +1191,45 @@ class BossEnemy extends Enemy {
             this.specialAbilityTimer = 6.0; // 开场即可释放特殊技能
         }
         // --- 结束 巨型僵尸 特定属性 ---
+    }
+
+    /**
+     * 覆盖状态效果应用方法，使Boss免疫控制效果
+     * @param {string} type - 效果类型 ('stun', 'slow', 'burn', 'poison')
+     * @param {Object} effectData - 效果数据
+     */
+    applyStatusEffect(type, effectData) {
+        // 免疫所有控制效果：眩晕、减速
+        if (type === 'stun' || type === 'slow') {
+            // 完全免疫，不执行任何效果
+            console.log(`Boss ${this.type.name} 免疫了${type === 'stun' ? '眩晕' : '减速'}效果`);
+            return;
+        }
+        
+        // 伤害性效果（燃烧和中毒）仍然生效，但伤害降低50%
+        if (type === 'burn' || type === 'poison') {
+            // 创建减伤后的效果数据副本
+            const reducedEffectData = { ...effectData };
+            if (reducedEffectData.damage) {
+                reducedEffectData.damage *= 0.5; // 伤害减半
+            }
+            // 调用父类方法应用伤害效果
+            super.applyStatusEffect(type, reducedEffectData);
+            return;
+        }
+        
+        // 其他未明确处理的效果，调用父类的应用方法
+        super.applyStatusEffect(type, effectData);
+    }
+
+    /**
+     * 覆盖击退处理，使Boss完全免疫击退
+     * @param {number} knockbackX - X方向的击退力量
+     * @param {number} knockbackY - Y方向的击退力量
+     */
+    applyKnockback(knockbackX, knockbackY) {
+        // Boss完全免疫击退，不执行任何操作
+        return; // 直接返回，不应用任何击退
     }
 
     update(dt, target) { // target 就是 player

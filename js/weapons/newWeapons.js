@@ -344,7 +344,7 @@ class MagnetGunWeapon extends Weapon {
         const hasPlayerDirection = playerDirectionX !== 0 || playerDirectionY !== 0;
         
         // 优先朝玩家移动方向寻找敌人，其次是最近的敌人
-        const visibleEnemies = this.getVisibleEnemies(800);
+        const visibleEnemies = this.getVisibleEnemies(300);
         let targetEnemies = [];
         
         // 如果玩家有移动方向，优先考虑该方向的敌人
@@ -368,7 +368,7 @@ class MagnetGunWeapon extends Weapon {
                 const dotProduct = normalizedDirX * enemyDirX + normalizedDirY * enemyDirY;
                 
                 // 距离因子（近的敌人得分更高）
-                const distFactor = 1 - Math.min(1, dist / 800);
+                const distFactor = 1 - Math.min(1, dist / 300);
                 
                 // 最终得分：方向相似度和距离的加权和
                 // 方向占40%权重，距离占60%权重，更注重距离而非方向
