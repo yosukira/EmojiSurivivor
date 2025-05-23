@@ -48,6 +48,9 @@ class Player extends Character {
         
         // 新增：当前宝箱序列的总升级次数
         this.currentChestTotalUpgrades = 0;
+
+        this.baseSpeed = PLAYER_DEFAULT_STATS.speed; // 新增基础速度
+        this.speed = this.baseSpeed; // 当前速度
     }
 
     /**
@@ -160,6 +163,10 @@ class Player extends Character {
     getStat(statName) {
         // 基础属性
         let baseStat = PLAYER_DEFAULT_STATS[statName] || 0;
+        if (statName === 'speed') {
+            // 速度特殊处理：用baseSpeed+被动加成，不受debuff影响
+            baseStat = this.baseSpeed;
+        }
 
         // 加成乘数
         let multiplier = 1.0;
@@ -183,33 +190,27 @@ class Player extends Character {
         const statNames = specialStatMappings[statName] || [statName];
 
         // 应用被动物品加成
-        console.log(`查询属性: ${statName}, 可能的名称: ${statNames.join(', ')}`);
         
         this.passiveItems.forEach(item => {
             // 确保 item 和 item.bonuses 存在
             if (!item || !item.bonuses) {
-                console.log(`跳过未初始化的被动物品: ${item ? item.name : 'undefined'}`);
                 return;
             }
             
-            console.log(`检查被动物品 ${item.name} 等级 ${item.level} 的加成...`);
             
             // 针对每个可能的属性名称
             for (const possibleStatName of statNames) {
                 // 检查被动是否有这个属性的加成
                 if (item.bonuses[possibleStatName] !== undefined) {
                     const bonus = item.bonuses[possibleStatName];
-                    console.log(`发现属性 ${possibleStatName} 加成: ${bonus}`);
                     
                     // 乘法属性（以Multiplier结尾）
                     if (possibleStatName.endsWith('Multiplier')) {
                         multiplier *= bonus;
-                        console.log(`更新乘数: ${multiplier}`);
                     } 
                     // 加法属性
                     else {
                         additive += bonus;
-                        console.log(`更新加值: ${additive}`);
                     }
                 }
             }
@@ -217,32 +218,26 @@ class Player extends Character {
             // 特殊处理：如果查询最大生命值，也考虑maxHealthMultiplier
             if ((statName === 'health' || statName === 'maxHealth') && item.bonuses.maxHealthMultiplier !== undefined) {
                 multiplier *= item.bonuses.maxHealthMultiplier;
-                console.log(`应用最大生命值乘数: ${item.bonuses.maxHealthMultiplier}, 新乘数: ${multiplier}`);
             }
             
             // 特殊处理：如果查询拾取半径，也考虑pickupRadiusBonus
             if (statName === 'pickupRadius' && item.bonuses.pickupRadiusBonus !== undefined) {
                 additive += item.bonuses.pickupRadiusBonus;
-                console.log(`应用拾取半径加成: ${item.bonuses.pickupRadiusBonus}, 新加值: ${additive}`);
             }
             
             // 特殊处理：如果查询速度，也考虑speed直接量
             if (statName === 'speed' && item.bonuses.speed !== undefined) {
                 additive += item.bonuses.speed;
-                console.log(`应用速度直接加成: ${item.bonuses.speed}, 新加值: ${additive}`);
             }
             
             // 特殊处理：如果查询生命恢复，确保regenAmount被正确处理
             if (statName === 'regenAmount' && item.bonuses.regenAmount !== undefined) {
                 additive += item.bonuses.regenAmount;
-                console.log(`应用生命恢复加成: ${item.bonuses.regenAmount}, 新加值: ${additive}`);
             }
         });
 
         // 计算最终属性值
         let finalStat = (baseStat + additive) * multiplier;
-        
-        console.log(`最终 ${statName} 值: ${finalStat} (基础: ${baseStat}, 加值: ${additive}, 乘数: ${multiplier})`);
         
         return finalStat;
     }
@@ -260,6 +255,9 @@ class Player extends Character {
 
         // 重新计算最大被动物品数量
         this.maxPassives = this.getStat('maxPassives');
+
+        // 重新计算基础速度，确保实际移动速度和面板一致
+        this.baseSpeed = this.getStat('speed');
     }
 
     /**
@@ -311,7 +309,6 @@ class Player extends Character {
                 // 理论上应该由后续的经验获取再次触发 player.gainXP -> player.levelUp 来处理。
                 // 或者在宝箱序列结束后，在 game.js 中添加逻辑主动检查一次。
                 // 目前的策略是简单地不设置 isLevelUp，让宝箱升级优先。
-                console.log("Player.levelUp: XP met for next level, but pending chest upgrades exist. Suppressing normal level up screen trigger.");
             } else {
                 isLevelUp = true; // 设置全局标志，由 game.js 处理升级界面的显示
             }
@@ -354,6 +351,11 @@ class Player extends Character {
         // 添加被动物品
         this.passiveItems.push(passive);
 
+        // 立即应用被动道具加成
+        if (typeof passive.apply === 'function') {
+            passive.apply(this);
+        }
+
         // 重新计算属性
         this.recalculateStats();
 
@@ -392,23 +394,8 @@ class Player extends Character {
         // 减少生命值
         this.health -= actualDamage;
 
-        // 显示玩家受到的伤害数字
-        const damageTakenColor = isAuraDamage ? 'rgba(128,0,128,0.7)' : (isBurnDamage ? 'orange' : 'rgb(255, 165, 0)'); // 光环用紫色，燃烧用橙色
-        const damageTakenSize = GAME_FONT_SIZE * 0.9;
-        // 光环伤害显示两位小数，燃烧一位，其他整数
-        const damageText = isAuraDamage ? `-${actualDamage.toFixed(2)}` : (isBurnDamage ? `-${actualDamage.toFixed(1)}` : `-${actualDamage.toFixed(0)}`);
-        
-        // 对于非常小的光环伤害，可以选择不显示
-        if (!isAuraDamage || Math.abs(actualDamage) >= 0.01) {
-            let damageNumberObj = null;
-        if (inactiveDamageNumbers.length > 0) {
-                damageNumberObj = inactiveDamageNumbers.pop();
-                damageNumberObj.init(this.x, this.y - this.size / 2, damageText, damageTakenSize, damageTakenColor, 0.7);
-        } else {
-                damageNumberObj = new DamageNumber(this.x, this.y - this.size / 2, damageText, damageTakenSize, damageTakenColor, 0.7);
-            }
-            damageNumbers.push(damageNumberObj);
-        }
+        // 新增：显示伤害数字
+        spawnDamageNumber(this.x, this.y - this.size / 2, `-${actualDamage.toString()}`, GAME_FONT_SIZE, 'red');
 
         // 设置短暂的无敌时间 (非光环/燃烧伤害)
         if (!isAuraDamage && !isBurnDamage) {
@@ -594,7 +581,6 @@ class Player extends Character {
         if (emergencyThreshold > 0 && this.health <= this.getStat('health') * emergencyThreshold && this.invincibleTime <= 0) {
             // 激活紧急护盾
             this.invincibleTime = 4.0; // 4秒无敌时间
-            console.log("激活古树精华紧急护盾!");
             
             // 创建无敌特效
             this.createShieldEffect();
@@ -634,7 +620,6 @@ class Player extends Character {
                         // 应用燃烧效果
                         if (typeof targetEnemy.applyBurnEffect === 'function') {
                             targetEnemy.applyBurnEffect(burnDamage, burnDuration, this);
-                            console.log(`龙息香料触发! 对敌人施加 ${burnDamage} 燃烧伤害，持续 ${burnDuration} 秒`);
                         } else {
                             // 如果敌人没有烧伤方法，则直接造成伤害
                             targetEnemy.takeDamage(burnDamage, this, true);
@@ -652,7 +637,6 @@ class Player extends Character {
                     if (targetEnemy && !targetEnemy.isGarbage && targetEnemy.isActive) {
                         // 应用闪电效果，包括链式伤害
                         this.applyLightningEffect(targetEnemy, lightningDamage, lightningChainCount);
-                        console.log(`雷光护符触发! 对敌人造成 ${lightningDamage} 闪电伤害，链接 ${lightningChainCount} 次`);
                     }
                 }
                 
@@ -664,11 +648,9 @@ class Player extends Character {
                         // 应用冰冻效果
                         if (typeof targetEnemy.applyFreezeEffect === 'function') {
                             targetEnemy.applyFreezeEffect(2.0, this); // 冻结2秒
-                            console.log("寒冰之心触发! 冻结敌人 2 秒");
                         } else if (typeof targetEnemy.applySlowEffect === 'function' && slowStrength > 0) {
                             // 如果没有冻结方法但有减速方法，则应用减速
                             targetEnemy.applySlowEffect(slowStrength, 3.0, this);
-                            console.log(`寒冰之心触发! 减速敌人 ${Math.round(slowStrength * 100)}%, 持续 3 秒`);
                         }
                         
                         // 创建冰冻特效
@@ -684,7 +666,6 @@ class Player extends Character {
                         // 应用毒素效果
                         if (typeof targetEnemy.applyPoisonEffect === 'function') {
                             targetEnemy.applyPoisonEffect(poisonDamage, poisonDuration, this);
-                            console.log(`毒素宝珠触发! 对敌人施加 ${poisonDamage} 毒素伤害，持续 ${poisonDuration} 秒`);
                         } else {
                             // 如果敌人没有中毒方法，则直接造成伤害
                             targetEnemy.takeDamage(poisonDamage, this);
@@ -946,5 +927,37 @@ class Player extends Character {
         
         // 添加效果
         visualEffects.push(effect);
+    }
+
+    /**
+     * 获取当前实际移动速度（受debuff影响）
+     */
+    getCurrentSpeed() {
+        let speed = this.baseSpeed;
+        // 检查是否有减速免疫
+        if (this.getStat && this.getStat('slowImmunity')) {
+            return speed;
+        }
+        // 叠加所有debuff减速（如有）
+        if (this.statusEffects && this.statusEffects.slow) {
+            speed *= (1 - (this.statusEffects.slow.strength || 0));
+        }
+        return speed;
+    }
+
+    /**
+     * 应用减速效果
+     * @param {number} strength - 减速比例
+     * @param {number} duration - 持续时间
+     * @param {Object} source - 来源
+     */
+    applySlowEffect(strength, duration, source) {
+        // 检查是否有减速免疫
+        if (this.getStat && this.getStat('slowImmunity')) return;
+        if (!this.statusEffects) this.statusEffects = {};
+        this.statusEffects.slow = {
+            strength: Math.max(strength, this.statusEffects.slow ? this.statusEffects.slow.strength : 0),
+            timer: duration
+        };
     }
 }

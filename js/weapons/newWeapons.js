@@ -789,6 +789,121 @@ class BlackHoleBallWeapon extends Weapon {
     }
 }
 
+/**
+ * 冰晶杖
+ * 发射冰晶，冻结敌人并造成范围伤害
+ */
+class FrostStaffWeapon extends Weapon {
+    /**
+     * 静态属性
+     */
+    static Name = "冰晶杖";
+    static Emoji = "❄";
+    static MaxLevel = 10;
+    static Evolution = {
+        requires: "Ice",
+        evolvesTo: "FrostStaff"
+    };
+
+    /**
+     * 构造函数
+     */
+    constructor() {
+        super(FrostStaffWeapon.Name, FrostStaffWeapon.Emoji, 1.5, FrostStaffWeapon.MaxLevel);
+    }
+
+    /**
+     * 计算武器属性
+     */
+    calculateStats() {
+        this.stats = {
+            damage: 9 + (this.level - 1) * 3,
+            cooldown: Math.max(1.0, 1.5 - (this.level - 1) * 0.06),
+            count: 1 + Math.floor((this.level - 1) / 2),
+            freezeDuration: this.level === 10 ? 1.5 : 0,
+            slowFactor: 0.15 + (this.level - 1) * 0.025,
+            projectileSpeed: 300 + (this.level - 1) * 10,
+            pierce: Math.floor((this.level - 1) / 3),
+            split: this.level >= 8
+        };
+    }
+
+    /**
+     * 发射武器
+     * @param {Player} owner - 拥有者
+     */
+    fire(owner) {
+        if (!owner) return; // 确保owner存在
+        
+        const ownerStats = this.getOwnerStats(owner);
+        const projectileCount = Math.min(this.stats.count + (ownerStats.projectileCountBonus || 0), 8); // 限制最大数量为8个
+        const speed = this.stats.projectileSpeed * (ownerStats.projectileSpeedMultiplier || 1);
+        const damage = this.stats.damage * (ownerStats.damageMultiplier || 1);
+        const freezeDuration = this.stats.freezeDuration * (ownerStats.durationMultiplier || 1);
+        const slowFactor = this.stats.slowFactor;
+        const size = GAME_FONT_SIZE * 1.2 * (ownerStats.areaMultiplier || 1);
+        const split = this.stats.split;
+        const pierce = this.stats.pierce;
+        const duration = 4.0;
+        
+        // 获取玩家精确位置，作为所有冰晶的发射起点
+        const startX = owner.x;
+        const startY = owner.y;
+
+        // 寻找目标，与匕首武器索敌逻辑一致
+        let target = owner.findNearestEnemy(GAME_WIDTH * 1.5) || {
+            x: owner.x + owner.lastMoveDirection.x * 100,
+            y: owner.y + owner.lastMoveDirection.y * 100
+        };
+        
+        // 计算方向
+        const dx = target.x - startX;
+        const dy = target.y - startY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const dirX = dist > 0 ? dx / dist : owner.lastMoveDirection.x;
+        const dirY = dist > 0 ? dy / dist : owner.lastMoveDirection.y;
+        
+        // 计算角度和扇形范围
+        const baseAngle = Math.atan2(dirY, dirX);
+        const angleSpread = Math.PI * 0.6;
+
+        // 随机方向发射冰晶
+        for (let i = 0; i < projectileCount; i++) {
+            // 计算发射角度，在敌人方向的扇形范围内
+            const randomAngle = baseAngle + (Math.random() - 0.5) * angleSpread;
+            
+            const dirX = Math.cos(randomAngle);
+            const dirY = Math.sin(randomAngle);
+            
+            // 添加一点随机性到速度
+            const speedVariation = 0.8 + Math.random() * 0.4; // 速度在80%-120%之间变化
+            const vx = dirX * speed * speedVariation;
+            const vy = dirY * speed * speedVariation;
+            
+            // 创建冰晶投射物，确保从玩家位置发射
+            const crystal = new FrostCrystalProjectile(
+                startX, startY, size, vx, vy, damage, pierce, duration, ownerStats, freezeDuration, slowFactor, split
+            );
+            crystal.owner = owner;
+            projectiles.push(crystal);
+        }
+    }
+
+    /**
+     * 获取当前描述
+     */
+    getCurrentDescription() {
+        return `发射${this.stats.count}个冰晶，冻结敌人${this.stats.freezeDuration.toFixed(1)}秒并造成${this.stats.damage}伤害。`;
+    }
+
+    /**
+     * 获取初始描述
+     */
+    getInitialDescription() {
+        return "发射冰晶，冻结敌人并造成范围伤害。";
+    }
+}
+
 // 在文件末尾添加新武器到全局武器列表
 if (typeof BASE_WEAPONS !== 'undefined') {
     // 添加新武器
@@ -797,6 +912,7 @@ if (typeof BASE_WEAPONS !== 'undefined') {
     if (typeof MagnetGunWeapon === 'function') BASE_WEAPONS.push(MagnetGunWeapon);
     if (typeof VolcanoStaffWeapon === 'function') BASE_WEAPONS.push(VolcanoStaffWeapon);
     if (typeof BlackHoleBallWeapon === 'function') BASE_WEAPONS.push(BlackHoleBallWeapon);
+    if (typeof FrostStaffWeapon === 'function') BASE_WEAPONS.push(FrostStaffWeapon);
 
     console.log('New weapons added to BASE_WEAPONS:', 
         BASE_WEAPONS.filter(w => 

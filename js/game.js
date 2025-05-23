@@ -532,6 +532,7 @@ function init() {
 
     // 创建玩家
     player = new Player(GAME_WIDTH / 2, GAME_HEIGHT / 2);
+    window.player = player;
 
     // 添加初始武器
     player.addWeapon(new DaggerWeapon());
@@ -2474,6 +2475,7 @@ function startGame() {
     
     // 创建玩家
     player = new Player(400, 300);
+    window.player = player;
     
     // 创建初始武器
     const dagger = new DaggerWeapon();

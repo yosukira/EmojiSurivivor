@@ -11,7 +11,6 @@ window.DebugPanel = {
     offsetY: 0,
 
     init: function() {
-        console.log("Initializing Debug Panel...");
         this.createPanel();
         this.addCoreControls();
         this.addCollapseExpandButton();
@@ -45,15 +44,13 @@ window.DebugPanel = {
         if (typeof player !== 'undefined' && player) {
             player.maxWeapons = 100;
             player.maxPassiveItems = 100;
-            console.log("Debug: Applied initial settings - maxWeapons & maxPassiveItems set to 100.");
         } else {
             setTimeout(() => {
                 if (typeof player !== 'undefined' && player) {
                     player.maxWeapons = 100;
                     player.maxPassiveItems = 100;
-                    console.log("Debug: Applied initial settings (deferred) - maxWeapons & maxPassiveItems set to 100.");
                 } else {
-                     console.warn("Debug: Player still not available after delay. Could not set item limits automatically.");
+                    console.warn("Debug: Player still not available after delay. Could not set item limits automatically.");
                 }
             }, 2000);
         }
@@ -181,10 +178,8 @@ window.DebugPanel = {
             if (typeof player !== 'undefined' && player && typeof presentLevelUpOptions === 'function') {
                 isLevelUp = true;
                 presentLevelUpOptions();
-                console.log("Debug: Forced display of level up options.");
             } else {
-                 console.warn("Debug: Cannot show level up options. Player or presentLevelUpOptions function not found.");
-                 alert("Player not ready or presentLevelUpOptions function missing.");
+                console.warn("Debug: Cannot show level up options. Player or presentLevelUpOptions function not found.");
             }
         });
     },
@@ -205,13 +200,11 @@ window.DebugPanel = {
         BOSS_TYPES.forEach(bossType => {
             this.addButtonToElement(content, `生成 ${bossType.name} (Spawn ${bossType.name})`, () => {
                 if (typeof BossEnemy === 'undefined' || typeof enemies === 'undefined') {
-                    console.warn("Debug: Cannot spawn boss. BossEnemy class or enemies array not found.");
-                    alert("Boss spawning prerequisites missing (BossEnemy or enemies).");
+                    console.warn("Boss spawning prerequisites missing (BossEnemy or enemies).");
                     return;
                 }
                 if (typeof cameraManager === 'undefined' || typeof canvas === 'undefined'){
-                    console.warn("Debug: cameraManager or canvas not found for boss positioning.");
-                    alert("Game screen utilities missing for boss positioning.");
+                    console.warn("Game screen utilities missing for boss positioning.");
                     return;
                 }
 
@@ -226,10 +219,8 @@ window.DebugPanel = {
                 // 使用bossManager的spawnBoss方法来生成Boss
                 if (player) {
                     bossManager.spawnBoss(player, bossType);
-                    console.log(`Debug: Spawned Boss ${bossType.name} using bossManager`);
                 } else {
-                    console.warn("Debug: Player not found, cannot spawn boss");
-                    alert("Player not found, cannot spawn boss");
+                    console.warn("Player not found, cannot spawn boss");
                 }
             });
         });
@@ -275,7 +266,7 @@ window.DebugPanel = {
             button.onmouseout = () => button.style.backgroundColor = '#555';
             button.onclick = () => {
                 if (!player) {
-                    alert("玩家未就绪，无法生成怪物");
+                    console.warn("玩家未就绪，无法生成怪物");
                     return;
                 }
                 
@@ -288,7 +279,6 @@ window.DebugPanel = {
                 // 创建并添加敌人
                 const enemy = new Enemy(x, y, enemyType);
                 enemies.push(enemy);
-                console.log(`Debug: Spawned enemy ${enemyType.name} at (${x.toFixed(0)}, ${y.toFixed(0)})`);
             };
             
             gridContainer.appendChild(button);
@@ -319,13 +309,13 @@ window.DebugPanel = {
         spawnRandomButton.style.cursor = 'pointer';
         spawnRandomButton.onclick = () => {
             if (!player) {
-                alert("玩家未就绪，无法生成怪物");
+                console.warn("玩家未就绪，无法生成怪物");
                 return;
             }
             
             const count = parseInt(spawnCountInput.value);
             if (isNaN(count) || count < 1) {
-                alert("请输入有效的数量");
+                console.warn("请输入有效的数量");
                 return;
             }
             
@@ -339,8 +329,6 @@ window.DebugPanel = {
                 const enemy = new Enemy(x, y, randomType);
                 enemies.push(enemy);
             }
-            
-            console.log(`Debug: Spawned ${count} random enemies`);
         };
         spawnMultipleContainer.appendChild(spawnRandomButton);
     },
@@ -353,11 +341,9 @@ window.DebugPanel = {
             } else {
                 player.invincibleTimer = 0; 
             }
-            console.log(`Debug: Player invincibility set to ${player.isInvincible}`);
             this.updateInvincibleButton();
         } else {
-            console.warn("Debug: Cannot toggle invincibility. Player object not found.");
-            alert("玩家未就绪 (Player not ready).");
+            console.warn("玩家未就绪 (Player not ready).");
         }
     },
 
@@ -505,9 +491,8 @@ window.DebugPanel = {
                     
                     this.addButtonToElement(content, `添加/升级 ${displayName} (${itemName})`, () => {
                         if (!player) {
-                             console.warn(`Debug: Player not found. Cannot add/upgrade ${itemName}.`);
-                             alert("玩家未就绪 (Player not ready).");
-                             return;
+                            console.warn("玩家未就绪 (Player not ready).");
+                            return;
                         }
                         const itemCollection = type === 'weapon' ? player.weapons : player.passiveItems;
                         const existingItem = itemCollection.find(item => item instanceof itemClass);
@@ -523,19 +508,16 @@ window.DebugPanel = {
                                     existingItem.levelUp();
                                     upgraded = true;
                                 } else {
-                                     console.warn(`Debug: ${itemName} has no upgrade/levelUp method.`);
-                                     alert(`${itemName} 没有升级方法。`);
-                                     return;
+                                    console.warn(`${itemName} 没有升级方法。`);
+                                    return;
                                 }
                                 if (upgraded) {
                                     if (player.recalculateStats) player.recalculateStats();
-                                    console.log(`Debug: Upgraded ${type} ${itemName} to level ${existingItem.level}`);
                                     if (type === 'weapon' && typeof checkEvolution === 'function') {
                                         checkEvolution(player, existingItem);
                                     }
                                 }
                             } else {
-                                console.log(`Debug: ${itemName} is already max level.`);
                             }
                         } else {
                             // 使用箭头函数确保this绑定正确
@@ -545,15 +527,12 @@ window.DebugPanel = {
                             const maxItems = type === 'weapon' ? player.maxWeapons : player.maxPassiveItems;
 
                             if (itemCollection.length >= maxItems) {
-                                console.warn(`Debug: Cannot add ${itemName}. Player has max ${type}s (${maxItems}).`);
                                 return;
                             }
                             try {
                                 const newItem = new itemClass(); 
                                 addFunc(newItem);
-                                console.log(`Debug: Added new ${type} ${itemName}`);
                             } catch (e) {
-                                console.error(`Debug: Error adding new ${type} ${itemName}:`, e);
                             }
                         }
                     });
@@ -598,10 +577,8 @@ window.DebugPanel = {
                 const oldMaxPassives = player.maxPassiveItems;
                 player.maxWeapons = 100;
                 player.maxPassiveItems = 100;
-                console.log(`Debug: Set maxWeapons to 100 (was ${oldMaxWeapons}), maxPassiveItems to 100 (was ${oldMaxPassives}).`);
-                if (typeof updateUI === 'function') updateUI();
             } else {
-                alert("玩家未就绪，无法设置物品上限 (Player not ready).");
+                console.warn("玩家未就绪，无法设置物品上限 (Player not ready).");
             }
         });
         
@@ -610,10 +587,8 @@ window.DebugPanel = {
             if (typeof gameTime !== 'undefined') {
                 const oldTime = gameTime;
                 gameTime += 60; // 增加60秒
-                console.log(`Debug: 游戏时间从 ${Math.floor(oldTime)}秒 增加到 ${Math.floor(gameTime)}秒`);
-                if (typeof updateUI === 'function') updateUI();
             } else {
-                alert("游戏未运行，无法调整时间 (Game not running).");
+                console.warn("游戏未运行，无法调整时间 (Game not running).");
             }
         });
     },
@@ -688,10 +663,11 @@ window.DebugPanel = {
             { name: "基础燃烧伤害", stat: "burnDamage", format: (val) => val.toFixed(1) },
             { name: "基础闪电伤害", stat: "lightningDamage", format: (val) => val.toFixed(1) },
             { name: "基础毒素伤害", stat: "poisonDamage", format: (val) => val.toFixed(1) },
+            { name: "最大生命值", stat: "maxHealth", format: (val) => val.toFixed(0) },
+            { name: "护甲值", stat: "armor", format: (val) => val.toFixed(1) },
+            { name: "减伤百分比", stat: "damageReductionPercent", format: (val) => `${(val*100).toFixed(1)}%` },
             { name: "基础暴击率", stat: "critChance", format: (val) => `${(val*100).toFixed(0)}%` },
-            { name: "基础暴击伤害", stat: "critDamage", format: (val) => `${((val-1)*100).toFixed(0)}%` },
-            { name: "基础拾取范围", stat: "pickupRange", format: (val) => val.toFixed(0) },
-            { name: "基础经验加成", stat: "xpMultiplier", format: (val) => `${((val-1)*100).toFixed(0)}%` }
+            { name: "拾取范围", stat: "pickupRadius", format: (val) => val.toFixed(0) }
         ];
         
         // 创建所有属性显示元素
@@ -850,12 +826,14 @@ window.DebugPanel = {
             { name: "基础毒素伤害", stat: "poisonDamage", format: (val) => val.toFixed(1) },
             { name: "最大生命值", stat: "maxHealth", format: (val) => val.toFixed(0) },
             { name: "护甲值", stat: "armor", format: (val) => val.toFixed(1) },
+            { name: "减伤百分比", stat: "damageReductionPercent", format: (val) => `${(val*100).toFixed(1)}%` },
             { name: "基础暴击率", stat: "critChance", format: (val) => `${(val*100).toFixed(0)}%` },
             { name: "拾取范围", stat: "pickupRadius", format: (val) => val.toFixed(0) }
         ];
         
         // 创建属性项
         const statElements = {};
+        const lastStatValues = {};
         statsItems.forEach(item => {
             const row = document.createElement('div');
             row.style.display = 'flex';
@@ -868,7 +846,7 @@ window.DebugPanel = {
             
             const value = document.createElement('span');
             value.style.fontWeight = 'bold';
-            value.style.color = '#4CAF50';
+            value.style.color = 'white';
             
             row.appendChild(label);
             row.appendChild(value);
@@ -878,6 +856,7 @@ window.DebugPanel = {
                 element: value,
                 format: item.format
             };
+            lastStatValues[item.stat] = null;
         });
         
         // 添加调试按钮：输出所有玩家属性
@@ -896,20 +875,14 @@ window.DebugPanel = {
         debugButton.onclick = (e) => {
             e.stopPropagation(); // 防止触发拖动
             if (!window.player || !player.stats) {
-                console.log("玩家或玩家属性不存在");
                 return;
             }
             
-            console.log("所有玩家属性：", player.stats);
-            console.log("被动道具：", player.passiveItems);
-            
-            // 输出所有getStat值
             statsItems.forEach(item => {
                 const value = player.getStat ? player.getStat(item.stat) : undefined;
-                console.log(`${item.name} (${item.stat}): ${value}`);
             });
             
-            alert("已在控制台输出玩家属性");
+            console.log("已在控制台输出玩家属性");
         };
         
         // 添加更新定时器
@@ -918,24 +891,36 @@ window.DebugPanel = {
             
             Object.entries(statElements).forEach(([stat, info]) => {
                 let value;
-                try {
-                    value = player.getStat(stat);
-                    // 检查数值是否合理
-                    if (value === undefined || value === null || isNaN(value)) {
-                        value = player.stats ? player.stats[stat] : 0;
+                if (stat === 'damageReductionPercent') {
+                    // 计算减伤百分比
+                    const armor = player.getStat('armor');
+                    // 公式：1-1/(1+armor/100)
+                    value = 1 - 1 / (1 + armor / 100);
+                } else {
+                    try {
+                        value = player.getStat(stat);
+                        if (value === undefined || value === null || isNaN(value)) {
+                            value = player.stats ? player.stats[stat] : 0;
+                        }
+                    } catch (e) {
+                        value = 0;
                     }
-                } catch (e) {
-                    console.error(`获取属性${stat}时出错:`, e);
-                    value = 0;
                 }
-                
                 // 格式化并显示值
-                try {
-                    info.element.textContent = info.format(value);
-                } catch (e) {
-                    console.error(`格式化属性${stat}时出错:`, e);
-                    info.element.textContent = 'ERROR';
+                const formatted = info.format(value);
+                info.element.textContent = formatted;
+                // 变色高亮逻辑
+                if (lastStatValues[stat] !== null && value !== lastStatValues[stat]) {
+                    if (value > lastStatValues[stat]) {
+                        info.element.style.color = '#4CAF50'; // 绿色
+                    } else {
+                        info.element.style.color = '#F44336'; // 红色
+                    }
+                    setTimeout(() => {
+                        info.element.style.color = 'white';
+                    }, 1000);
                 }
+                lastStatValues[stat] = value;
             });
         };
         
@@ -967,11 +952,9 @@ debugCommands.passives = {
     help: "显示当前所有被动道具的详细信息",
     action: () => {
         if (!player || !player.passiveItems) {
-            console.log("玩家或被动道具不存在");
             return;
         }
         
-        console.log("===== 被动道具详情 =====");
         player.passiveItems.forEach((passive, index) => {
             console.log(`${index + 1}. ${passive.name} (Lv ${passive.level})`);
             console.log(`   描述: ${passive.description}`);

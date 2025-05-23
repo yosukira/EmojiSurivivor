@@ -66,7 +66,6 @@ class BubbleProjectile extends Projectile {
         // 安全检查：强制销毁计时器
         this.forceDestroyTimer += dt;
         if (this.forceDestroyTimer >= this.maxExistTime) {
-            console.log("泡泡强制销毁：超过最大存在时间");
             this.burst();
             return;
         }
@@ -102,7 +101,6 @@ class BubbleProjectile extends Projectile {
             // 边界检查：如果泡泡位置离开了有效区域，强制销毁
             const worldSize = Math.max(GAME_WIDTH, GAME_HEIGHT);
             if (Math.abs(this.x) > worldSize * 1.5 || Math.abs(this.y) > worldSize * 1.5) {
-                console.log("泡泡强制销毁：超出边界");
                 this.isGarbage = true;
                 this.isActive = false;
                 return;
@@ -135,7 +133,6 @@ class BubbleProjectile extends Projectile {
 
             // 如果泡泡超出了活动范围，则标记为垃圾进行回收，而不是反弹
             if (newX < activeLeft || newX > activeRight || newY < activeTop || newY > activeBottom) {
-                // console.log(`泡泡 (${this.x.toFixed(0)},${this.y.toFixed(0)}) 超出活动范围，标记为垃圾。相机: (${cameraManager.x.toFixed(0)},${cameraManager.y.toFixed(0)})`);
                 this.isGarbage = true;
                 this.isActive = false;
                 return;
@@ -206,8 +203,12 @@ class BubbleProjectile extends Projectile {
      * @param {Enemy} enemy - 敌人
      */
     trapEnemy(enemy) {
-        // Boss免疫泡泡控制
-        if (enemy.isBoss || (enemy.type && enemy.type.isBoss)) return;
+        // Boss免疫泡泡控制，但依然显示动画和造成伤害
+        if (enemy.isBoss || (enemy.type && enemy.type.isBoss)) {
+            this.trapped = enemy;
+            enemy.takeDamage(this.damage, this.owner);
+            return;
+        }
         // 造成伤害
         enemy.takeDamage(this.damage, this.owner);
         
@@ -2423,6 +2424,8 @@ class VineHazard {
      * @param {Enemy} enemy - 敌人
      */
     applySlow(enemy) {
+        // Boss免疫减速
+        if (enemy.isBoss || enemy.isControlImmune) return;
         // 初始化状态效果对象
         if (!enemy.statusEffects) {
             enemy.statusEffects = {};
@@ -2747,6 +2750,8 @@ class FrostCrystalProjectile extends Projectile {
      * @param {Enemy} enemy - 敌人
      */
     applyFreezeEffect(enemy) {
+        // Boss免疫冰冻和减速
+        if (enemy.isBoss || enemy.isControlImmune) return;
         // 初始化状态效果对象
         if (!enemy.statusEffects) {
             enemy.statusEffects = {};

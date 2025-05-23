@@ -122,9 +122,6 @@ class PassiveItem {
                 owner.stats[key] = value;
             }
         }
-
-        // 打印调试信息，可以在发布时移除
-        console.log(`应用被动物品 ${this.name}(Lv${this.level}) 的效果: `, this.bonuses);
         
         // 确保玩家重新计算属性
         if (typeof owner.recalculateStats === 'function') {
@@ -264,7 +261,7 @@ class Spinach extends PassiveItem {
      * @returns {Object} - 增益
      */
     getBonuses() {
-        let damageBonus = 0.15 + (this.level - 1) * 0.1; // 1级时15%伤害加成，每升一级再增加10%
+        let damageBonus = 0.15 + (this.level - 1) * 0.1;
         if (this.level === 10) {
             return {
                 damageMultiplier: 1.0 + damageBonus + 0.15,
@@ -272,7 +269,7 @@ class Spinach extends PassiveItem {
             };
         }
         return {
-            damageMultiplier: 1.0 + damageBonus // 1级就是1.15
+            damageMultiplier: 1.0 + damageBonus
         };
     }
 }
@@ -328,7 +325,7 @@ class HollowHeart extends PassiveItem {
      * @returns {Object} - 增益
      */
     getBonuses() {
-        let healthBonus = 20 + (this.level - 1) * 10; // 初始20点生命值，每级增加10点
+        let healthBonus = 20 + (this.level - 1) * 10;
         if (this.level === 10) {
             return {
                 maxHealth: healthBonus + 50,
@@ -358,28 +355,22 @@ class Wings extends PassiveItem {
      * @returns {Object} - 增益
      */
     getBonuses() {
-        // 修复：确保有正确的速度加成
-        let speedBonus = 20 + (this.level - 1) * 5; // 基础20点速度，每级增加5点
-        
-        // 5级特殊效果：50%减速免疫
+        let speedBonus = 20 + (this.level - 1) * 5;
         if (this.level >= 5 && this.level < 10) {
             return {
                 speed: speedBonus,
-                slowResistance: 0.5 // 50%减速抗性
+                slowResistance: 0.5
             };
         }
-        
-        // 10级特殊效果：完全免疫减速和短暂冲刺能力
         if (this.level === 10) {
             return {
-                speed: speedBonus + 30, // 额外30点速度
-                slowImmunity: true, // 完全免疫减速
-                dashChance: 0.2, // 20%几率在受伤时获得2秒冲刺能力
+                speed: speedBonus + 30,
+                slowImmunity: true,
+                dashChance: 0.2,
                 dashDuration: 2.0,
                 dashSpeedMultiplier: 1.5
             };
         }
-        
         return {
             speed: speedBonus
         };
@@ -569,20 +560,20 @@ class BarrierRune extends PassiveItem {
      * @returns {Object} - 增益
      */
     getBonuses() {
-        let armorBonus = this.level * 2; // 每级增加2点护甲
+        let armor = this.level * 2; // 每级增加2点护甲
         let damageReduction = (this.level - 1) * 0.03; // 每级减少3%伤害
         
         // 10级特殊效果：额外护甲和伤害减免，并有几率完全格挡伤害
         if (this.level === 10) {
             return {
-                armorBonus: armorBonus + 5,
+                armor: armor + 5,
                 damageReductionMultiplier: 1 - (damageReduction + 0.07),
                 blockChance: 0.08 // 8%几率完全格挡伤害
             };
         }
         
         return {
-            armorBonus: armorBonus,
+            armor: armor,
             damageReductionMultiplier: 1 - damageReduction
         };
     }
@@ -785,8 +776,8 @@ class AncientTreeSap extends PassiveItem {
      * @returns {Object} - 增益
      */
     getBonuses() {
-        let regenAmount = 1.5 + (this.level - 1) * 0.3; // 基础1.5点恢复，每级增加0.3点
-        let maxHealthPercent = 0.05 + (this.level - 1) * 0.03; // 从1级就有5%最大生命值加成，每级增加3%
+        let regenAmount = 1.5 + (this.level - 1) * 0.3;
+        let maxHealthPercent = 0.05 + (this.level - 1) * 0.03;
         if (this.level === 10) {
             return {
                 regen: regenAmount + 1.5,

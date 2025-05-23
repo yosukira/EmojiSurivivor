@@ -40,7 +40,6 @@ class UpgradeableItem {
     upgrade() {
         if (!this.isMaxLevel()) {
             this.level++;
-            console.log(`${this.name} 升级到 ${this.level}级`);
             this.onUpgrade();
             return true;
         }

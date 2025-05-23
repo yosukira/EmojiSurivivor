@@ -803,5 +803,3 @@ const BASE_WEAPONS = [];
 if (typeof DaggerWeapon === 'function') BASE_WEAPONS.push(DaggerWeapon);
 if (typeof GarlicWeapon === 'function') BASE_WEAPONS.push(GarlicWeapon);
 if (typeof WhipWeapon === 'function') BASE_WEAPONS.push(WhipWeapon);
-
-console.log('BASE_WEAPONS initialized in basicWeapons.js:', BASE_WEAPONS.map(w => w.name));
