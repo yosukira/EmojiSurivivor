@@ -413,12 +413,19 @@ class WhipWeapon extends Weapon {
      */
     calculateStats() {
         this.stats = {
-            damage: 15 + (this.level - 1) * 6, // 略微提高伤害成长
-            width: 30, // 减小宽度，使鞭子更细长
-            length: 160 + (this.level - 1) * 20, // 略微增加基础长度
-            cooldown: this.level === 10 ? 0.15 : Math.max(0.5, this.baseCooldown - (this.level - 1) * 0.10), // 10级极大加快攻击频率
-            count: 1 + Math.floor(this.level / 4),
-            duration: 0.3
+            damage: 15 + (this.level - 1) * 6,
+            width: 30,
+            length: 160 + (this.level - 1) * 20,
+            cooldown: Math.max(0.15, this.baseCooldown - (this.level - 1) * 0.1),
+            count: 1 + Math.floor((this.level - 1) / 3),
+            slowEffect: this.level === 10,  // 10级才有减速效果
+            slowFactor: 0.7,  // 减速30%
+            slowDuration: 1.0,  // 减速持续1秒
+            critChance: this.level === 10 ? 0.3 : 0,  // 10级才有30%暴击率
+            critMultiplier: 1.5,  // 暴击伤害1.5倍
+            chainAttack: this.level === 10,  // 10级才有连锁攻击
+            chainCount: 2,  // 连锁攻击2个目标
+            chainRange: 150  // 连锁范围
         };
     }
 

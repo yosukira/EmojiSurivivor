@@ -264,19 +264,15 @@ class Spinach extends PassiveItem {
      * @returns {Object} - 增益
      */
     getBonuses() {
-        // 修改：确保1级就有明显的伤害加成
         let damageBonus = 0.15 + (this.level - 1) * 0.1; // 1级时15%伤害加成，每升一级再增加10%
-        
-        // 10级特殊效果：额外增加15%伤害和5%暴击率
         if (this.level === 10) {
             return {
-                damageMultiplier: damageBonus + 0.15 + 1.0,
+                damageMultiplier: 1.0 + damageBonus + 0.15,
                 critChance: 0.05
             };
         }
-        
         return {
-            damageMultiplier: damageBonus + 1.0 // 修改：确保是1.0+加成值
+            damageMultiplier: 1.0 + damageBonus // 1级就是1.15
         };
     }
 }
@@ -333,17 +329,14 @@ class HollowHeart extends PassiveItem {
      */
     getBonuses() {
         let healthBonus = 20 + (this.level - 1) * 10; // 初始20点生命值，每级增加10点
-        
-        // 10级特殊效果：额外增加生命值和少量生命恢复
         if (this.level === 10) {
             return {
-                maxHealth: healthBonus + 50,  // 修改：使用maxHealth
-                regenAmount: 0.5 // 每秒回复0.5点生命值
+                maxHealth: healthBonus + 50,
+                regenAmount: 0.5
             };
         }
-        
         return {
-            maxHealth: healthBonus // 修改：使用maxHealth而不是maxHealthBonus
+            maxHealth: healthBonus
         };
     }
 }
@@ -792,22 +785,18 @@ class AncientTreeSap extends PassiveItem {
      * @returns {Object} - 增益
      */
     getBonuses() {
-        // 增强生命回复：确保1级有更强的基础回复效果
         let regenAmount = 1.5 + (this.level - 1) * 0.3; // 基础1.5点恢复，每级增加0.3点
         let maxHealthPercent = 0.05 + (this.level - 1) * 0.03; // 从1级就有5%最大生命值加成，每级增加3%
-        
-        // 10级特殊效果：额外恢复和生命值，并在生命危急时提供保护
         if (this.level === 10) {
             return {
-                regen: regenAmount + 1.5, // 修改：使用regen而不是regenAmount
-                maxHealthMultiplier: 1 + maxHealthPercent + 0.15, // 增加到15%额外生命值
-                emergencyShield: 0.15 // 生命值低于15%时获得4秒无敌(原10%和3秒)
+                regen: regenAmount + 1.5,
+                maxHealthMultiplier: 1 + maxHealthPercent + 0.15,
+                emergencyShield: 0.15
             };
         }
-        
         return {
-            regen: regenAmount, // 修改：使用regen而不是regenAmount
-            maxHealthMultiplier: 1 + maxHealthPercent // 确保1级就有生命值加成
+            regen: regenAmount,
+            maxHealthMultiplier: 1 + maxHealthPercent
         };
     }
 }

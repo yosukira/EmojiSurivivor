@@ -314,8 +314,8 @@ class MagnetGunWeapon extends Weapon {
             count: 1 + Math.floor((this.level - 1) / 2.5),  // 每3级增加一个投射物
             pullRadius: 100 + (this.level - 1) * 10,  // 吸引半径
             pullStrength: 50 + (this.level - 1) * 10,  // 吸引强度
-            stun: this.level >= 8,  // 8级以上晕眩敌人
-            stunDuration: 0.5 + (this.level - 8) * 0.1,  // 晕眩持续时间
+            stun: this.level === 10,  // 10级才有晕眩效果
+            stunDuration: 0.5,  // 晕眩持续时间
             duration: 3,  // 持续时间
             pierce: Math.min(3, 1 + Math.floor((this.level - 1) / 3))  // 穿透数量
         };
@@ -561,8 +561,8 @@ class VolcanoStaffWeapon extends Weapon {
             eruptionDelay: 0.5,  // 爆发间隔
             burnDamage: 2 + Math.floor((this.level - 1) * 0.5),  // 燃烧伤害
             burnDuration: 3.0,  // 燃烧持续时间固定为3秒
-            lavaPuddle: this.level >= 7,  // 7级以上留下熔岩池
-            lavaDuration: 3.0  // 熔岩池持续时间固定为3秒
+            lavaPuddle: this.level === 10,  // 10级才有熔岩池
+            lavaDuration: 2.0  // 熔岩池持续时间固定为2秒
         };
         
         // 10级额外效果
@@ -601,7 +601,7 @@ class VolcanoStaffWeapon extends Weapon {
                 const offsetY = (Math.random() - 0.5) * 100;
                 x = enemy.x + offsetX;
                 y = enemy.y + offsetY;
-            } else {
+                } else {
                 // 在玩家周围随机位置创建火山
                 const angle = Math.random() * Math.PI * 2;
                 const distance = 100 + Math.random() * 150;
@@ -610,17 +610,17 @@ class VolcanoStaffWeapon extends Weapon {
             }
             
             // 创建火山爆发
-                const volcano = new VolcanoEruption(
+            const volcano = new VolcanoEruption(
                 x, y, radius, damage, eruptions, eruptionDelay,
-                burnDamage, burnDuration, lavaPuddle, // 修改：只传递是否生成熔岩池的标记
+                burnDamage, burnDuration, lavaPuddle, lavaDuration,
                 owner
-                );
-                
-                // 添加到危险区域列表
-                if (typeof hazards !== 'undefined') {
-                    hazards.push(volcano);
+            );
+            
+            // 添加到危险区域列表
+            if (typeof hazards !== 'undefined') {
+                hazards.push(volcano);
             } else {
-                    console.error('hazards 数组未定义!');
+                console.error('hazards 数组未定义!');
             }
         }
     }
@@ -697,8 +697,8 @@ class BlackHoleBallWeapon extends Weapon {
         
         // 寻找最近的敌人
         const enemy = this.getClosestEnemy(800);
-            
-            if (enemy) {
+        
+        if (enemy) {
             // 计算方向朝向敌人
             const dx = enemy.x - owner.x;
             const dy = enemy.y - owner.y;
@@ -729,9 +729,9 @@ class BlackHoleBallWeapon extends Weapon {
             
             ball.owner = owner;
             projectiles.push(ball);
-            } else {
+        } else {
             // 没有敌人时，随机方向
-                const angle = Math.random() * Math.PI * 2;
+            const angle = Math.random() * Math.PI * 2;
             const vx = Math.cos(angle) * speed;
             const vy = Math.sin(angle) * speed;
         

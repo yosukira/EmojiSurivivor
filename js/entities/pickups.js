@@ -473,6 +473,8 @@ class Chest extends GameObject {
             console.warn("宝箱升级次数权重计算出错，默认为3次。");
             numberOfUpgrades = 3; 
         }
+        // 新增：安全校验，确保每次只会出现1-5次升级
+        numberOfUpgrades = Math.max(1, Math.min(5, numberOfUpgrades));
 
         console.log(`宝箱提供 ${numberOfUpgrades} 次升级机会 (权重计算).`);
         

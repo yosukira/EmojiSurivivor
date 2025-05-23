@@ -682,8 +682,8 @@ window.DebugPanel = {
         const statsItems = [
             { name: "基础伤害加成", stat: "damageMultiplier", format: (val) => `${((val-1)*100).toFixed(0)}%` },
             { name: "移动速度", stat: "speed", format: (val) => val.toFixed(0) },
-            { name: "回血速度", stat: "regenAmount", format: (val) => `${val.toFixed(1)}/秒` },
-            { name: "基础投射物数量", stat: "projectileCount", format: (val) => val.toFixed(0) },
+            { name: "回血速度", stat: "regen", format: (val) => `${val.toFixed(1)}/秒` },
+            { name: "基础投射物数量", stat: "projectileCountBonus", format: (val) => val.toFixed(0) },
             { name: "基础攻击间隔", stat: "cooldownMultiplier", format: (val) => `${(val*100).toFixed(0)}%` },
             { name: "基础燃烧伤害", stat: "burnDamage", format: (val) => val.toFixed(1) },
             { name: "基础闪电伤害", stat: "lightningDamage", format: (val) => val.toFixed(1) },
@@ -842,16 +842,16 @@ window.DebugPanel = {
         const statsItems = [
             { name: "基础伤害加成", stat: "damageMultiplier", format: (val) => `${((val-1)*100).toFixed(0)}%` },
             { name: "移动速度", stat: "speed", format: (val) => val.toFixed(0) },
-            { name: "回血速度", stat: "regen", format: (val) => `${val.toFixed(1)}/秒` }, // 修改：regenAmount -> regen
-            { name: "基础投射物数量", stat: "projectileCountBonus", format: (val) => val.toFixed(0) }, // 修改：projectileCount -> projectileCountBonus
+            { name: "回血速度", stat: "regen", format: (val) => `${val.toFixed(1)}/秒` },
+            { name: "基础投射物数量", stat: "projectileCountBonus", format: (val) => val.toFixed(0) },
             { name: "基础攻击间隔", stat: "cooldownMultiplier", format: (val) => `${(val*100).toFixed(0)}%` },
             { name: "基础燃烧伤害", stat: "burnDamage", format: (val) => val.toFixed(1) },
             { name: "基础闪电伤害", stat: "lightningDamage", format: (val) => val.toFixed(1) },
             { name: "基础毒素伤害", stat: "poisonDamage", format: (val) => val.toFixed(1) },
-            { name: "最大生命值", stat: "maxHealth", format: (val) => val.toFixed(0) }, // 新增：显示最大生命值
-            { name: "护甲值", stat: "armor", format: (val) => val.toFixed(1) }, // 新增：显示护甲值
-            { name: "基础暴击率", stat: "critChance", format: (val) => `${(val*100).toFixed(0)}%` }, // 新增：显示暴击率
-            { name: "拾取范围", stat: "pickupRadius", format: (val) => val.toFixed(0) } // 新增：显示拾取范围
+            { name: "最大生命值", stat: "maxHealth", format: (val) => val.toFixed(0) },
+            { name: "护甲值", stat: "armor", format: (val) => val.toFixed(1) },
+            { name: "基础暴击率", stat: "critChance", format: (val) => `${(val*100).toFixed(0)}%` },
+            { name: "拾取范围", stat: "pickupRadius", format: (val) => val.toFixed(0) }
         ];
         
         // 创建属性项

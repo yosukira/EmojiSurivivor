@@ -1193,7 +1193,7 @@ class BossEnemy extends Enemy {
         this.swordSwingDuration = 0.6; // 挥剑动画持续时间
         this.swordAngle = 0;
         this.initialSwordAngle = -Math.PI / 3;
-        this.swordReach = this.size * 0.7; // 调整剑的触及范围基于新的、更大的this.size (之前是1.3*小size)
+        this.swordReach = this.size * 1.1; // 增大骷髅王剑的判定范围
         this.swordArc = Math.PI * 0.8;
         this.swordDamageCooldown = 0.3; // 每次挥剑造成伤害的最小间隔
         this.lastSwordDamageTime = 0;
@@ -1211,7 +1211,7 @@ class BossEnemy extends Enemy {
 
         // --- 巨型僵尸 (GiantZombie) 特定属性 ---
         if (this.type.name === "巨型僵尸") {
-            this.poisonAuraRadius = this.size * 2.0; 
+            this.poisonAuraRadius = this.size * 2.7; // 增大被动毒圈半径
             // this.poisonAuraDamagePerSecond = 5; // 旧的每秒伤害值
             this.poisonAuraDamageAmount = 3; // 每次伤害量
             this.poisonAuraDamageInterval = 1.0; // 伤害间隔（秒）
@@ -1221,7 +1221,7 @@ class BossEnemy extends Enemy {
             this.toxicPoolWarningTime = this.type.toxicPoolWarningTime || 1.5; 
             this.toxicPoolDuration = this.type.toxicPoolDuration || 5.0; // 特殊攻击：毒池持续时间
             this.toxicPoolDamagePerSecond = this.type.toxicPoolDamagePerSecond || 10; // 特殊攻击：毒池每秒伤害
-            this.toxicPoolRadius = this.type.toxicPoolRadius || this.size * 0.8; // 特殊攻击：单个毒池半径
+            this.toxicPoolRadius = this.size * 1.2; // 特殊攻击：单个毒池半径，增大
             this.toxicPoolCount = this.type.toxicPoolCount || 3; // 特殊攻击：毒池数量
             // 特殊攻击：毒池生成位置在 Boss 毒环外，且在一定范围内
             this.toxicPoolMinSpawnRadius = this.poisonAuraRadius * 1.2; 

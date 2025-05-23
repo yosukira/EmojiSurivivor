@@ -206,6 +206,8 @@ class BubbleProjectile extends Projectile {
      * @param {Enemy} enemy - 敌人
      */
     trapEnemy(enemy) {
+        // Boss免疫泡泡控制
+        if (enemy.isBoss || (enemy.type && enemy.type.isBoss)) return;
         // 造成伤害
         enemy.takeDamage(this.damage, this.owner);
         
@@ -3431,10 +3433,10 @@ class VolcanoEruption {
      * @param {number} burnDamage - 燃烧伤害
      * @param {number} burnDuration - 燃烧持续时间
      * @param {boolean} lavaPuddle - 是否留下熔岩池
+     * @param {number} [lavaDuration] - 熔岩池持续时间（可选）
      * @param {Player} owner - 拥有者
      */
-    constructor(x, y, radius, damage, eruptions, eruptionDelay, burnDamage, burnDuration, lavaPuddle, owner) {
-        // 基本属性
+    constructor(x, y, radius, damage, eruptions, eruptionDelay, burnDamage, burnDuration, lavaPuddle, lavaDuration, owner) {
         this.x = x;
         this.y = y;
         this.radius = radius;
@@ -3444,6 +3446,7 @@ class VolcanoEruption {
         this.burnDamage = burnDamage;
         this.burnDuration = burnDuration;
         this.lavaPuddle = lavaPuddle;
+        this.lavaDuration = typeof lavaDuration === 'number' ? lavaDuration : 3.0; // 默认3秒
         this.owner = owner;
         
         // 状态
@@ -3604,7 +3607,7 @@ class VolcanoEruption {
             x: this.x,
             y: this.y,
             radius: this.radius * 0.8,
-            lifetime: 3.0,  // 固定熔岩池持续时间为3秒
+            lifetime: this.lavaDuration,  // 使用传入的熔岩池持续时间
             timer: 0,
             damageTimer: 0,
             damageInterval: 0.5,
@@ -3772,6 +3775,10 @@ class VolcanoEruption {
                 }
             }
         };
+        // 修复：将熔岩池对象加入hazards数组，由主循环统一update和回收
+        if (typeof hazards !== 'undefined') {
+            hazards.push(this.lavaPool);
+        }
     }
 
     /**
@@ -4184,7 +4191,6 @@ class VolcanoEruption {
             
             // 绘制熔岩池
             if (this.lavaPool && !this.lavaPool.isGarbage) {
-                this.lavaPool.update(0.016, this); // 使用固定时间步长更新
                 this.lavaPool.draw(ctx);
             }
             
