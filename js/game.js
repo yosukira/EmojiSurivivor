@@ -1883,7 +1883,14 @@ class EnemyProjectile {
      */
     applySlowToPlayer(slowFactor, slowDuration) {
         if (!player || !player.stats) return;
-        
+        // slowImmunity判定
+        if (player.getStat && player.getStat('slowImmunity')) {
+            if (player.statusEffects && player.statusEffects.slow) {
+                delete player.statusEffects.slow;
+                player.speed = player.getStat('speed');
+            }
+            return;
+        }
         // 确保玩家有statusEffects对象
         if (!player.statusEffects) {
             player.statusEffects = {};

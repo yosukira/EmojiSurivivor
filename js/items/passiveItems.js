@@ -32,7 +32,7 @@ class PassiveItem {
         if (this.level < this.maxLevel) {
             this.level++;
             this.onLevelUp();
-            // 每次升级后更新 bonuses
+            if (typeof this.calculateStats === 'function') this.calculateStats();
             this.bonuses = this.getBonuses();
             return true;
         }
@@ -50,7 +50,9 @@ class PassiveItem {
     /**
      * 升级时回调
      */
-    onLevelUp() {}
+    onLevelUp() {
+        if (typeof this.calculateStats === 'function') this.calculateStats();
+    }
 
     /**
      * 获取描述
@@ -364,6 +366,16 @@ class Wings extends PassiveItem {
             slowResistance: this.slowResistance,
             slowImmunity: this.slowImmunity
         };
+    }
+
+    getDescription() {
+        if (this.level === 10) {
+            return "提升移动速度，减速抗性+50%，10级：完全免疫所有减速";
+        } else if (this.level >= 5) {
+            return "提升移动速度，减速抗性+50%";
+        } else {
+            return "提升移动速度";
+        }
     }
 }
 

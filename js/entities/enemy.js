@@ -473,7 +473,14 @@ class Enemy extends Character {
     applySlowEffect(target, slowFactor, slowDuration) {
         if (!target || !target.stats) return;
         if (!target.statusEffects) target.statusEffects = {};
-        if (target.getStat && target.getStat('slowImmunity') === true) return;
+        if (target.getStat && target.getStat('slowImmunity') === true) {
+            // 免疫所有减速，且如果已经有减速，立即移除
+            if (target.statusEffects.slow) {
+                delete target.statusEffects.slow;
+                target.speed = target.getStat('speed');
+            }
+            return;
+        }
         let slowResistance = 0;
         if (target.getStat && typeof target.getStat('slowResistance') === 'number') {
             slowResistance = target.getStat('slowResistance');
@@ -1498,7 +1505,8 @@ class BossEnemy extends Enemy {
                         target.applyStatusEffect('slow', { 
                             factor: this.poisonAuraSlowFactor, 
                             duration: 0.5, 
-                            source: this 
+                            source: this,
+                            isAuraEffect: true // 标记为光环效果
                         });
                     }
 
@@ -1507,6 +1515,13 @@ class BossEnemy extends Enemy {
                     if (this.poisonAuraDamageTimer >= this.poisonAuraDamageInterval) {
                         target.takeDamage(this.poisonAuraDamageAmount, this, false, true); // isAuraDamage = true
                         this.poisonAuraDamageTimer -= this.poisonAuraDamageInterval;
+                    }
+                } else if (target.statusEffects && target.statusEffects.slow && target.statusEffects.slow.isAuraEffect) {
+                    // 如果玩家离开毒圈范围，移除光环减速效果
+                    delete target.statusEffects.slow;
+                    // 恢复原始速度
+                    if (target.stats && target.stats.speed) {
+                        target.speed = target.stats.speed;
                     }
                 }
             }

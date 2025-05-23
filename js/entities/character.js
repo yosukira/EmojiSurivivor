@@ -51,6 +51,11 @@ class Character extends GameObject {
         if (type === 'slow') {
             // 检查是否有减速免疫
             if (this.getStat && this.getStat('slowImmunity')) {
+                // 免疫所有减速，且如果已经有减速，立即移除
+                if (this.statusEffects.slow) {
+                    delete this.statusEffects.slow;
+                    this.speed = this.getStat('speed');
+                }
                 return;
             }
 
@@ -63,24 +68,42 @@ class Character extends GameObject {
             // 应用减速抗性
             const actualSlowStrength = effectData.factor * (1 - slowResistance);
             
-            // 只在首次减速时赋值originalSpeed
-            if (!this.statusEffects.slow) {
-                effectData.originalSpeed = this.speed;
-            } else {
-                effectData.originalSpeed = this.statusEffects.slow.originalSpeed;
-            }
-
-            // 只保留最强减速，刷新持续时间
-            if (!this.statusEffects.slow || actualSlowStrength > this.statusEffects.slow.factor || (actualSlowStrength === this.statusEffects.slow.factor && effectData.duration > this.statusEffects.slow.duration)) {
+            // 获取当前基础速度
+            const currentBaseSpeed = this.getStat('speed');
+            
+            // 如果是光环效果，直接应用
+            if (effectData.isAuraEffect) {
                 this.statusEffects[type] = {
                     ...effectData,
                     factor: actualSlowStrength,
+                    originalSpeed: currentBaseSpeed,
                     icon: '🐌'
                 };
+                this.speed = currentBaseSpeed * actualSlowStrength;
+                return;
             }
-
-            // 立即应用减速效果
-            this.speed = effectData.originalSpeed * actualSlowStrength;
+            
+            // 对于非光环效果，只保留最强减速
+            if (!this.statusEffects.slow || 
+                actualSlowStrength > this.statusEffects.slow.factor || 
+                (actualSlowStrength === this.statusEffects.slow.factor && 
+                 effectData.duration > this.statusEffects.slow.duration)) {
+                
+                // 保存原始速度
+                const originalSpeed = this.statusEffects.slow ? 
+                                    this.statusEffects.slow.originalSpeed : 
+                                    currentBaseSpeed;
+                
+                this.statusEffects[type] = {
+                    ...effectData,
+                    factor: actualSlowStrength,
+                    originalSpeed: originalSpeed,
+                    icon: '🐌'
+                };
+                
+                // 立即应用减速效果
+                this.speed = originalSpeed * actualSlowStrength;
+            }
             return;
         }
 
@@ -130,8 +153,12 @@ class Character extends GameObject {
             }
         } else if (this.statusEffects.slow) {
             // 更新减速效果
-            this.statusEffects.slow.duration -= dt;
-            if (this.statusEffects.slow.duration <= 0) {
+            if (!this.statusEffects.slow.isAuraEffect) {
+                // 非光环减速效果才减少持续时间
+                this.statusEffects.slow.duration -= dt;
+            }
+            
+            if (this.statusEffects.slow.duration <= 0 && !this.statusEffects.slow.isAuraEffect) {
                 // 恢复原速
                 if (this.statusEffects.slow.originalSpeed !== undefined) {
                     this.speed = this.statusEffects.slow.originalSpeed;

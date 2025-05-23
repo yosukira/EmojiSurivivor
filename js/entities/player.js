@@ -180,9 +180,10 @@ class Player extends Character {
      */
     getStat(statName) {
         // 基础属性
-        let baseStat = PLAYER_DEFAULT_STATS[statName] || 0;
-        // 速度加成：基础速度+被动加成
+        let baseStat = 0;
         if (statName === 'speed') {
+            // 只用180为基数
+            baseStat = 180;
             let bonus = 0;
             this.passiveItems.forEach(item => {
                 if (item && typeof item.getBonuses === 'function') {
@@ -190,7 +191,9 @@ class Player extends Character {
                     if (typeof bonuses.speed === 'number') bonus += bonuses.speed;
                 }
             });
-            return PLAYER_DEFAULT_STATS.speed + bonus;
+            return Math.max(0, baseStat + bonus);
+        } else {
+            baseStat = PLAYER_DEFAULT_STATS[statName] || 0;
         }
 
         // 加成乘数
@@ -591,15 +594,6 @@ class Player extends Character {
         // 所以这里不需要再次 save/restore 或设置 alpha
         this.drawStatusEffects(ctx);
 
-        // 显示速度
-        let displaySpeed = this.getStat('speed');
-        if (this.statusEffects && this.statusEffects.slow) {
-            displaySpeed = this.getCurrentSpeed();
-        }
-        ctx.font = `${GAME_FONT_SIZE * 0.7}px Arial`;
-        ctx.fillStyle = 'white';
-        ctx.fillText(`速度: ${Math.round(displaySpeed)}` + (this.statusEffects && this.statusEffects.slow ? ' (减速中)' : ''), this.x - 40, this.y - this.size - 30);
-
         ctx.restore(); // 恢复到 Player.draw 最开始保存的状态
     }
 
@@ -973,12 +967,26 @@ class Player extends Character {
      * 获取当前实际移动速度（受debuff影响）
      */
     getCurrentSpeed() {
-        // 如果有减速debuff，优先用debuff影响速度
-        if (this.statusEffects && this.statusEffects.slow && this.statusEffects.slow.originalSpeed !== undefined) {
-            return this.statusEffects.slow.originalSpeed * this.statusEffects.slow.factor;
+        // 获取基础速度
+        let speed = this.getStat('speed');
+        // 如果有减速免疫，直接返回基础速度
+        if (this.getStat && this.getStat('slowImmunity')) {
+            return speed;
         }
-        // 否则用getStat('speed')
-        return this.getStat('speed');
+        // 如果被减速，应用减速效果
+        if (this.statusEffects.slow) {
+            // 如果是光环效果，直接返回当前速度
+            if (this.statusEffects.slow.isAuraEffect) {
+                return this.speed;
+            }
+            // 否则应用减速因子
+            speed *= this.statusEffects.slow.factor;
+        }
+        // 如果被眩晕，速度为0
+        if (this.isStunned()) {
+            speed = 0;
+        }
+        return speed;
     }
 
     /**
@@ -988,26 +996,21 @@ class Player extends Character {
      * @param {Object} source - 来源
      */
     applySlowEffect(strength, duration, source) {
-        // 检查是否有减速免疫
         if (this.getStat && this.getStat('slowImmunity')) return;
-        // 检查是否有减速抗性
         let slowResistance = 0;
         if (this.getStat && typeof this.getStat('slowResistance') === 'number') {
             slowResistance = this.getStat('slowResistance');
         }
-        // 应用减速抗性
         const actualSlowStrength = strength * (1 - slowResistance);
-        // 只保留最强减速效果（强度大或持续时间更长）
-        if (!this.statusEffects.slow || actualSlowStrength > this.statusEffects.slow.strength || (actualSlowStrength === this.statusEffects.slow.strength && duration > this.statusEffects.slow.duration)) {
-            this.statusEffects.slow = {
-                factor: 1 - actualSlowStrength,
-                duration: duration,
-                strength: actualSlowStrength,
-                originalSpeed: this.getStat('speed'),
-                source: source,
-                icon: '🐌'
-            };
-        }
+        // 每次都用最新的getStat('speed')赋值originalSpeed
+        this.statusEffects.slow = {
+            factor: 1 - actualSlowStrength,
+            duration: duration,
+            strength: actualSlowStrength,
+            originalSpeed: this.getStat('speed'),
+            source: source,
+            icon: '��'
+        };
     }
 
     respawn() {
@@ -1021,6 +1024,10 @@ class Player extends Character {
         // 重置速度
         this.speed = PLAYER_DEFAULT_STATS.speed;
         this.baseSpeed = PLAYER_DEFAULT_STATS.speed;
+        // 清除所有减速相关字段
+        if (this.statusEffects && this.statusEffects.slow) {
+            delete this.statusEffects.slow;
+        }
         // 重置伤害加成
         this.damageMultiplier = 1;
         // 重置无敌
