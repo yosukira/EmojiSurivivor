@@ -257,17 +257,16 @@ const ENEMY_TYPES = [
     {
         name: "地狱犬",
         emoji: "🐕",
-        healthMult: 1.0, // 降低血量
+        healthMult: 1.0,
         speedMult: 1.7,
         damageMult: 1.0,
         xpMult: 1.8,
         weight: 3,
-        minTime: 480, // 8分钟后出现
-        // 冲刺行为可在updateMovement中处理
+        minTime: 480,
         canDash: true,
         dashCooldown: 3,
-        dashSpeed: 2.5,
-        dashDuration: 0.8
+        dashSpeed: 3.75,
+        dashDuration: 1.2
     },
     {
         name: "骷髅弓手",

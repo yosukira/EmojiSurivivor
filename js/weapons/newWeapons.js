@@ -820,8 +820,8 @@ class FrostStaffWeapon extends Weapon {
             damage: 9 + (this.level - 1) * 3,
             cooldown: Math.max(1.0, 1.5 - (this.level - 1) * 0.06),
             count: 1 + Math.floor((this.level - 1) / 2),
-            freezeDuration: this.level === 10 ? 1.5 : 0,
-            slowFactor: 0.15 + (this.level - 1) * 0.025,
+            freezeDuration: this.level === 10 ? 1.0 : 0,
+            slowFactor: 0.10 + (this.level - 1) * 0.015,
             projectileSpeed: 300 + (this.level - 1) * 10,
             pierce: Math.floor((this.level - 1) / 3),
             split: this.level >= 8

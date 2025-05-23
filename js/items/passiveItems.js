@@ -340,39 +340,29 @@ class HollowHeart extends PassiveItem {
 
 /**
  * 翅膀
- * 增加移动速度
+ * 增加移动速度，提供减速抗性
  */
 class Wings extends PassiveItem {
     /**
      * 构造函数
      */
     constructor() {
-        super("翅膀", "🦋", 10, "增加移动速度");
+        super("翅膀", "🦋", 10, "增加移动速度，提供减速抗性");
+        this.level = 1;
+        this.calculateStats();
     }
-
-    /**
-     * 获取增益
-     * @returns {Object} - 增益
-     */
+    
+    calculateStats() {
+        this.speedBonus = this.level < 10 ? 10 * this.level : 10 * 9 + 20;
+        this.slowResistance = this.level >= 5 ? 0.5 : 0;
+        this.slowImmunity = this.level >= 10;
+    }
+    
     getBonuses() {
-        let speedBonus = 20 + (this.level - 1) * 5;
-        if (this.level >= 5 && this.level < 10) {
-            return {
-                speed: speedBonus,
-                slowResistance: 0.5
-            };
-        }
-        if (this.level === 10) {
-            return {
-                speed: speedBonus + 30,
-                slowImmunity: true,
-                dashChance: 0.2,
-                dashDuration: 2.0,
-                dashSpeedMultiplier: 1.5
-            };
-        }
         return {
-            speed: speedBonus
+            speed: this.speedBonus,
+            slowResistance: this.slowResistance,
+            slowImmunity: this.slowImmunity
         };
     }
 }
@@ -394,18 +384,8 @@ class EmptyBottle extends PassiveItem {
      * @returns {Object} - 增益
      */
     getBonuses() {
-        let pickupRangeBonus = this.level * 15; // 每级增加15点拾取范围
-        
-        // 10级特殊效果：额外增加30点拾取范围和增加掉落率
-        if (this.level === 10) {
-            return {
-                pickupRadiusBonus: pickupRangeBonus + 30,
-                dropRateMultiplier: 1.2 // 20%掉落率增加
-            };
-        }
-        
         return {
-            pickupRadiusBonus: pickupRangeBonus
+            pickupRadiusBonus: this.level * 10
         };
     }
 }
@@ -419,7 +399,7 @@ class Gargoyle extends PassiveItem {
      * 构造函数
      */
     constructor() {
-        super("石像鬼", "👹", 10, "增加项目数量");
+        super("石像鬼", "👹", 10, "增加投射物数量");
     }
 
     /**
@@ -427,17 +407,14 @@ class Gargoyle extends PassiveItem {
      * @returns {Object} - 增益
      */
     getBonuses() {
-        // 修改：确保1级就有投射物加成
-        let projectileBonus = 1 + Math.floor((this.level - 1) / 2); // 1级时+1投射物，每2级再增加1个
-        
-        // 10级特殊效果：额外增加1个投射物和增加投射物大小
-        if (this.level === 10) {
-            return {
-                projectileCountBonus: projectileBonus + 1,
-                projectileSizeMultiplier: 1.15 // 15%投射物大小增加
-            };
-        }
-        
+        // 分级加成：2/4/6/8级+1，10级+2
+        let projectileBonus = 0;
+        if (this.level >= 2) projectileBonus += 1;
+        if (this.level >= 4) projectileBonus += 1;
+        if (this.level >= 6) projectileBonus += 1;
+        if (this.level >= 8) projectileBonus += 1;
+        if (this.level === 10) projectileBonus += 2;
+        // 只对Projectile类生效，场地召唤类不受影响（在武器/投射物生成处判断ownerStats.projectileCountBonus）
         return {
             projectileCountBonus: projectileBonus
         };
@@ -552,7 +529,7 @@ class BarrierRune extends PassiveItem {
      * 构造函数
      */
     constructor() {
-        super("结界符文", "🛡️", 10, "增加护盾和减少伤害");
+        super("结界符文", "🛡️", 10, "减少所受伤害");
     }
 
     /**
@@ -560,21 +537,8 @@ class BarrierRune extends PassiveItem {
      * @returns {Object} - 增益
      */
     getBonuses() {
-        let armor = this.level * 2; // 每级增加2点护甲
-        let damageReduction = (this.level - 1) * 0.03; // 每级减少3%伤害
-        
-        // 10级特殊效果：额外护甲和伤害减免，并有几率完全格挡伤害
-        if (this.level === 10) {
-            return {
-                armor: armor + 5,
-                damageReductionMultiplier: 1 - (damageReduction + 0.07),
-                blockChance: 0.08 // 8%几率完全格挡伤害
-            };
-        }
-        
         return {
-            armor: armor,
-            damageReductionMultiplier: 1 - damageReduction
+            damageReductionPercent: this.level < 10 ? 0.05 * this.level : 0.6
         };
     }
 }

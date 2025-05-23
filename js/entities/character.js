@@ -47,18 +47,51 @@ class Character extends GameObject {
             return;
         }
 
-        // 对于减速和眩晕，如果已经存在效果，则选择持续时间更长的那个
-        if (type === 'slow' || type === 'stun') {
+        // 对于减速效果，需要特殊处理
+        if (type === 'slow') {
+            // 检查是否有减速免疫
+            if (this.getStat && this.getStat('slowImmunity')) {
+                return;
+            }
+
+            // 检查是否有减速抗性
+            let slowResistance = 0;
+            if (this.getStat && typeof this.getStat('slowResistance') === 'number') {
+                slowResistance = this.getStat('slowResistance');
+            }
+
+            // 应用减速抗性
+            const actualSlowStrength = effectData.factor * (1 - slowResistance);
+            
+            // 只在首次减速时赋值originalSpeed
+            if (!this.statusEffects.slow) {
+                effectData.originalSpeed = this.speed;
+            } else {
+                effectData.originalSpeed = this.statusEffects.slow.originalSpeed;
+            }
+
+            // 只保留最强减速，刷新持续时间
+            if (!this.statusEffects.slow || actualSlowStrength > this.statusEffects.slow.factor || (actualSlowStrength === this.statusEffects.slow.factor && effectData.duration > this.statusEffects.slow.duration)) {
+                this.statusEffects[type] = {
+                    ...effectData,
+                    factor: actualSlowStrength,
+                    icon: '🐌'
+                };
+            }
+
+            // 立即应用减速效果
+            this.speed = effectData.originalSpeed * actualSlowStrength;
+            return;
+        }
+
+        // 对于眩晕效果，如果已经存在效果，则选择持续时间更长的那个
+        if (type === 'stun') {
             if (this.statusEffects[type] && this.statusEffects[type].duration > effectData.duration) {
                 return; // 已有更强的同类效果
             }
         }
         
         this.statusEffects[type] = { ...effectData };
-        if (type === 'slow') {
-            this.statusEffects.slow.icon = '🐌'; // 确保所有减速效果都有蜗牛图标
-            console.log('Slow effect applied to:', this, 'New slow status:', this.statusEffects.slow);
-        }
     }
 
     /**
@@ -82,19 +115,41 @@ class Character extends GameObject {
      * @param {number} dt - 时间增量
      */
     updateStatusEffects(dt) {
+        // 更新冻结效果
+        if (this.statusEffects.freeze) {
+            this.statusEffects.freeze.duration -= dt;
+            if (this.statusEffects.freeze.duration <= 0) {
+                // 恢复原速
+                if (this.statusEffects.freeze.originalSpeed !== undefined) {
+                    this.speed = this.statusEffects.freeze.originalSpeed;
+                }
+                delete this.statusEffects.freeze;
+            } else {
+                // 冻结期间速度为0
+                this.speed = 0;
+            }
+        } else if (this.statusEffects.slow) {
+            // 更新减速效果
+            this.statusEffects.slow.duration -= dt;
+            if (this.statusEffects.slow.duration <= 0) {
+                // 恢复原速
+                if (this.statusEffects.slow.originalSpeed !== undefined) {
+                    this.speed = this.statusEffects.slow.originalSpeed;
+                }
+                delete this.statusEffects.slow;
+            } else {
+                // 减速期间
+                if (this.statusEffects.slow.originalSpeed !== undefined) {
+                    this.speed = this.statusEffects.slow.originalSpeed * this.statusEffects.slow.factor;
+                }
+            }
+        }
+
         // 更新眩晕效果
         if (this.statusEffects.stun) {
             this.statusEffects.stun.duration -= dt;
             if (this.statusEffects.stun.duration <= 0) {
                 this.statusEffects.stun = null;
-            }
-        }
-
-        // 更新减速效果
-        if (this.statusEffects.slow) {
-            this.statusEffects.slow.duration -= dt;
-            if (this.statusEffects.slow.duration <= 0) {
-                this.statusEffects.slow = null;
             }
         }
 

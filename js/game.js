@@ -1110,10 +1110,26 @@ function updateUI() {
         if (statAreaUI) statAreaUI.textContent = getSafeStat('areaMultiplier', 1).toFixed(2);
         if (statDurationUI) statDurationUI.textContent = getSafeStat('durationMultiplier', 1).toFixed(2);
         if (statAmountUI) statAmountUI.textContent = getSafeStat('projectileCountBonus', 0).toString();
-        if (statArmorUI) statArmorUI.textContent = getSafeStat('armor', 0).toFixed(1);
+        // if (statArmorUI) statArmorUI.textContent = getSafeStat('armor', 0).toFixed(1); // 移除护甲值面板
         if (statRegenUI) statRegenUI.textContent = getSafeStat('regen', 0).toFixed(1);
-        if (statMoveSpeedUI) statMoveSpeedUI.textContent = getSafeStat('speed', 170).toFixed(0);
+        if (statMoveSpeedUI) statMoveSpeedUI.textContent = (typeof player.getCurrentSpeed === 'function' ? player.getCurrentSpeed() : getSafeStat('speed', 170)).toFixed(0);
         if (statPickupUI) statPickupUI.textContent = getSafeStat('pickupRadius', 70).toFixed(0);
+        // 显示减速百分比
+        const statSlowUI = document.getElementById('statSlow');
+        if (statSlowUI) {
+            if (player.statusEffects && player.statusEffects.slow && player.statusEffects.slow.factor !== undefined) {
+                const slowPercent = Math.round((1 - player.statusEffects.slow.factor) * 100);
+                statSlowUI.textContent = slowPercent + '%';
+            } else {
+                statSlowUI.textContent = '0%';
+            }
+        }
+        // 显示减伤百分比
+        const statDRUI = document.getElementById('statDR');
+        if (statDRUI) {
+            const dr = getSafeStat('damageReductionPercent', 0);
+            statDRUI.textContent = (dr * 100).toFixed(1) + '%';
+        }
         
     } catch (error) {
         console.error("更新UI时出错:", error, "Player Stats:", JSON.stringify(player?.stats), "Calculated Stats:", JSON.stringify(player?.calculatedStats));

@@ -104,7 +104,7 @@ class Enemy extends Character {
         
         // 堕落天使光束攻击
         if (type.canShootBeam) {
-            this.beamCooldown = 0;
+            this.beamCooldown = 1.0; // 生成后1秒内不能发射光线
             this.beamCooldownTime = type.beamCooldown || 5;
             this.beamDamage = type.beamDamage || 15;
             this.beamWidth = type.beamWidth || 30;
@@ -114,6 +114,7 @@ class Enemy extends Character {
             this.beamDirection = { x: 0, y: 0 };
             this.beamTarget = null;
             this.beamHitTargets = new Set();
+            this.beamWarningTimer = 0;
         }
         
         // 精英僵尸毒气光环
@@ -123,6 +124,21 @@ class Enemy extends Character {
             this.poisonTickTimer = 0;
             this.poisonTickInterval = 1.0;
         }
+        
+        // 添加时间增长系数
+        this.timeScalingFactor = 1.0;
+        this.lastTimeScalingUpdate = 0;
+        this.timeScalingInterval = 60; // 每60秒更新一次
+        
+        // 如果是炸弹敌人，设置更高的基础伤害
+        if (type && type.name === "炸弹") {
+            this.stats.damage = 20;
+            this.damage = 20;
+        }
+
+        this.beamAttackCooldown = 0;
+        this.beamAttackTimer = 0;
+        this.beamWarningTimer = 0;
     }
 
     /**
@@ -164,6 +180,32 @@ class Enemy extends Character {
         
         // 处理状态效果
         this.handleStatusEffects(dt);
+        
+        // 更新时间增长系数
+        this.lastTimeScalingUpdate += dt;
+        if (this.lastTimeScalingUpdate >= this.timeScalingInterval) {
+            this.timeScalingFactor += 0.1; // 每60秒增加10%伤害
+            this.lastTimeScalingUpdate = 0;
+        }
+        // 怪物-怪物简单推挤，避免重叠
+        if (!this.isBoss && !this.isGarbage && this.isActive) {
+            const minDist = (this.size || 32) * 0.6;
+            for (let i = 0; i < enemies.length; i++) {
+                const other = enemies[i];
+                if (other !== this && !other.isBoss && !other.isGarbage && other.isActive) {
+                    const dx = this.x - other.x;
+                    const dy = this.y - other.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist > 0 && dist < minDist) {
+                        const push = (minDist - dist) / 2;
+                        this.x += (dx / dist) * push;
+                        this.y += (dy / dist) * push;
+                        other.x -= (dx / dist) * push;
+                        other.y -= (dy / dist) * push;
+                    }
+                }
+            }
+        }
     }
     
     /**
@@ -175,30 +217,79 @@ class Enemy extends Character {
         if (!this.target || this.isStunned()) return;
         
         // 地狱犬冲刺
-        if (this.type && this.type.canDash && !this.isDashing) {
-            // 更新冲刺冷却
-            if (this.dashCooldown > 0) {
-                this.dashCooldown -= dt;
-            } 
-            // 如果冷却结束且在合适范围内，尝试冲刺
-            else {
-                const distSq = this.getDistanceSquared(this.target);
-                // 如果距离合适(比如在100-300之间)，启动冲刺
-                if (distSq >= 100*100 && distSq <= 300*300) {
+        if (this.type && this.type.canDash) {
+            // 冲刺冷却时间缩短
+            this.dashCooldownTime = 1.2;
+            const dashRange = (this.dashSpeed || 3.75) * (this.dashDuration || 1.2) * 0.7 * 60;
+            const distSq = this.getDistanceSquared(this.target);
+            if (!this.isDashing) {
+                const dx = this.target.x - this.x;
+                const dy = this.target.y - this.y;
+                const dist = Math.sqrt(distSq);
+                const circleRadius = dashRange * 1.1;
+                // 记录上一次位置
+                this._lastPos = this._lastPos || {x: this.x, y: this.y, t: 0};
+                if (dist > 0) {
+                    if (distSq < circleRadius * circleRadius * 0.8) {
+                        this.x -= (dx / dist) * this.getCurrentSpeed() * dt;
+                        this.y -= (dy / dist) * this.getCurrentSpeed() * dt;
+                    } else if (distSq > circleRadius * circleRadius * 1.2) {
+                        this.x += (dx / dist) * this.getCurrentSpeed() * dt;
+                        this.y += (dy / dist) * this.getCurrentSpeed() * dt;
+                    } else {
+                        let angle = Math.atan2(dy, dx) + Math.PI / 2;
+                        angle += (Math.random() - 0.5) * 0.5; // 扰动更大
+                        this.x += Math.cos(angle) * this.getCurrentSpeed() * dt;
+                        this.y += Math.sin(angle) * this.getCurrentSpeed() * dt;
+                    }
+                }
+                // 如果长时间没移动，强制扰动或冲刺
+                const moved = Math.abs(this.x - this._lastPos.x) + Math.abs(this.y - this._lastPos.y);
+                this._lastPos.t += dt;
+                if (this._lastPos.t > 1.5) {
+                    if (moved < 2) {
+                        // 强制扰动
+                        this.x += (Math.random() - 0.5) * 10;
+                        this.y += (Math.random() - 0.5) * 10;
+                        // 或强制冲刺
+                        if (this.dashCooldown <= 0) this.startDash();
+                    }
+                    this._lastPos = {x: this.x, y: this.y, t: 0};
+                }
+                // 冲刺冷却结束且距离合适才冲刺，判定范围放宽
+                if (this.dashCooldown <= 0 && distSq >= dashRange * dashRange * 0.7 && distSq <= dashRange * dashRange * 1.3) {
                     this.startDash();
                 }
             }
         }
         
         // 堕落天使光束攻击
-        if (this.type && this.type.canShootBeam && !this.isShootingBeam) {
-            // 更新光束冷却
-            if (this.beamCooldown > 0) {
-                this.beamCooldown -= dt;
-            } 
-            // 如果冷却结束，尝试射出光束
-            else {
-                this.startBeamAttack();
+        if (this.type && this.type.canShootBeam) {
+            if (!this.isShootingBeam) {
+                if (this.beamCooldown > 0) {
+                    this.beamCooldown -= dt;
+                } else if (this.beamWarningTimer <= 0 && this.target && this.getDistanceSquared(this.target) < 500*500) { // 索敌范围提升到500
+                    this.beamWarningTimer = 0.5; // 0.5秒警告
+                }
+                if (this.beamWarningTimer > 0) {
+                    this.beamWarningTimer -= dt;
+                    if (this.beamWarningTimer <= 0) {
+                        this.isShootingBeam = true;
+                        this.beamTimer = 0;
+                        // 计算光束方向
+                        const dx = this.target.x - this.x;
+                        const dy = this.target.y - this.y;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        this.beamDirection = dist > 0 ? { x: dx / dist, y: dy / dist } : { x: 0, y: 1 };
+                    }
+                }
+            } else {
+                // 光束持续
+                this.beamTimer += dt;
+                if (this.beamTimer >= this.beamDuration) {
+                    this.isShootingBeam = false;
+                    this.beamCooldown = this.beamCooldownTime;
+                }
             }
         } 
         // 如果正在射出光束，更新光束
@@ -215,6 +306,26 @@ class Enemy extends Character {
             if (this.poisonTickTimer >= this.poisonTickInterval) {
                 this.applyPoisonAura();
                 this.poisonTickTimer = 0;
+            }
+        }
+
+        if (this.type === '堕落天使') {
+            if (this.beamAttackCooldown > 0) {
+                this.beamAttackCooldown -= dt;
+            }
+            
+            // 添加攻击提示
+            if (this.beamAttackCooldown <= 0 && this.distanceToTarget < 300) {
+                this.beamWarningTimer = 0.5; // 0.5秒警告时间
+                this.beamAttackCooldown = 5; // 5秒冷却
+            }
+            
+            if (this.beamWarningTimer > 0) {
+                this.beamWarningTimer -= dt;
+                if (this.beamWarningTimer <= 0) {
+                    this.beamAttackTimer = 1.5; // 1.5秒持续时间
+                    this.beamDamage = this.damage * 2; // 光束伤害为基础伤害的2倍
+                }
             }
         }
     }
@@ -303,35 +414,28 @@ class Enemy extends Character {
      * @param {number} dt - 时间增量
      */
     updateBeamAttack(dt) {
-        // 更新光束计时器
         this.beamTimer += dt;
-        
-        // 如果光束结束，重置状态
         if (this.beamTimer >= this.beamDuration) {
             this.isShootingBeam = false;
             this.beamCooldown = this.beamCooldownTime;
             return;
         }
-        
-        // 计算光束终点
-        const beamLength = 300; // 光束长度
+        const beamLength = 500;
         const endX = this.x + this.beamDirection.x * beamLength;
         const endY = this.y + this.beamDirection.y * beamLength;
-        
-        // 检查光束与玩家的碰撞
-        if (this.target && !this.beamHitTargets.has(this.target)) {
-            // 简单检查：如果玩家在光束附近，造成伤害
+        if (this.target) {
             const playerToBeamDistSq = pointToLineDistanceSq(
                 this.target.x, this.target.y,
                 this.x, this.y,
                 endX, endY
             );
-            
-            if (playerToBeamDistSq <= (this.beamWidth * this.beamWidth / 4)) {
-                // 造成伤害
-                this.target.takeDamage(this.beamDamage, this);
-                // 标记已命中
-                this.beamHitTargets.add(this.target);
+            const hitWidth = this.beamWidth || 30;
+            if (playerToBeamDistSq < (hitWidth * hitWidth) / 4) {
+                // 只要无敌时间为0就造成一次伤害
+                if (this.target.invincibleTime <= 0) {
+                    this.target.takeDamage(15, this, false, true);
+                    this.target.invincibleTime = 0.5; // 0.5秒无敌
+                }
             }
         }
     }
@@ -368,57 +472,33 @@ class Enemy extends Character {
      */
     applySlowEffect(target, slowFactor, slowDuration) {
         if (!target || !target.stats) return;
-        
-        // 确保目标有statusEffects对象
-        if (!target.statusEffects) {
-            target.statusEffects = {};
-        }
-        
-        // 检查玩家是否有减速免疫（如翅膀10级）
-        if (target.getStat && target.getStat('slowImmunity') === true) {
-            // 玩家完全免疫减速，不应用效果
-            return;
-        }
-        
-        // 检查玩家是否有减速抗性（如翅膀5级）
+        if (!target.statusEffects) target.statusEffects = {};
+        if (target.getStat && target.getStat('slowImmunity') === true) return;
         let slowResistance = 0;
         if (target.getStat && typeof target.getStat('slowResistance') === 'number') {
-            slowResistance = target.getStat('slowResistance'); // 0到1之间的值
+            slowResistance = target.getStat('slowResistance');
         }
-        
-        // 应用减速抗性，降低减速效果
         if (slowResistance > 0) {
-            // 减速因子接近1表示减速效果更弱
-            // 所以我们要让计算后的slowFactor更接近1
             slowFactor = 1 - (1 - slowFactor) * (1 - slowResistance);
         }
-        
-        // 保存原有速度（如果没有已存在的减速效果）
         let originalSpeed = target.statusEffects.slow ? 
                           target.statusEffects.slow.originalSpeed : 
                           target.stats.speed;
-        
-        // 检查是否已有减速效果
         if (target.statusEffects.slow) {
-            // 已有减速效果，取最强的效果（更低的factor值表示更强的减速）
-            if (slowFactor <= target.statusEffects.slow.factor) {
-                // 新的减速效果更强或相同，更新减速系数
+            // 只保留最强减速
+            if (slowFactor < target.statusEffects.slow.factor) {
                 target.statusEffects.slow.factor = slowFactor;
-                // 重置目标速度为原速度×新减速系数
                 target.stats.speed = originalSpeed * slowFactor;
             }
-            // 不管新效果是否更强，都刷新持续时间（取较长的）
             target.statusEffects.slow.duration = Math.max(target.statusEffects.slow.duration, slowDuration);
         } else {
-            // 没有已存在的减速效果，直接应用
             target.stats.speed *= slowFactor;
-            
             target.statusEffects.slow = {
                 factor: slowFactor,
                 duration: slowDuration,
                 originalSpeed: originalSpeed,
                 source: this,
-                icon: '🐌' // 确保有蜗牛图标
+                icon: '🐌'
             };
         }
     }
@@ -711,7 +791,7 @@ class Enemy extends Character {
         
         visualEffects.push(explosion);
         
-        // 对范围内的玩家造成伤害
+        // 对范围内的玩家造成伤害，应用时间增长系数
         if (player && !player.isGarbage && player.isActive) {
             const dx = player.x - this.x;
             const dy = player.y - this.y;
@@ -721,7 +801,7 @@ class Enemy extends Character {
                 // 计算伤害衰减
                 const dist = Math.sqrt(distSq);
                 const damageFactor = 1 - (dist / radius);
-                const actualDamage = damage * damageFactor;
+                const actualDamage = damage * damageFactor * this.timeScalingFactor;
                 
                 // 造成伤害
                 player.takeDamage(actualDamage, this);
@@ -948,6 +1028,124 @@ class Enemy extends Character {
         if (this.hitAnimationTimer > 0) {
             ctx.restore();
         }
+
+        // 绘制堕落天使光束警告
+        if (this.type && this.type.canShootBeam && this.beamWarningTimer > 0) {
+            const screenPos = cameraManager.worldToScreen(this.x, this.y);
+            const angle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
+            ctx.save();
+            ctx.strokeStyle = 'rgba(255,0,0,0.5)';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(screenPos.x, screenPos.y);
+            ctx.lineTo(screenPos.x + Math.cos(angle) * 1000, screenPos.y + Math.sin(angle) * 1000);
+            ctx.stroke();
+            ctx.restore();
+        }
+        // 堕落天使光束
+        if (this.type && this.type.canShootBeam && this.isShootingBeam) {
+            const screenPos = cameraManager.worldToScreen(this.x, this.y);
+            const endX = this.x + this.beamDirection.x * 1000;
+            const endY = this.y + this.beamDirection.y * 1000;
+            const endScreen = cameraManager.worldToScreen(endX, endY);
+            ctx.save();
+            ctx.strokeStyle = 'rgba(255,0,0,0.8)';
+            ctx.lineWidth = this.beamWidth * cameraManager.zoom;
+            ctx.beginPath();
+            ctx.moveTo(screenPos.x, screenPos.y);
+            ctx.lineTo(endScreen.x, endScreen.y);
+            ctx.stroke();
+            ctx.restore();
+            // 判定玩家是否被击中（点到线段距离）
+            if (this.target && this.target instanceof Player) {
+                const px = this.target.x, py = this.target.y;
+                const distSq = pointToLineDistanceSq(px, py, this.x, this.y, endX, endY);
+                if (distSq <= (this.beamWidth * this.beamWidth / 4)) {
+                    this.target.takeDamage(this.beamDamage * (1/60), this, false, true); // 持续伤害，isAuraDamage=true
+                }
+            }
+        }
+        
+        // 绘制精英僵尸毒气光环
+        if (this.type && this.type.hasPoisonAura) {
+            ctx.save();
+            const auraRadius = this.poisonAuraRadius * cameraManager.zoom;
+            const gradient = ctx.createRadialGradient(
+                screenPos.x, screenPos.y, 0,
+                screenPos.x, screenPos.y, auraRadius
+            );
+            gradient.addColorStop(0, 'rgba(0, 255, 0, 0.2)');
+            gradient.addColorStop(0.7, 'rgba(0, 200, 0, 0.15)');
+            gradient.addColorStop(1, 'rgba(0, 150, 0, 0.1)');
+            
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(screenPos.x, screenPos.y, auraRadius, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // 添加旋转的线条效果
+            const time = gameTime * 0.5;
+            const numLines = 4;
+            ctx.strokeStyle = 'rgba(0, 255, 0, 0.3)';
+            ctx.lineWidth = 2 * cameraManager.zoom;
+            
+            for (let i = 0; i < numLines; i++) {
+                const angle = time + (Math.PI * 2 / numLines) * i;
+                ctx.beginPath();
+                ctx.moveTo(screenPos.x, screenPos.y);
+                ctx.lineTo(
+                    screenPos.x + Math.cos(angle) * auraRadius,
+                    screenPos.y + Math.sin(angle) * auraRadius
+                );
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+
+        if (this.type === '堕落天使') {
+            // 绘制警告线
+            if (this.beamWarningTimer > 0) {
+                const angle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
+                const distance = 1000;
+                const endX = this.x + Math.cos(angle) * distance;
+                const endY = this.y + Math.sin(angle) * distance;
+                
+                ctx.save();
+                ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(this.x, this.y);
+                ctx.lineTo(endX, endY);
+                ctx.stroke();
+                ctx.restore();
+            }
+            
+            // 绘制光束
+            if (this.beamAttackTimer > 0) {
+                const angle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
+                const distance = 1000;
+                const endX = this.x + Math.cos(angle) * distance;
+                const endY = this.y + Math.sin(angle) * distance;
+                
+                ctx.save();
+                ctx.strokeStyle = 'rgba(255, 0, 0, 0.8)';
+                ctx.lineWidth = 5;
+                ctx.beginPath();
+                ctx.moveTo(this.x, this.y);
+                ctx.lineTo(endX, endY);
+                ctx.stroke();
+                ctx.restore();
+                
+                // 检查玩家是否在光束范围内
+                if (this.target && this.target instanceof Player) {
+                    const playerAngle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
+                    const angleDiff = Math.abs(angle - playerAngle);
+                    if (angleDiff < 0.2) { // 20度范围内
+                        this.target.takeDamage(this.beamDamage * dt);
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -1035,21 +1233,24 @@ class Enemy extends Character {
             actualDamage = amount; // 允许燃烧和光环造成小于1的伤害
         }
 
-        this.health -= actualDamage;
+        // 应用时间增长系数到伤害
+        const scaledAmount = actualDamage * this.timeScalingFactor;
+
+        this.health -= scaledAmount;
 
         // 伤害数字的颜色和文本
         let damageColor = 'white'; // 默认普通攻击
         if (isBurnDamage) damageColor = 'orange';
         // if (isAuraDamage) damageColor = 'purple'; // 紫色可能与经验宝石冲突，暂用默认或特定颜色
 
-        let damageText = actualDamage.toFixed(0);
-        if (isBurnDamage) damageText = actualDamage.toFixed(1);
-        if (isAuraDamage) damageText = actualDamage.toFixed(2); // 光环伤害显示更精确的小数
+        let damageText = scaledAmount.toFixed(0);
+        if (isBurnDamage) damageText = scaledAmount.toFixed(1);
+        if (isAuraDamage) damageText = scaledAmount.toFixed(2); // 光环伤害显示更精确的小数
 
         // 对于非常小的光环伤害，可以选择不显示，或者累计后再显示
-        // 目前，如果 actualDamage * dt 非常小，它可能仍然会显示为0.00
+        // 目前，如果 scaledAmount * dt 非常小，它可能仍然会显示为0.00
         // 如果是光环伤害，并且伤害量很小 (例如小于0.01)，则不显示伤害数字
-        if (!isAuraDamage || Math.abs(actualDamage) >= 0.01) {
+        if (!isAuraDamage || Math.abs(scaledAmount) >= 0.01) {
              spawnDamageNumber(this.x, this.y - this.size / 2, damageText, damageColor); 
         }
 

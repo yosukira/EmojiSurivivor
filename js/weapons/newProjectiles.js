@@ -2396,27 +2396,30 @@ class VineHazard {
                 this.affectedEnemies.delete(enemy);
             }
         });
-        
-        // 对范围内的敌人造成伤害
+        // 对范围内的敌人和玩家造成伤害
         enemies.forEach(enemy => {
             if (enemy.isGarbage || !enemy.isActive) return;
-            
             const dx = enemy.x - this.x;
             const dy = enemy.y - this.y;
             const distSq = dx * dx + dy * dy;
-            
-            // 如果在范围内，造成伤害
             if (distSq <= this.currentRadius * this.currentRadius) {
-                // 造成伤害
                 enemy.takeDamage(this.damage, this.owner);
-                
-                // 应用减速效果
                 this.applySlow(enemy);
-                
-                // 添加到受影响列表
                 this.affectedEnemies.add(enemy);
             }
         });
+        // 新增：对玩家生效
+        if (typeof player !== 'undefined' && player && player.isActive) {
+            const dx = player.x - this.x;
+            const dy = player.y - this.y;
+            const distSq = dx * dx + dy * dy;
+            if (distSq <= this.currentRadius * this.currentRadius) {
+                player.takeDamage(this.damage, this.owner);
+                if (typeof player.applySlowEffect === 'function') {
+                    player.applySlowEffect(this.slowFactor, 0.5, this.owner);
+                }
+            }
+        }
     };
     
     /**
@@ -2426,22 +2429,20 @@ class VineHazard {
     applySlow(enemy) {
         // Boss免疫减速
         if (enemy.isBoss || enemy.isControlImmune) return;
-        // 初始化状态效果对象
-        if (!enemy.statusEffects) {
-            enemy.statusEffects = {};
-        }
-        
-        // 如果已经有减速效果，延长持续时间
+        if (!enemy.statusEffects) enemy.statusEffects = {};
+        // 只保留最强减速
         if (enemy.statusEffects.vineSlow) {
             enemy.statusEffects.vineSlow.duration = Math.max(
                 enemy.statusEffects.vineSlow.duration,
                 0.5
             );
+            enemy.statusEffects.vineSlow.factor = Math.min(
+                enemy.statusEffects.vineSlow.factor,
+                this.slowFactor
+            );
         } else {
-            // 添加新的减速效果
             const originalSpeed = enemy.speed;
             enemy.speed *= this.slowFactor;
-            
             enemy.statusEffects.vineSlow = {
                 duration: 0.5,
                 factor: this.slowFactor,
@@ -2449,7 +2450,7 @@ class VineHazard {
                 source: this.owner
             };
         }
-    };
+    }
     
     /**
      * 创建叶子粒子
@@ -2750,30 +2751,38 @@ class FrostCrystalProjectile extends Projectile {
      * @param {Enemy} enemy - 敌人
      */
     applyFreezeEffect(enemy) {
-        // Boss免疫冰冻和减速
         if (enemy.isBoss || enemy.isControlImmune) return;
-        // 初始化状态效果对象
-        if (!enemy.statusEffects) {
-            enemy.statusEffects = {};
-        }
-        
-        // 如果已经有减速效果，延长持续时间
-        if (enemy.statusEffects.freeze) {
-            enemy.statusEffects.freeze.duration = Math.max(
-                enemy.statusEffects.freeze.duration,
-                this.freezeDuration
-            );
-        } else {
-            // 添加新的减速效果
+        if (!enemy.statusEffects) enemy.statusEffects = {};
+        // 冻结优先于减速
+        if (!enemy.statusEffects.freeze || this.freezeDuration > enemy.statusEffects.freeze.duration) {
+            // 恢复原速
+            if (enemy.statusEffects.freeze && enemy.statusEffects.freeze.originalSpeed !== undefined) {
+                enemy.speed = enemy.statusEffects.freeze.originalSpeed;
+            } else if (enemy.statusEffects.slow && enemy.statusEffects.slow.originalSpeed !== undefined) {
+                enemy.speed = enemy.statusEffects.slow.originalSpeed;
+            }
+            // 应用冻结
             const originalSpeed = enemy.speed;
-            enemy.speed *= this.slowFactor;
-            
+            enemy.speed = 0;
             enemy.statusEffects.freeze = {
                 duration: this.freezeDuration,
-                factor: this.slowFactor,
                 originalSpeed: originalSpeed,
                 source: this.owner
             };
+            // 移除减速
+            if (enemy.statusEffects.slow) delete enemy.statusEffects.slow;
+        } else if (!enemy.statusEffects.freeze) {
+            // 没有冻结时才允许减速
+            if (!enemy.statusEffects.slow || this.slowFactor < enemy.statusEffects.slow.factor) {
+                const originalSpeed = enemy.speed;
+                enemy.speed *= this.slowFactor;
+                enemy.statusEffects.slow = {
+                    duration: 2.0,
+                    factor: this.slowFactor,
+                    originalSpeed: originalSpeed,
+                    source: this.owner
+                };
+            }
         }
     }
 
@@ -3662,6 +3671,18 @@ class VolcanoEruption {
                     });
                 }
                 
+                // 新增：对玩家生效
+                if (typeof player !== 'undefined' && player && player.isActive) {
+                    const dx = player.x - this.x;
+                    const dy = player.y - this.y;
+                    const distSq = dx * dx + dy * dy;
+                    if (distSq <= this.radius * this.radius) {
+                        player.takeDamage(this.damage, volcano ? volcano.owner : null);
+                        if (typeof player.applySlowEffect === 'function') {
+                            player.applySlowEffect(0.7, 0.7, volcano ? volcano.owner : null);
+                        }
+                    }
+                }
                 // 产生气泡效果
                 if (Math.random() < 0.1) {
                     this.createBubbleEffect();
@@ -5426,6 +5447,66 @@ class PoisonVialProjectile extends Projectile {
         }
     }
 } 
+
+// ... existing code ...
+class EmptyBottleProjectile extends Projectile {
+    constructor(x, y, targetX, targetY, damage, level) {
+        super(x, y, targetX, targetY, damage);
+        this.level = level;
+        this.radius = 20;
+        this.duration = 3; // 持续时间
+        this.slowStrength = 0.1 + (level - 1) * 0.01; // 基础减速10%，每级+1%
+        if (level >= 10) {
+            this.slowStrength = 0.2; // 10级时固定20%减速
+        }
+    }
+    
+    update(dt) {
+        super.update(dt);
+        
+        // 检查是否击中敌人
+        if (this.active) {
+            game.enemies.forEach(enemy => {
+                const dx = enemy.x - this.x;
+                const dy = enemy.y - this.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance < this.radius) {
+                    // 应用减速效果
+                    if (!enemy.statusEffects) enemy.statusEffects = {};
+                    enemy.statusEffects.slow = {
+                        factor: 1 - this.slowStrength, // 转换为减速因子
+                        duration: this.duration,
+                        originalSpeed: enemy.speed,
+                        source: this.owner,
+                        icon: '🐌'
+                    };
+                    
+                    // 立即应用减速效果
+                    enemy.speed = enemy.statusEffects.slow.originalSpeed * enemy.statusEffects.slow.factor;
+                    
+                    // 造成伤害
+                    enemy.takeDamage(this.damage);
+                    
+                    // 移除投射物
+                    this.active = false;
+                }
+            });
+        }
+    }
+    
+    draw(ctx) {
+        if (!this.active) return;
+        
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(200, 200, 200, 0.5)';
+        ctx.fill();
+        ctx.restore();
+    }
+}
+// ... existing code ...
 
 // 确保导出所有投射物类，使其他文件可以访问
 if (typeof window !== "undefined") {

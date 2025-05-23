@@ -51,6 +51,8 @@ class Player extends Character {
 
         this.baseSpeed = PLAYER_DEFAULT_STATS.speed; // 新增基础速度
         this.speed = this.baseSpeed; // 当前速度
+
+        this.invincibleSources = {}; // 新增：来源独立无敌时间
     }
 
     /**
@@ -74,6 +76,22 @@ class Player extends Character {
         
         // 检查并处理被动特殊效果触发
         this.checkPassiveEffectTriggers(dt);
+
+        // 更新来源独立无敌计时
+        for (const k in this.invincibleSources) {
+            if (this.invincibleSources[k] > 0) {
+                this.invincibleSources[k] -= dt;
+                if (this.invincibleSources[k] < 0) this.invincibleSources[k] = 0;
+            }
+        }
+
+        // 更新减速debuff持续时间
+        if (this.statusEffects && this.statusEffects.slow) {
+            this.statusEffects.slow.duration -= dt;
+            if (this.statusEffects.slow.duration <= 0) {
+                delete this.statusEffects.slow;
+            }
+        }
     }
 
     /**
@@ -163,9 +181,16 @@ class Player extends Character {
     getStat(statName) {
         // 基础属性
         let baseStat = PLAYER_DEFAULT_STATS[statName] || 0;
+        // 速度加成：基础速度+被动加成
         if (statName === 'speed') {
-            // 速度特殊处理：用baseSpeed+被动加成，不受debuff影响
-            baseStat = this.baseSpeed;
+            let bonus = 0;
+            this.passiveItems.forEach(item => {
+                if (item && typeof item.getBonuses === 'function') {
+                    const bonuses = item.getBonuses();
+                    if (typeof bonuses.speed === 'number') bonus += bonuses.speed;
+                }
+            });
+            return PLAYER_DEFAULT_STATS.speed + bonus;
         }
 
         // 加成乘数
@@ -176,7 +201,6 @@ class Player extends Character {
 
         // 特殊属性映射
         const specialStatMappings = {
-            'speed': ['speed'], // 移动速度，对应Wings被动
             'health': ['health', 'maxHealth'], // 最大生命值，对应HollowHeart被动
             'regenAmount': ['regenAmount', 'regen'], // 生命恢复，对应AncientTreeSap被动
             'maxHealth': ['maxHealth', 'maxHealthBonus', 'health'], // 最大生命值，对应HollowHeart被动
@@ -192,52 +216,60 @@ class Player extends Character {
         // 应用被动物品加成
         
         this.passiveItems.forEach(item => {
-            // 确保 item 和 item.bonuses 存在
-            if (!item || !item.bonuses) {
+            // 动态获取加成，确保每次都是最新的
+            if (!item || typeof item.getBonuses !== 'function') {
                 return;
             }
-            
-            
+            const bonuses = item.getBonuses();
             // 针对每个可能的属性名称
             for (const possibleStatName of statNames) {
-                // 检查被动是否有这个属性的加成
-                if (item.bonuses[possibleStatName] !== undefined) {
-                    const bonus = item.bonuses[possibleStatName];
-                    
-                    // 乘法属性（以Multiplier结尾）
+                if (bonuses[possibleStatName] !== undefined) {
+                    const bonus = bonuses[possibleStatName];
                     if (possibleStatName.endsWith('Multiplier')) {
                         multiplier *= bonus;
-                    } 
-                    // 加法属性
-                    else {
+                    } else {
                         additive += bonus;
                     }
                 }
             }
-            
-            // 特殊处理：如果查询最大生命值，也考虑maxHealthMultiplier
-            if ((statName === 'health' || statName === 'maxHealth') && item.bonuses.maxHealthMultiplier !== undefined) {
-                multiplier *= item.bonuses.maxHealthMultiplier;
+            if ((statName === 'health' || statName === 'maxHealth') && bonuses.maxHealthMultiplier !== undefined) {
+                multiplier *= bonuses.maxHealthMultiplier;
             }
-            
-            // 特殊处理：如果查询拾取半径，也考虑pickupRadiusBonus
-            if (statName === 'pickupRadius' && item.bonuses.pickupRadiusBonus !== undefined) {
-                additive += item.bonuses.pickupRadiusBonus;
+            if (statName === 'pickupRadius' && bonuses.pickupRadiusBonus !== undefined) {
+                additive += bonuses.pickupRadiusBonus;
             }
-            
-            // 特殊处理：如果查询速度，也考虑speed直接量
-            if (statName === 'speed' && item.bonuses.speed !== undefined) {
-                additive += item.bonuses.speed;
+            if (statName === 'speed' && bonuses.speed !== undefined) {
+                additive += bonuses.speed;
             }
-            
-            // 特殊处理：如果查询生命恢复，确保regenAmount被正确处理
-            if (statName === 'regenAmount' && item.bonuses.regenAmount !== undefined) {
-                additive += item.bonuses.regenAmount;
+            if (statName === 'regenAmount' && bonuses.regenAmount !== undefined) {
+                additive += bonuses.regenAmount;
             }
         });
 
         // 计算最终属性值
         let finalStat = (baseStat + additive) * multiplier;
+        
+        // 兼容damageReductionPercent和pickupRadiusBonus
+        if (statName === 'damageReductionPercent') {
+            let reduction = 0;
+            this.passiveItems.forEach(item => {
+                if (item && typeof item.getBonuses === 'function') {
+                    const bonuses = item.getBonuses();
+                    if (typeof bonuses.damageReductionPercent === 'number') reduction += bonuses.damageReductionPercent;
+                }
+            });
+            return reduction;
+        }
+        if (statName === 'pickupRadius') {
+            let bonus = 0;
+            this.passiveItems.forEach(item => {
+                if (item && typeof item.getBonuses === 'function') {
+                    const bonuses = item.getBonuses();
+                    if (bonuses.pickupRadiusBonus) bonus += bonuses.pickupRadiusBonus;
+                }
+            });
+            return PLAYER_DEFAULT_STATS.pickupRadius + bonus;
+        }
         
         return finalStat;
     }
@@ -380,29 +412,28 @@ class Player extends Character {
      * @returns {boolean} 是否死亡
      */
     takeDamage(amount, source, isBurnDamage = false, isAuraDamage = false) {
-        // 如果处于无敌状态，不受伤害
-        if (this.invincibleTime > 0 && !isAuraDamage && !isBurnDamage) return false; // 光环和燃烧伤害无视普通无敌
-
+        const sourceId = source && source.type && source.type.name ? source.type.name : (source && source.name ? source.name : 'unknown');
+        if (!isAuraDamage && !isBurnDamage && this.invincibleSources[sourceId] > 0) return false;
         let actualDamage;
-        if (isAuraDamage || isBurnDamage) {
-            actualDamage = amount; // 光环和燃烧伤害直接应用，不计算护甲，允许小于1
-        } else {
-        const armor = this.getStat('armor');
-            actualDamage = Math.max(1, amount - armor); // 普通攻击计算护甲，最低为1
-        }
-
-        // 减少生命值
-        this.health -= actualDamage;
-
-        // 新增：显示伤害数字
-        spawnDamageNumber(this.x, this.y - this.size / 2, `-${actualDamage.toString()}`, GAME_FONT_SIZE, 'red');
-
-        // 设置短暂的无敌时间 (非光环/燃烧伤害)
+        let reduction = 0;
+        // 读取结界符文减伤
         if (!isAuraDamage && !isBurnDamage) {
-        this.invincibleTime = 0.5;
+            reduction = this.getStat && typeof this.getStat === 'function' ? (this.getStat('damageReductionPercent') || 0) : 0;
         }
-
-        // 检查是否死亡
+        if (isAuraDamage || isBurnDamage) {
+            actualDamage = amount;
+        } else {
+            const armor = this.getStat('armor');
+            actualDamage = Math.max(1, amount - armor);
+            if (reduction > 0) {
+                actualDamage = Math.max(1, actualDamage * (1 - reduction));
+            }
+        }
+        this.health -= actualDamage;
+        spawnDamageNumber(this.x, this.y - this.size / 2, `-${actualDamage.toString()}`, GAME_FONT_SIZE, 'red');
+        if (!isAuraDamage && !isBurnDamage) {
+            this.invincibleSources[sourceId] = 0.5;
+        }
         if (this.health <= 0) {
             this.onDeath(source);
             return true;
@@ -559,6 +590,15 @@ class Player extends Character {
         // 绘制状态效果 (Character.draw 已经处理了状态效果的 save/restore 和 alpha)
         // 所以这里不需要再次 save/restore 或设置 alpha
         this.drawStatusEffects(ctx);
+
+        // 显示速度
+        let displaySpeed = this.getStat('speed');
+        if (this.statusEffects && this.statusEffects.slow) {
+            displaySpeed = this.getCurrentSpeed();
+        }
+        ctx.font = `${GAME_FONT_SIZE * 0.7}px Arial`;
+        ctx.fillStyle = 'white';
+        ctx.fillText(`速度: ${Math.round(displaySpeed)}` + (this.statusEffects && this.statusEffects.slow ? ' (减速中)' : ''), this.x - 40, this.y - this.size - 30);
 
         ctx.restore(); // 恢复到 Player.draw 最开始保存的状态
     }
@@ -933,16 +973,12 @@ class Player extends Character {
      * 获取当前实际移动速度（受debuff影响）
      */
     getCurrentSpeed() {
-        let speed = this.baseSpeed;
-        // 检查是否有减速免疫
-        if (this.getStat && this.getStat('slowImmunity')) {
-            return speed;
+        // 如果有减速debuff，优先用debuff影响速度
+        if (this.statusEffects && this.statusEffects.slow && this.statusEffects.slow.originalSpeed !== undefined) {
+            return this.statusEffects.slow.originalSpeed * this.statusEffects.slow.factor;
         }
-        // 叠加所有debuff减速（如有）
-        if (this.statusEffects && this.statusEffects.slow) {
-            speed *= (1 - (this.statusEffects.slow.strength || 0));
-        }
-        return speed;
+        // 否则用getStat('speed')
+        return this.getStat('speed');
     }
 
     /**
@@ -954,10 +990,101 @@ class Player extends Character {
     applySlowEffect(strength, duration, source) {
         // 检查是否有减速免疫
         if (this.getStat && this.getStat('slowImmunity')) return;
-        if (!this.statusEffects) this.statusEffects = {};
-        this.statusEffects.slow = {
-            strength: Math.max(strength, this.statusEffects.slow ? this.statusEffects.slow.strength : 0),
-            timer: duration
-        };
+        // 检查是否有减速抗性
+        let slowResistance = 0;
+        if (this.getStat && typeof this.getStat('slowResistance') === 'number') {
+            slowResistance = this.getStat('slowResistance');
+        }
+        // 应用减速抗性
+        const actualSlowStrength = strength * (1 - slowResistance);
+        // 只保留最强减速效果（强度大或持续时间更长）
+        if (!this.statusEffects.slow || actualSlowStrength > this.statusEffects.slow.strength || (actualSlowStrength === this.statusEffects.slow.strength && duration > this.statusEffects.slow.duration)) {
+            this.statusEffects.slow = {
+                factor: 1 - actualSlowStrength,
+                duration: duration,
+                strength: actualSlowStrength,
+                originalSpeed: this.getStat('speed'),
+                source: source,
+                icon: '🐌'
+            };
+        }
+    }
+
+    respawn() {
+        // 重置位置
+        this.x = canvas.width / 2;
+        this.y = canvas.height / 2;
+        // 重置生命值
+        this.health = this.maxHealth;
+        // 重置状态效果
+        this.statusEffects = {};
+        // 重置速度
+        this.speed = PLAYER_DEFAULT_STATS.speed;
+        this.baseSpeed = PLAYER_DEFAULT_STATS.speed;
+        // 重置伤害加成
+        this.damageMultiplier = 1;
+        // 重置无敌
+        this.invincibleTime = 0;
+        this.invincibleSources = {};
+        // 重置所有武器和被动道具的等级
+        if (this.weapons) {
+            this.weapons.forEach(weapon => {
+                if (weapon.level > 1) {
+                    weapon.level = 1;
+                    weapon.calculateStats();
+                }
+            });
+        }
+        if (this.passiveItems) {
+            this.passiveItems.forEach(item => {
+                if (item.level > 1) {
+                    item.level = 1;
+                    item.calculateStats();
+                }
+            });
+        }
+        // 重新计算所有属性
+        this.calculateStats();
+        // 清空所有状态效果
+        this.statusEffects = {};
+        this.invincibleSources = {};
+        // 重置所有被动和武器的临时状态
+        if (this.weapons) {
+            this.weapons.forEach(weapon => {
+                if (weapon.resetStatus) weapon.resetStatus();
+            });
+        }
+        if (this.passiveItems) {
+            this.passiveItems.forEach(item => {
+                if (item.resetStatus) item.resetStatus();
+            });
+        }
+    }
+
+    calculateStats() {
+        // 重置基础属性
+        this.baseSpeed = this.initialSpeed;
+        this.damageMultiplier = 1;
+        
+        // 计算武器加成
+        if (this.weapons) {
+            this.weapons.forEach(weapon => {
+                if (weapon.calculateStats) {
+                    weapon.calculateStats();
+                }
+            });
+        }
+        
+        // 计算被动道具加成
+        if (this.passiveItems) {
+            this.passiveItems.forEach(item => {
+                if (item.calculateStats) {
+                    item.calculateStats();
+                }
+            });
+        }
+        
+        // 应用所有加成
+        this.applyAllBuffs();
     }
 }
