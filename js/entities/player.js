@@ -975,11 +975,7 @@ class Player extends Character {
         }
         // 如果被减速，应用减速效果
         if (this.statusEffects.slow) {
-            // 如果是光环效果，直接返回当前速度
-            if (this.statusEffects.slow.isAuraEffect) {
-                return this.speed;
-            }
-            // 否则应用减速因子
+            // 应用减速因子
             speed *= this.statusEffects.slow.factor;
         }
         // 如果被眩晕，速度为0
@@ -990,6 +986,13 @@ class Player extends Character {
     }
 
     /**
+     * 获取当前实际速度（用于显示）
+     */
+    getDisplaySpeed() {
+        return this.getCurrentSpeed();
+    }
+
+    /**
      * 应用减速效果
      * @param {number} strength - 减速比例
      * @param {number} duration - 持续时间
@@ -997,6 +1000,8 @@ class Player extends Character {
      */
     applySlowEffect(strength, duration, source) {
         if (this.getStat && this.getStat('slowImmunity')) return;
+        // 如果当前有光环slow，普通slow不生效
+        if (this.statusEffects.slow && this.statusEffects.slow.isAuraEffect) return;
         let slowResistance = 0;
         if (this.getStat && typeof this.getStat('slowResistance') === 'number') {
             slowResistance = this.getStat('slowResistance');

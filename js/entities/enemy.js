@@ -218,47 +218,58 @@ class Enemy extends Character {
         
         // 地狱犬冲刺
         if (this.type && this.type.canDash) {
-            // 冲刺冷却时间缩短
-            this.dashCooldownTime = 1.2;
+            // 冲刺冷却时间
+            this.dashCooldownTime = 3.0;
             const dashRange = (this.dashSpeed || 3.75) * (this.dashDuration || 1.2) * 0.7 * 60;
             const distSq = this.getDistanceSquared(this.target);
             if (!this.isDashing) {
                 const dx = this.target.x - this.x;
                 const dy = this.target.y - this.y;
                 const dist = Math.sqrt(distSq);
-                const circleRadius = dashRange * 1.1;
+                const safeDistance = dashRange * 0.8; // 安全距离为冲刺范围的80%
+                
                 // 记录上一次位置
-                this._lastPos = this._lastPos || {x: this.x, y: this.y, t: 0};
+                if (!this._lastPos) this._lastPos = {x: this.x, y: this.y, t: 0};
+                
                 if (dist > 0) {
-                    if (distSq < circleRadius * circleRadius * 0.8) {
+                    if (distSq < safeDistance * safeDistance * 0.9) {
+                        // 太近，后退
                         this.x -= (dx / dist) * this.getCurrentSpeed() * dt;
                         this.y -= (dy / dist) * this.getCurrentSpeed() * dt;
-                    } else if (distSq > circleRadius * circleRadius * 1.2) {
+                    } else if (distSq > safeDistance * safeDistance * 1.1) {
+                        // 太远，接近
                         this.x += (dx / dist) * this.getCurrentSpeed() * dt;
                         this.y += (dy / dist) * this.getCurrentSpeed() * dt;
                     } else {
+                        // 在安全距离附近，绕圈
                         let angle = Math.atan2(dy, dx) + Math.PI / 2;
-                        angle += (Math.random() - 0.5) * 0.5; // 扰动更大
+                        // 添加随机扰动，使移动更自然
+                        angle += (Math.random() - 0.5) * 0.3;
                         this.x += Math.cos(angle) * this.getCurrentSpeed() * dt;
                         this.y += Math.sin(angle) * this.getCurrentSpeed() * dt;
                     }
                 }
-                // 如果长时间没移动，强制扰动或冲刺
+                
+                // 检查是否需要强制移动
                 const moved = Math.abs(this.x - this._lastPos.x) + Math.abs(this.y - this._lastPos.y);
                 this._lastPos.t += dt;
-                if (this._lastPos.t > 1.5) {
-                    if (moved < 2) {
-                        // 强制扰动
-                        this.x += (Math.random() - 0.5) * 10;
-                        this.y += (Math.random() - 0.5) * 10;
-                        // 或强制冲刺
-                        if (this.dashCooldown <= 0) this.startDash();
+                
+                // 每帧都更新_lastPos，防止卡住
+                if (this._lastPos.t > 0.5) {
+                    if (moved < 1) {
+                        this.x += (Math.random() - 0.5) * 12;
+                        this.y += (Math.random() - 0.5) * 12;
                     }
                     this._lastPos = {x: this.x, y: this.y, t: 0};
                 }
-                // 冲刺冷却结束且距离合适才冲刺，判定范围放宽
-                if (this.dashCooldown <= 0 && distSq >= dashRange * dashRange * 0.7 && distSq <= dashRange * dashRange * 1.3) {
-                    this.startDash();
+                
+                // 冲刺判定
+                if (this.dashCooldown <= 0) {
+                    // 当距离合适且不在冲刺状态时，可以冲刺
+                    if (distSq >= safeDistance * safeDistance * 1.2 && 
+                        distSq <= safeDistance * safeDistance * 2.0) {
+                        this.startDash();
+                    }
                 }
             }
         }
@@ -1068,7 +1079,11 @@ class Enemy extends Character {
                 const px = this.target.x, py = this.target.y;
                 const distSq = pointToLineDistanceSq(px, py, this.x, this.y, endX, endY);
                 if (distSq <= (this.beamWidth * this.beamWidth / 4)) {
-                    this.target.takeDamage(this.beamDamage * (1/60), this, false, true); // 持续伤害，isAuraDamage=true
+                    // 只要无敌时间<=0就持续造成伤害
+                    if (this.target.invincibleTime <= 0) {
+                        this.target.takeDamage(this.beamDamage, this, false, false);
+                        this.target.invincibleTime = 0.5; // 0.5秒无敌
+                    }
                 }
             }
         }
@@ -1500,29 +1515,26 @@ class BossEnemy extends Enemy {
                 const distSq = dx * dx + dy * dy;
 
                 if (distSq <= this.poisonAuraRadius * this.poisonAuraRadius) {
-                    // 减速效果 (持续施加)
+                    // 强制应用光环减速，覆盖普通减速
                     if (typeof target.applyStatusEffect === 'function') {
-                        target.applyStatusEffect('slow', { 
-                            factor: this.poisonAuraSlowFactor, 
-                            duration: 0.5, 
+                        target.applyStatusEffect('slow', {
+                            factor: this.poisonAuraSlowFactor,
+                            duration: 0.5,
                             source: this,
-                            isAuraEffect: true // 标记为光环效果
+                            isAuraEffect: true
                         });
                     }
-
                     // 周期性伤害
                     this.poisonAuraDamageTimer += dt;
                     if (this.poisonAuraDamageTimer >= this.poisonAuraDamageInterval) {
-                        target.takeDamage(this.poisonAuraDamageAmount, this, false, true); // isAuraDamage = true
+                        target.takeDamage(this.poisonAuraDamageAmount, this, false, true);
                         this.poisonAuraDamageTimer -= this.poisonAuraDamageInterval;
                     }
                 } else if (target.statusEffects && target.statusEffects.slow && target.statusEffects.slow.isAuraEffect) {
-                    // 如果玩家离开毒圈范围，移除光环减速效果
+                    // 离开毒圈时移除光环减速，恢复普通减速（如果有）
                     delete target.statusEffects.slow;
-                    // 恢复原始速度
-                    if (target.stats && target.stats.speed) {
-                        target.speed = target.stats.speed;
-                    }
+                    // 检查是否有普通减速需要恢复
+                    // 这里可以根据需要恢复原速或普通减速
                 }
             }
         } else { // 其他Boss的普通攻击逻辑
@@ -2433,80 +2445,89 @@ class BossEnemy extends Enemy {
      * @param {Player} target - 目标玩家
      */
     performPoisonCloud(target) {
-        // 毒云数量
-        const cloudCount = 5;
-
-        // 创建多个毒云
-        for (let i = 0; i < cloudCount; i++) {
-            // 计算毒云位置
-            const angle = Math.random() * Math.PI * 2;
-            const distance = 100 + Math.random() * 200;
-            const x = this.x + Math.cos(angle) * distance;
-            const y = this.y + Math.sin(angle) * distance;
-
-            // 创建毒云效果
-            const effect = {
-                x: x,
-                y: y,
-                radius: 80 + Math.random() * 40,
-                damage: this.damage * 0.3,
-                lifetime: 5.0,
-                timer: 0,
-                damageTimer: 0,
-                damageInterval: 0.5,
-                boss: this,
-                isGarbage: false,
-
-                update: function(dt) {
-                    // 更新计时器
-                    this.timer += dt;
-
-                    // 如果计时器结束，标记为垃圾
-                    if (this.timer >= this.lifetime) {
-                        this.isGarbage = true;
-                        return;
-                    }
-
-                    // 更新伤害计时器
-                    this.damageTimer += dt;
-
-                    // 如果伤害计时器结束，检查与玩家的碰撞
-                    if (this.damageTimer >= this.damageInterval) {
-                        // 计算到玩家的距离
-                        const playerDx = player.x - this.x;
-                        const playerDy = player.y - this.y;
-                        const playerDistSq = playerDx * playerDx + playerDy * playerDy;
-
-                        // 如果玩家在范围内，造成伤害
-                        if (playerDistSq <= this.radius * this.radius) {
-                            player.takeDamage(this.damage, this.boss);
-                        }
-
-                        // 重置伤害计时器
-                        this.damageTimer = 0;
-                    }
-                },
-
-                draw: function(ctx) {
-                    if (this.isGarbage) return;
-
-                    // 获取屏幕坐标
-                    const screenPos = cameraManager.worldToScreen(this.x, this.y);
-
-                    // 计算透明度
-                    const alpha = 0.3 * (1 - (this.timer / this.lifetime) * 0.7);
-
-                    // 绘制毒云效果
-                    ctx.fillStyle = `rgba(0, 128, 0, ${alpha})`;
-                    ctx.beginPath();
-                    ctx.arc(screenPos.x, screenPos.y, this.radius, 0, Math.PI * 2);
-                    ctx.fill();
+        if (!target || target.isGarbage || !target.isActive) return;
+        
+        // 创建毒云效果
+        const cloud = {
+            x: target.x,
+            y: target.y,
+            radius: 150,
+            damage: this.stats.damage * 0.5,
+            duration: 3.0,
+            timer: 0,
+            tickInterval: 0.5,
+            tickTimer: 0,
+            isGarbage: false,
+            source: this,
+            
+            update: function(dt) {
+                this.timer += dt;
+                this.tickTimer += dt;
+                
+                if (this.timer >= this.duration) {
+                    this.isGarbage = true;
+                    return;
                 }
-            };
-
-            // 添加到视觉效果列表
-            visualEffects.push(effect);
-        }
+                
+                // 更新位置跟随目标
+                if (target && !target.isGarbage && target.isActive) {
+                    this.x = target.x;
+                    this.y = target.y;
+                }
+                
+                // 造成伤害和减速
+                if (this.tickTimer >= this.tickInterval) {
+                    this.tickTimer = 0;
+                    
+                    // 对范围内的所有敌人造成伤害
+                    enemies.forEach(enemy => {
+                        if (enemy.isGarbage || !enemy.isActive) return;
+                        
+                        const dx = enemy.x - this.x;
+                        const dy = enemy.y - this.y;
+                        const distSq = dx * dx + dy * dy;
+                        
+                        if (distSq <= this.radius * this.radius) {
+                            // 造成伤害
+                            enemy.takeDamage(this.damage, this.source, false, true);
+                            
+                            // 应用减速效果
+                            if (enemy.applyStatusEffect) {
+                                enemy.applyStatusEffect('slow', {
+                                    factor: 0.5,
+                                    duration: 0.5,
+                                    isAuraEffect: true,
+                                    source: this.source
+                                });
+                            }
+                        }
+                    });
+                }
+            },
+            
+            draw: function(ctx) {
+                if (this.isGarbage) return;
+                
+                const screenPos = cameraManager.worldToScreen(this.x, this.y);
+                
+                // 绘制毒云
+                ctx.beginPath();
+                const gradient = ctx.createRadialGradient(
+                    screenPos.x, screenPos.y, 0,
+                    screenPos.x, screenPos.y, this.radius
+                );
+                
+                gradient.addColorStop(0, 'rgba(0, 255, 0, 0.3)');
+                gradient.addColorStop(1, 'rgba(0, 255, 0, 0)');
+                
+                ctx.fillStyle = gradient;
+                ctx.arc(screenPos.x, screenPos.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        };
+        
+        // 添加毒云效果
+        visualEffects.push(cloud);
     }
 
     /**

@@ -716,8 +716,39 @@ window.DebugPanel = {
             if (!window.player) return;
             
             Object.entries(statElements).forEach(([stat, info]) => {
-                const value = player.getStat(stat);
-                info.element.textContent = info.format(value);
+                let value;
+                if (stat === 'damageReductionPercent') {
+                    // 计算减伤百分比
+                    const armor = player.getStat('armor');
+                    value = 1 - 1 / (1 + armor / 100);
+                } else if (stat === 'speed') {
+                    // 这里用getCurrentSpeed而不是getStat
+                    value = player.getCurrentSpeed ? player.getCurrentSpeed() : player.getStat('speed');
+                } else {
+                    try {
+                        value = player.getStat(stat);
+                        if (value === undefined || value === null || isNaN(value)) {
+                            value = player.stats ? player.stats[stat] : 0;
+                        }
+                    } catch (e) {
+                        value = 0;
+                    }
+                }
+                // 格式化并显示值
+                const formatted = info.format(value);
+                info.element.textContent = formatted;
+                // 变色高亮逻辑
+                if (lastStatValues[stat] !== null && value !== lastStatValues[stat]) {
+                    if (value > lastStatValues[stat]) {
+                        info.element.style.color = '#4CAF50'; // 绿色
+                    } else {
+                        info.element.style.color = '#F44336'; // 红色
+                    }
+                    setTimeout(() => {
+                        info.element.style.color = 'white';
+                    }, 1000);
+                }
+                lastStatValues[stat] = value;
             });
         };
         
@@ -894,8 +925,10 @@ window.DebugPanel = {
                 if (stat === 'damageReductionPercent') {
                     // 计算减伤百分比
                     const armor = player.getStat('armor');
-                    // 公式：1-1/(1+armor/100)
                     value = 1 - 1 / (1 + armor / 100);
+                } else if (stat === 'speed') {
+                    // 这里用getCurrentSpeed而不是getStat
+                    value = player.getCurrentSpeed ? player.getCurrentSpeed() : player.getStat('speed');
                 } else {
                     try {
                         value = player.getStat(stat);
