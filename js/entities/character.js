@@ -49,62 +49,60 @@ class Character extends GameObject {
 
         // 对于减速效果，需要特殊处理
         if (type === 'slow') {
-            // 检查是否有减速免疫
             if (this.getStat && this.getStat('slowImmunity')) {
-                // 免疫所有减速，且如果已经有减速，立即移除
                 if (this.statusEffects.slow) {
                     delete this.statusEffects.slow;
                     this.speed = this.getStat('speed');
                 }
+                this._pendingNormalSlow = null;
                 return;
             }
-
-            // 检查是否有减速抗性
             let slowResistance = 0;
             if (this.getStat && typeof this.getStat('slowResistance') === 'number') {
                 slowResistance = this.getStat('slowResistance');
             }
-
-            // 应用减速抗性
             const actualSlowStrength = effectData.factor * (1 - slowResistance);
-            
-            // 获取当前基础速度
             const currentBaseSpeed = this.getStat('speed');
             
-            // 如果是光环效果
             if (effectData.isAuraEffect) {
-                // 保存当前非光环减速效果
-                const nonAuraSlow = this.statusEffects.slow && !this.statusEffects.slow.isAuraEffect ? 
-                    {...this.statusEffects.slow} : null;
-                
-                // 应用光环减速
+                // 进入毒圈时始终覆盖为光环减速，保存当前普通减速
+                if (this.statusEffects.slow && !this.statusEffects.slow.isAuraEffect) {
+                    this._pendingNormalSlow = { ...this.statusEffects.slow };
+                }
+                // 每次进入毒圈都强制覆盖光环减速，并刷新duration
                 this.statusEffects[type] = {
                     ...effectData,
                     factor: actualSlowStrength,
                     originalSpeed: currentBaseSpeed,
                     icon: '🐌',
-                    isAuraEffect: true
+                    isAuraEffect: true,
+                    duration: effectData.duration || 0.5 // 每帧都重置duration，防止被清理
                 };
-                
-                // 如果有非光环减速，叠加效果
-                if (nonAuraSlow) {
-                    this.speed = currentBaseSpeed * actualSlowStrength * nonAuraSlow.factor;
-                } else {
-                    this.speed = currentBaseSpeed * actualSlowStrength;
-                }
+                this.speed = currentBaseSpeed * actualSlowStrength;
                 return;
             }
             
-            // 对于非光环效果
-            if (!this.statusEffects.slow || 
-                !this.statusEffects.slow.isAuraEffect || 
-                actualSlowStrength < this.statusEffects.slow.factor) {
-                
-                // 保存原始速度
-                const originalSpeed = this.statusEffects.slow ? 
-                    this.statusEffects.slow.originalSpeed : 
-                    currentBaseSpeed;
-                
+            // 离开毒圈时恢复普通减速
+            if (effectData._restoreFromAura) {
+                if (this._pendingNormalSlow) {
+                    this.statusEffects.slow = { ...this._pendingNormalSlow };
+                    this.speed = currentBaseSpeed * this._pendingNormalSlow.factor;
+                } else {
+                    delete this.statusEffects.slow;
+                    this.speed = currentBaseSpeed;
+                }
+                this._pendingNormalSlow = null;
+                return;
+            }
+            
+            // 如果当前有光环slow，普通slow不生效
+            if (this.statusEffects.slow && this.statusEffects.slow.isAuraEffect && !effectData.isAuraEffect) {
+                return;
+            }
+            
+            // 应用普通减速效果
+            if (!this.statusEffects.slow || actualSlowStrength < this.statusEffects.slow.factor) {
+                const originalSpeed = this.statusEffects.slow ? this.statusEffects.slow.originalSpeed : currentBaseSpeed;
                 this.statusEffects[type] = {
                     ...effectData,
                     factor: actualSlowStrength,
@@ -112,13 +110,7 @@ class Character extends GameObject {
                     icon: '🐌',
                     isAuraEffect: false
                 };
-                
-                // 如果有光环减速，叠加效果
-                if (this.statusEffects.slow && this.statusEffects.slow.isAuraEffect) {
-                    this.speed = originalSpeed * actualSlowStrength * this.statusEffects.slow.factor;
-                } else {
-                    this.speed = originalSpeed * actualSlowStrength;
-                }
+                this.speed = originalSpeed * actualSlowStrength;
             }
             return;
         }
@@ -168,13 +160,15 @@ class Character extends GameObject {
                 this.speed = 0;
             }
         } else if (this.statusEffects.slow) {
-            // 更新减速效果
-            if (!this.statusEffects.slow.isAuraEffect) {
-                // 非光环减速效果才减少持续时间
-                this.statusEffects.slow.duration -= dt;
+            // 光环减速效果有特殊标记，不减少持续时间
+            if (this.statusEffects.slow.isAuraEffect) {
+                // 不做任何处理，让光环减速由施加者控制
+                return;
             }
             
-            if (this.statusEffects.slow.duration <= 0 && !this.statusEffects.slow.isAuraEffect) {
+            // 更新减速效果
+            this.statusEffects.slow.duration -= dt;
+            if (this.statusEffects.slow.duration <= 0) {
                 // 恢复原速
                 if (this.statusEffects.slow.originalSpeed !== undefined) {
                     this.speed = this.statusEffects.slow.originalSpeed;
@@ -184,7 +178,6 @@ class Character extends GameObject {
                 // 减速期间，始终使用最新的基础速度计算
                 const currentBaseSpeed = this.getStat('speed');
                 this.speed = currentBaseSpeed * this.statusEffects.slow.factor;
-                // 更新原始速度，确保下次恢复时使用正确的基础速度
                 this.statusEffects.slow.originalSpeed = currentBaseSpeed;
             }
         } else {
@@ -301,18 +294,16 @@ class Character extends GameObject {
      * @returns {number} 当前速度
      */
     getCurrentSpeed() {
-        // 获取基础速度
-        let speed = this.speed;
-        // 如果被减速，应用减速效果
-        if (this.statusEffects.slow) {
+        let speed = this.getStat('speed');
+        // 优先光环减速
+        if (this.statusEffects.slow && this.statusEffects.slow.isAuraEffect) {
+            speed *= this.statusEffects.slow.factor;
+        } else if (this.statusEffects.slow) {
             speed *= this.statusEffects.slow.factor;
         }
-
-        // 如果被眩晕，速度为0
         if (this.isStunned()) {
             speed = 0;
         }
-
         return speed;
     }
 

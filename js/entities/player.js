@@ -87,9 +87,11 @@ class Player extends Character {
 
         // 更新减速debuff持续时间
         if (this.statusEffects && this.statusEffects.slow) {
-            this.statusEffects.slow.duration -= dt;
-            if (this.statusEffects.slow.duration <= 0) {
-                delete this.statusEffects.slow;
+            if (!this.statusEffects.slow.isAuraEffect) {
+                this.statusEffects.slow.duration -= dt;
+                if (this.statusEffects.slow.duration <= 0) {
+                    delete this.statusEffects.slow;
+                }
             }
         }
     }
@@ -100,44 +102,27 @@ class Player extends Character {
      * @param {Object} keys - 按键状态
      */
     handleMovement(dt, keys) {
-        // 如果被眩晕，不移动
         if (this.isStunned()) return;
-
-        // 计算移动方向
         let dx = 0;
         let dy = 0;
-
-        // 水平移动
         if (keys['a'] || keys['arrowleft']) dx -= 1;
         if (keys['d'] || keys['arrowright']) dx += 1;
-
-        // 垂直移动
         if (keys['w'] || keys['arrowup']) dy -= 1;
         if (keys['s'] || keys['arrowdown']) dy += 1;
-
-        // 如果有移动，更新最后移动方向
         if (dx !== 0 || dy !== 0) {
-            // 归一化方向
             const length = Math.sqrt(dx * dx + dy * dy);
             dx /= length;
             dy /= length;
-
-            // 更新最后移动方向
             this.lastMoveDirection.x = dx;
             this.lastMoveDirection.y = dy;
-
-            // 获取当前速度
             const currentSpeed = this.getCurrentSpeed();
-
-            // 计算新位置
             let newX = this.x + dx * currentSpeed * dt;
             let newY = this.y + dy * currentSpeed * dt;
-            
-            // 不再限制玩家移动范围，允许无限大地图
-
-            // 更新位置
             this.x = newX;
             this.y = newY;
+        } else {
+            // 松开所有方向键时，立即停止移动
+            // 不做任何位置更新
         }
     }
 

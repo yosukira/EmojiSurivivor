@@ -672,6 +672,7 @@ window.DebugPanel = {
         
         // 创建所有属性显示元素
         const statElements = {};
+        const lastStatValues = {};
         statsItems.forEach(item => {
             const statItem = document.createElement('div');
             statItem.style.display = 'flex';

@@ -218,58 +218,96 @@ class Enemy extends Character {
         
         // 地狱犬冲刺
         if (this.type && this.type.canDash) {
-            // 冲刺冷却时间
-            this.dashCooldownTime = 3.0;
+            // dashCooldown每帧递减
+            if (this.dashCooldown > 0) {
+                this.dashCooldown -= dt;
+                if (this.dashCooldown < 0) this.dashCooldown = 0;
+            }
+            // 狗的AI状态
+            if (!this._dogState) {
+                this._dogState = {
+                    angle: Math.random() * Math.PI * 2, // 绕圈角度
+                    mode: 'approach', // 初始状态改为approach
+                    stuckTimer: 0,
+                    circleReady: false,
+                    lastX: this.x,
+                    lastY: this.y
+                };
+            }
+            // 目标丢失时自动恢复AI状态
+            if (!this.target) {
+                this._dogState.mode = 'approach';
+                this._dogState.stuckTimer = 0;
+                this._dogState.lastX = this.x;
+                this._dogState.lastY = this.y;
+                this._dogState.circleReady = false;
+                return;
+            }
             const dashRange = (this.dashSpeed || 3.75) * (this.dashDuration || 1.2) * 0.7 * 60;
-            const distSq = this.getDistanceSquared(this.target);
+            const safeDistance = dashRange * 0.6; // 降低安全距离
+            const dx = this.target.x - this.x;
+            const dy = this.target.y - this.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            // 状态切换
+            if (dist < safeDistance * 0.7) { // 降低离开阈值
+                this._dogState.mode = 'leave';
+                this._dogState.circleReady = false;
+            } else if (dist > safeDistance * 1.3) { // 提高接近阈值
+                this._dogState.mode = 'approach';
+                this._dogState.circleReady = false;
+            } else {
+                this._dogState.mode = 'circle';
+            }
+            // 行为
             if (!this.isDashing) {
-                const dx = this.target.x - this.x;
-                const dy = this.target.y - this.y;
-                const dist = Math.sqrt(distSq);
-                const safeDistance = dashRange * 0.8; // 安全距离为冲刺范围的80%
-                
-                // 记录上一次位置
-                if (!this._lastPos) this._lastPos = {x: this.x, y: this.y, t: 0};
-                
-                if (dist > 0) {
-                    if (distSq < safeDistance * safeDistance * 0.9) {
-                        // 太近，后退
-                        this.x -= (dx / dist) * this.getCurrentSpeed() * dt;
-                        this.y -= (dy / dist) * this.getCurrentSpeed() * dt;
-                    } else if (distSq > safeDistance * safeDistance * 1.1) {
-                        // 太远，接近
-                        this.x += (dx / dist) * this.getCurrentSpeed() * dt;
-                        this.y += (dy / dist) * this.getCurrentSpeed() * dt;
+                if (this._dogState.mode === 'leave') {
+                    this.x -= (dx / dist) * this.getCurrentSpeed() * dt;
+                    this.y -= (dy / dist) * this.getCurrentSpeed() * dt;
+                    this._dogState.circleReady = false;
+                } else if (this._dogState.mode === 'approach') {
+                    this.x += (dx / dist) * this.getCurrentSpeed() * dt;
+                    this.y += (dy / dist) * this.getCurrentSpeed() * dt;
+                    this._dogState.circleReady = false;
+                } else {
+                    // 转圈前先平滑移动到圆周边缘
+                    if (!this._dogState.circleReady) {
+                        const toEdge = safeDistance - dist;
+                        if (Math.abs(toEdge) > 2) {
+                            this.x += (dx / dist) * Math.min(Math.abs(toEdge), this.getCurrentSpeed() * dt) * Math.sign(toEdge);
+                            this.y += (dy / dist) * Math.min(Math.abs(toEdge), this.getCurrentSpeed() * dt) * Math.sign(toEdge);
+                        } else {
+                            this._dogState.circleReady = true;
+                            this._dogState.angle = Math.atan2(this.y - this.target.y, this.x - this.target.x);
+                        }
                     } else {
-                        // 在安全距离附近，绕圈
-                        let angle = Math.atan2(dy, dx) + Math.PI / 2;
-                        // 添加随机扰动，使移动更自然
-                        angle += (Math.random() - 0.5) * 0.3;
-                        this.x += Math.cos(angle) * this.getCurrentSpeed() * dt;
-                        this.y += Math.sin(angle) * this.getCurrentSpeed() * dt;
+                        this._dogState.angle += 1.5 * dt;
+                        this.x = this.target.x + Math.cos(this._dogState.angle) * safeDistance;
+                        this.y = this.target.y + Math.sin(this._dogState.angle) * safeDistance;
                     }
                 }
-                
-                // 检查是否需要强制移动
-                const moved = Math.abs(this.x - this._lastPos.x) + Math.abs(this.y - this._lastPos.y);
-                this._lastPos.t += dt;
-                
-                // 每帧都更新_lastPos，防止卡住
-                if (this._lastPos.t > 0.5) {
-                    if (moved < 1) {
-                        this.x += (Math.random() - 0.5) * 12;
-                        this.y += (Math.random() - 0.5) * 12;
-                    }
-                    this._lastPos = {x: this.x, y: this.y, t: 0};
+                // 防止卡住
+                if (!this._dogState.lastX) {
+                    this._dogState.lastX = this.x;
+                    this._dogState.lastY = this.y;
                 }
-                
+                const moved = Math.abs(this.x - this._dogState.lastX) + Math.abs(this.y - this._dogState.lastY);
+                if (moved < 0.5) {
+                    this._dogState.stuckTimer += dt;
+                    if (this._dogState.stuckTimer > 0.5) {
+                        this.x += (Math.random() - 0.5) * 16;
+                        this.y += (Math.random() - 0.5) * 16;
+                        this._dogState.stuckTimer = 0;
+                        this._dogState.circleReady = false;
+                        this._dogState.mode = 'approach'; // 卡住时切换到approach状态
+                    }
+                } else {
+                    this._dogState.stuckTimer = 0;
+                }
+                this._dogState.lastX = this.x;
+                this._dogState.lastY = this.y;
                 // 冲刺判定
-                if (this.dashCooldown <= 0) {
-                    // 当距离合适且不在冲刺状态时，可以冲刺
-                    if (distSq >= safeDistance * safeDistance * 1.2 && 
-                        distSq <= safeDistance * safeDistance * 2.0) {
-                        this.startDash();
-                    }
+                if (this.dashCooldown <= 0 && dist > safeDistance * 0.8 && dist < safeDistance * 2.5) { // 放宽冲刺条件
+                    this.startDash();
                 }
             }
         }
@@ -371,13 +409,18 @@ class Enemy extends Character {
      * @param {number} dt - 时间增量
      */
     updateDash(dt) {
-        // 更新冲刺计时器
         this.dashTimer += dt;
-        
-        // 如果冲刺结束，重置状态
         if (this.dashTimer >= this.dashDuration) {
             this.isDashing = false;
             this.dashCooldown = this.dashCooldownTime;
+            // 冲刺结束后彻底重置AI状态，防止卡住
+            if (this._dogState) {
+                this._dogState.mode = 'circle';
+                this._dogState.stuckTimer = 0;
+                this._dogState.lastX = this.x;
+                this._dogState.lastY = this.y;
+                this._dogState.circleReady = false;
+            }
             return;
         }
         
@@ -1439,8 +1482,10 @@ class BossEnemy extends Enemy {
             this.poisonAuraDamageAmount = 3; // 每次伤害量
             this.poisonAuraDamageInterval = 1.0; // 伤害间隔（秒）
             this.poisonAuraDamageTimer = 0; // 伤害计时器
-
             this.poisonAuraSlowFactor = 0.5; 
+            
+            // 添加一个标记，用来跟踪玩家是否在毒圈内
+            this.playerInPoisonAura = false;
             this.toxicPoolWarningTime = this.type.toxicPoolWarningTime || 1.5; 
             this.toxicPoolDuration = this.type.toxicPoolDuration || 5.0; // 特殊攻击：毒池持续时间
             this.toxicPoolDamagePerSecond = this.type.toxicPoolDamagePerSecond || 10; // 特殊攻击：毒池每秒伤害
@@ -1513,28 +1558,60 @@ class BossEnemy extends Enemy {
                 const dx = target.x - this.x;
                 const dy = target.y - this.y;
                 const distSq = dx * dx + dy * dy;
-
-                if (distSq <= this.poisonAuraRadius * this.poisonAuraRadius) {
-                    // 强制应用光环减速，覆盖普通减速
-                    if (typeof target.applyStatusEffect === 'function') {
-                        target.applyStatusEffect('slow', {
+                
+                // 检查玩家是否在毒圈内
+                const inPoisonAura = distSq <= this.poisonAuraRadius * this.poisonAuraRadius;
+                
+                if (inPoisonAura) {
+                    // 玩家在毒圈内
+                    
+                    // 如果刚进入毒圈
+                    if (!this.playerInPoisonAura) {
+                        this.playerInPoisonAura = true;
+                        
+                        // 保存当前的普通减速效果（如果有）
+                        if (target.statusEffects && target.statusEffects.slow && !target.statusEffects.slow.isAuraEffect) {
+                            target._pendingNormalSlow = { ...target.statusEffects.slow };
+                        }
+                        
+                        // 应用光环减速
+                        const baseSpeed = target.getStat('speed');
+                        // 直接设置减速效果，而不是通过applyStatusEffect
+                        target.statusEffects.slow = {
                             factor: this.poisonAuraSlowFactor,
-                            duration: 0.5,
+                            duration: 999, // 长时间持续，不会自动消失
+                            originalSpeed: baseSpeed,
                             source: this,
-                            isAuraEffect: true
-                        });
+                            isAuraEffect: true,
+                            icon: '🐌'
+                        };
+                        target.speed = baseSpeed * this.poisonAuraSlowFactor;
                     }
+                    
                     // 周期性伤害
                     this.poisonAuraDamageTimer += dt;
                     if (this.poisonAuraDamageTimer >= this.poisonAuraDamageInterval) {
                         target.takeDamage(this.poisonAuraDamageAmount, this, false, true);
                         this.poisonAuraDamageTimer -= this.poisonAuraDamageInterval;
                     }
-                } else if (target.statusEffects && target.statusEffects.slow && target.statusEffects.slow.isAuraEffect) {
-                    // 离开毒圈时移除光环减速，恢复普通减速（如果有）
-                    delete target.statusEffects.slow;
-                    // 检查是否有普通减速需要恢复
-                    // 这里可以根据需要恢复原速或普通减速
+                } else if (this.playerInPoisonAura) {
+                    // 玩家刚离开毒圈
+                    this.playerInPoisonAura = false;
+                    
+                    // 移除光环减速
+                    if (target.statusEffects && target.statusEffects.slow && target.statusEffects.slow.isAuraEffect) {
+                        delete target.statusEffects.slow;
+                        
+                        // 恢复普通减速（如果有）
+                        if (target._pendingNormalSlow) {
+                            target.statusEffects.slow = { ...target._pendingNormalSlow };
+                            target.speed = target.getStat('speed') * target._pendingNormalSlow.factor;
+                            delete target._pendingNormalSlow;
+                        } else {
+                            // 没有普通减速，恢复原速
+                            target.speed = target.getStat('speed');
+                        }
+                    }
                 }
             }
         } else { // 其他Boss的普通攻击逻辑
