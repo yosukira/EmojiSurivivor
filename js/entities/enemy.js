@@ -319,17 +319,20 @@ class Enemy extends Character {
                     this.beamCooldown -= dt;
                 } else if (this.beamWarningTimer <= 0 && this.target && this.getDistanceSquared(this.target) < 500*500) { // 索敌范围提升到500
                     this.beamWarningTimer = 0.5; // 0.5秒警告
+                    // 在警告阶段就确定光束方向，不再跟踪玩家
+                    if (this.target) {
+                        const dx = this.target.x - this.x;
+                        const dy = this.target.y - this.y;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        this.beamDirection = dist > 0 ? { x: dx / dist, y: dy / dist } : { x: 0, y: 1 };
+                    }
                 }
                 if (this.beamWarningTimer > 0) {
                     this.beamWarningTimer -= dt;
                     if (this.beamWarningTimer <= 0) {
                         this.isShootingBeam = true;
                         this.beamTimer = 0;
-                        // 计算光束方向
-                        const dx = this.target.x - this.x;
-                        const dy = this.target.y - this.y;
-                        const dist = Math.sqrt(dx * dx + dy * dy);
-                        this.beamDirection = dist > 0 ? { x: dx / dist, y: dy / dist } : { x: 0, y: 1 };
+                        // 光束方向已在警告阶段确定，不再重新计算
                     }
                 }
             } else {
@@ -724,6 +727,24 @@ class Enemy extends Character {
      * @param {GameObject} killer - 击杀者
      */
     onDeath(killer) {
+        // 检查是否被泡泡困住，如果是，触发泡泡爆炸
+        if (this.statusEffects && this.statusEffects.bubbleTrap && this.statusEffects.bubbleTrap.bubble) {
+            // 获取泡泡实例并触发爆炸
+            const bubble = this.statusEffects.bubbleTrap.bubble;
+            if (bubble && typeof bubble.burst === 'function') {
+                // 触发泡泡爆炸
+                bubble.burst();
+            }
+            // 移除困住效果引用，防止死亡后的引用问题
+            delete this.statusEffects.bubbleTrap;
+            
+            // 恢复原始的updateMovement方法
+            if (this._originalUpdateMovement) {
+                this.updateMovement = this._originalUpdateMovement;
+                delete this._originalUpdateMovement;
+            }
+        }
+        
         // 调用父类死亡处理
         super.onDeath(killer);
         
@@ -978,14 +999,12 @@ class Enemy extends Character {
             ctx.beginPath();
             ctx.arc(screenPos.x, screenPos.y, this.size * 0.7, 0, Math.PI * 2);
             ctx.fill();
-            ctx.restore();
             
-            // 添加火焰小图标
-            ctx.save();
-            ctx.globalAlpha = 0.7;
-            ctx.font = `${GAME_FONT_SIZE * 0.5}px Arial`;
+            // 添加火焰小图标 - 提高显示位置和透明度
+            ctx.globalAlpha = 0.9;
+            ctx.font = `${GAME_FONT_SIZE * 0.6}px Arial`;
             ctx.fillStyle = 'orange';
-            ctx.fillText('🔥', screenPos.x + GAME_FONT_SIZE * 0.5, screenPos.y - GAME_FONT_SIZE * 0.3);
+            ctx.fillText('🔥', screenPos.x, screenPos.y - this.size * 0.5);
             ctx.restore();
         }
 
@@ -1105,27 +1124,49 @@ class Enemy extends Character {
         }
         // 堕落天使光束
         if (this.type && this.type.canShootBeam && this.isShootingBeam) {
-            const screenPos = cameraManager.worldToScreen(this.x, this.y);
-            const endX = this.x + this.beamDirection.x * 1000;
-            const endY = this.y + this.beamDirection.y * 1000;
-            const endScreen = cameraManager.worldToScreen(endX, endY);
-            ctx.save();
-            ctx.strokeStyle = 'rgba(255,0,0,0.8)';
-            ctx.lineWidth = this.beamWidth * cameraManager.zoom;
-            ctx.beginPath();
-            ctx.moveTo(screenPos.x, screenPos.y);
-            ctx.lineTo(endScreen.x, endScreen.y);
-            ctx.stroke();
-            ctx.restore();
-            // 判定玩家是否被击中（点到线段距离）
-            if (this.target && this.target instanceof Player) {
-                const px = this.target.x, py = this.target.y;
-                const distSq = pointToLineDistanceSq(px, py, this.x, this.y, endX, endY);
-                if (distSq <= (this.beamWidth * this.beamWidth / 4)) {
-                    // 只要无敌时间<=0就持续造成伤害
-                    if (this.target.invincibleTime <= 0) {
-                        this.target.takeDamage(this.beamDamage, this, false, false);
-                        this.target.invincibleTime = 0.5; // 0.5秒无敌
+            // 绘制警告线
+            if (this.beamWarningTimer > 0) {
+                // 使用已经确定的光束方向绘制警告线
+                const endX = this.x + this.beamDirection.x * 1000;
+                const endY = this.y + this.beamDirection.y * 1000;
+                const startScreen = cameraManager.worldToScreen(this.x, this.y);
+                const endScreen = cameraManager.worldToScreen(endX, endY);
+                
+                ctx.save();
+                ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)';
+                ctx.lineWidth = this.beamWidth * cameraManager.zoom * 0.5;
+                ctx.beginPath();
+                ctx.moveTo(startScreen.x, startScreen.y);
+                ctx.lineTo(endScreen.x, endScreen.y);
+                ctx.stroke();
+                ctx.restore();
+            }
+            
+            // 绘制光束
+            if (this.isShootingBeam) {
+                const screenPos = cameraManager.worldToScreen(this.x, this.y);
+                const endX = this.x + this.beamDirection.x * 1000;
+                const endY = this.y + this.beamDirection.y * 1000;
+                const endScreen = cameraManager.worldToScreen(endX, endY);
+                ctx.save();
+                ctx.strokeStyle = 'rgba(255,0,0,0.8)';
+                ctx.lineWidth = this.beamWidth * cameraManager.zoom;
+                ctx.beginPath();
+                ctx.moveTo(screenPos.x, screenPos.y);
+                ctx.lineTo(endScreen.x, endScreen.y);
+                ctx.stroke();
+                ctx.restore();
+                
+                // 判定玩家是否被击中（点到线段距离）
+                if (this.target && this.target instanceof Player) {
+                    const px = this.target.x, py = this.target.y;
+                    const distSq = pointToLineDistanceSq(px, py, this.x, this.y, endX, endY);
+                    if (distSq <= (this.beamWidth * this.beamWidth / 4)) {
+                        // 只要无敌时间<=0就持续造成伤害
+                        if (this.target.invincibleTime <= 0) {
+                            this.target.takeDamage(this.beamDamage, this, false, false);
+                            this.target.invincibleTime = 0.5; // 0.5秒无敌
+                        }
                     }
                 }
             }
@@ -1330,18 +1371,7 @@ class Enemy extends Character {
         }
 
         if (this.health <= 0) {
-            // 检查是否被泡泡困住，如果是，触发泡泡爆炸
-            if (this.statusEffects && this.statusEffects.bubbleTrap && this.statusEffects.bubbleTrap.bubble) {
-                // 获取泡泡实例并触发爆炸
-                const bubble = this.statusEffects.bubbleTrap.bubble;
-                if (bubble && typeof bubble.burst === 'function') {
-                    // 触发泡泡爆炸
-                    bubble.burst();
-                }
-                // 移除困住效果引用，防止死亡后的引用问题
-                delete this.statusEffects.bubbleTrap;
-            }
-            
+            // onDeath方法现在会处理泡泡效果，不需要在这里重复处理
             this.onDeath(source); // killer 应该是 source
             return true;
         }

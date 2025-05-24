@@ -328,7 +328,7 @@ const ENEMY_TYPES = [
         // 死亡时爆炸
         explodeOnDeath: true,
         explodeRadius: 150, // 爆炸范围
-        explodeDamage: 20 // 爆炸伤害
+        explodeDamage: 40 // 爆炸伤害提高到40
     }
 ];
 

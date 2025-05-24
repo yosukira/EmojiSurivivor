@@ -984,14 +984,27 @@ class Player extends Character {
      * @param {Object} source - 来源
      */
     applySlowEffect(strength, duration, source) {
-        if (this.getStat && this.getStat('slowImmunity')) return;
+        // 如果有减速免疫，直接返回且清除已有的减速效果和图标
+        if (this.getStat && this.getStat('slowImmunity')) {
+            // 如果已有减速效果，立即清除
+            if (this.statusEffects.slow) {
+                delete this.statusEffects.slow;
+                // 恢复原速度
+                this.speed = this.getStat('speed');
+            }
+            return;
+        }
+        
         // 如果当前有光环slow，普通slow不生效
         if (this.statusEffects.slow && this.statusEffects.slow.isAuraEffect) return;
+        
         let slowResistance = 0;
         if (this.getStat && typeof this.getStat('slowResistance') === 'number') {
             slowResistance = this.getStat('slowResistance');
         }
+        
         const actualSlowStrength = strength * (1 - slowResistance);
+        
         // 每次都用最新的getStat('speed')赋值originalSpeed
         this.statusEffects.slow = {
             factor: 1 - actualSlowStrength,
@@ -999,7 +1012,7 @@ class Player extends Character {
             strength: actualSlowStrength,
             originalSpeed: this.getStat('speed'),
             source: source,
-            icon: '��'
+            icon: '🐌'
         };
     }
 

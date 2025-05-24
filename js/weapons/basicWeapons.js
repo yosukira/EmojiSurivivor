@@ -476,27 +476,35 @@ class WhipWeapon extends Weapon {
         // 计算方向
         const dirX = Math.cos(angle);
         const dirY = Math.sin(angle);
-        // 计算中心点
-        const centerX = owner.x + dirX * length / 2;
-        const centerY = owner.y + dirY * length / 2;
-        // 计算垂直方向
-        const perpX = -dirY;
-        const perpY = dirX;
-        // 计算四个角点
+        
+        // 计算起点
+        const startX = owner.x;
+        const startY = owner.y;
+        
+        // 创建击打点
+        const hitX = startX + dirX * length;
+        const hitY = startY + dirY * length;
+        
+        // 创建碰撞点数组
         const points = [
-            { x: centerX - dirX * length / 2 - perpX * width / 2, y: centerY - dirY * length / 2 - perpY * width / 2 },
-            { x: centerX + dirX * length / 2 - perpX * width / 2, y: centerY + dirY * length / 2 - perpY * width / 2 },
-            { x: centerX + dirX * length / 2 + perpX * width / 2, y: centerY + dirY * length / 2 + perpY * width / 2 },
-            { x: centerX - dirX * length / 2 + perpX * width / 2, y: centerY - dirY * length / 2 + perpY * width / 2 }
+            { x: startX, y: startY },
+            { x: hitX, y: hitY }
         ];
+        
         // 创建命中框
         const hitbox = {
             points: points,
+            x: startX,
+            y: startY,
+            width: width,
+            length: length,
+            angle: angle,
             damage: damage,
             duration: duration,
             lifetime: 0,
-            hitEnemies: new Set(),
+            hitTargets: new Set(),
             isGarbage: false,
+            
             update: function(dt) {
                 // 更新生命周期
                 this.lifetime += dt;
@@ -505,33 +513,30 @@ class WhipWeapon extends Weapon {
                     this.isGarbage = true;
                     return;
                 }
-                // 检查与敌人的碰撞
+                
+                // 检查碰撞
                 enemies.forEach(enemy => {
-                    // 跳过已命中的敌人
-                    if (enemy.isGarbage || !enemy.isActive || this.hitEnemies.has(enemy)) return;
-                    // 检查碰撞
-                    if (this.checkCollision(enemy)) {
-                        // 造成伤害
-                        enemy.takeDamage(this.damage, owner);
+                    // 跳过已经命中的敌人或已经标记为垃圾的敌人
+                    if (this.hitTargets.has(enemy) || enemy.isGarbage || !enemy.isActive) return;
+                    
+                    // 计算鞭子到敌人的距离
+                    const lineSegDistSq = pointToLineDistanceSq(
+                        enemy.x, enemy.y,
+                        this.points[0].x, this.points[0].y,
+                        this.points[1].x, this.points[1].y
+                    );
+                    
+                    // 如果距离小于宽度的一半，造成伤害
+                    if (lineSegDistSq <= (this.width * this.width) / 4) {
+                        // 敌人受伤
+                        enemy.takeDamage(this.damage, player);
+                        
                         // 添加到已命中列表
-                        this.hitEnemies.add(enemy);
+                        this.hitTargets.add(enemy);
                     }
                 });
             },
-            checkCollision: function(enemy) {
-                // 检查点是否在多边形内
-                return this.isPointInPolygon(enemy.x, enemy.y, this.points);
-            },
-            isPointInPolygon: function(x, y, polygon) {
-                let inside = false;
-                for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-                    const xi = polygon[i].x, yi = polygon[i].y;
-                    const xj = polygon[j].x, yj = polygon[j].y;
-                    const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
-                    if (intersect) inside = !inside;
-                }
-                return inside;
-            },
+            
             draw: function(ctx) {
                 if (this.isGarbage) return;
                 
@@ -614,6 +619,7 @@ class WhipWeapon extends Weapon {
         };
         // 添加到命中框列表
         this.hitboxes.push(hitbox);
+        
         // 创建视觉效果
         const effect = {
             x: owner.x,
@@ -713,8 +719,13 @@ class WhipWeapon extends Weapon {
                 ctx.restore();
             }
         };
-        // 添加到视觉效果列表
-        visualEffects.push(effect);
+        
+        // 添加到视觉效果列表 - 确保visualEffects是全局变量并且存在
+        if (typeof visualEffects !== 'undefined') {
+            visualEffects.push(effect);
+        } else {
+            console.warn('visualEffects is not defined, cannot add whip visual effect');
+        }
     }
 
     /**

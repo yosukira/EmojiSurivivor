@@ -205,10 +205,13 @@ class BubbleProjectile extends Projectile {
     trapEnemy(enemy) {
         // Boss免疫泡泡控制，但依然显示动画和造成伤害
         if (enemy.isBoss || (enemy.type && enemy.type.isBoss)) {
-            this.trapped = enemy;
+            this.hitTargets.add(enemy); // 添加到已命中列表，防止重复命中
             enemy.takeDamage(this.damage, this.owner);
+            // 不设置this.trapped，因为不想将boss困住
+            this.burst(); // 直接爆炸
             return;
         }
+        
         // 造成伤害
         enemy.takeDamage(this.damage, this.owner);
         
@@ -231,8 +234,18 @@ class BubbleProjectile extends Projectile {
             bubble: this // 保存对泡泡实例的引用
         };
         
-        // 几乎停止移动
-        enemy.speed *= 0.05;
+        // 几乎停止移动（改为完全停止）
+        enemy.speed = 0;
+        
+        // 保存敌人当前的updateMovement方法，以便后续恢复
+        if (!enemy._originalUpdateMovement && enemy.updateMovement) {
+            enemy._originalUpdateMovement = enemy.updateMovement;
+            // 覆盖敌人的updateMovement方法，防止它移动
+            enemy.updateMovement = function(dt) {
+                // 被困住时不移动
+                return;
+            };
+        }
     }
 
     /**
@@ -253,6 +266,12 @@ class BubbleProjectile extends Projectile {
                 this.trapped.speed = this.trapped.statusEffects.bubbleTrap.originalSpeed;
                 // 删除困住效果
                 delete this.trapped.statusEffects.bubbleTrap;
+                
+                // 恢复原始的updateMovement方法
+                if (this.trapped._originalUpdateMovement) {
+                    this.trapped.updateMovement = this.trapped._originalUpdateMovement;
+                    delete this.trapped._originalUpdateMovement;
+                }
             }
             
             // 再次造成伤害
