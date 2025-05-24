@@ -501,231 +501,129 @@ class WhipWeapon extends Weapon {
             angle: angle,
             damage: damage,
             duration: duration,
-            lifetime: 0,
-            hitTargets: new Set(),
+            timer: 0,
+            hitEnemies: new Set(),
             isGarbage: false,
             
             update: function(dt) {
-                // 更新生命周期
-                this.lifetime += dt;
-                // 如果生命周期结束，标记为垃圾
-                if (this.lifetime >= this.duration) {
+                this.timer += dt;
+                if (this.timer >= this.duration) {
                     this.isGarbage = true;
                     return;
                 }
                 
-                // 检查碰撞
+                // 击中检测
                 enemies.forEach(enemy => {
-                    // 跳过已经命中的敌人或已经标记为垃圾的敌人
-                    if (this.hitTargets.has(enemy) || enemy.isGarbage || !enemy.isActive) return;
+                    if (enemy.isGarbage || !enemy.isActive || this.hitEnemies.has(enemy.id)) return;
                     
                     // 计算鞭子到敌人的距离
-                    const lineSegDistSq = pointToLineDistanceSq(
+                    const dist = pointToLineDistanceSq(
                         enemy.x, enemy.y,
                         this.points[0].x, this.points[0].y,
                         this.points[1].x, this.points[1].y
                     );
                     
-                    // 如果距离小于宽度的一半，造成伤害
-                    if (lineSegDistSq <= (this.width * this.width) / 4) {
-                        // 敌人受伤
-                        enemy.takeDamage(this.damage, player);
+                    if (dist <= (this.width * this.width) / 4 + (enemy.size * enemy.size) / 4) {
+                        // 击中敌人
+                        enemy.takeDamage(this.damage, owner);
                         
-                        // 添加到已命中列表
-                        this.hitTargets.add(enemy);
+                        // 记录已击中的敌人
+                        this.hitEnemies.add(enemy.id);
                     }
                 });
+            },
+            
+            // 添加空的draw方法以避免TypeError
+            draw: function(ctx) {
+                // 空方法，只是为了避免错误
+            }
+        };
+        
+        // 将碰撞箱加入列表
+        this.hitboxes.push(hitbox);
+        
+        // 创建视觉效果
+        const whipEffect = {
+            x: startX,
+            y: startY,
+            targetX: hitX,
+            targetY: hitY,
+            width: width,
+            angle: angle,
+            duration: 0.3, // 效果持续0.3秒
+            timer: 0,
+            progress: 0,
+            isGarbage: false,
+            
+            update: function(dt) {
+                this.timer += dt;
+                
+                // 计算动画进度 (0-1)
+                this.progress = Math.min(1.0, this.timer / this.duration);
+                
+                if (this.timer >= this.duration) {
+                    this.isGarbage = true;
+                }
             },
             
             draw: function(ctx) {
                 if (this.isGarbage) return;
                 
-                // 计算透明度
-                const alpha = 0.8 * (1 - this.lifetime / this.duration);
-                
                 // 获取屏幕坐标
-                const screenPos = cameraManager.worldToScreen(this.x, this.y);
+                const startPos = cameraManager.worldToScreen(this.x, this.y);
+                const endPos = cameraManager.worldToScreen(this.targetX, this.targetY);
                 
-                // 保存上下文
+                // 使用平滑的缓动函数计算当前进度
+                let animProgress;
+                if (this.progress < 0.5) {
+                    // 加速阶段 (0-0.5)
+                    animProgress = 2 * this.progress * this.progress;
+                } else {
+                    // 减速阶段 (0.5-1.0)
+                    const t = this.progress * 2 - 1;
+                    animProgress = 1 - (1 - t) * (1 - t);
+                }
+                
+                // 计算当前位置
+                const currentX = startPos.x + (endPos.x - startPos.x) * animProgress;
+                const currentY = startPos.y + (endPos.y - startPos.y) * animProgress;
+                
+                // 绘制鞭子线条
                 ctx.save();
                 
-                // 平移到玩家位置
-                ctx.translate(screenPos.x, screenPos.y);
+                // 设置线条样式
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = this.width * (1 - this.progress * 0.3); // 线条宽度随时间略微变细
+                ctx.lineCap = 'round';
                 
-                // 旋转
-                ctx.rotate(this.angle + Math.PI / 2);
-
-                // 使用更细的鞭子线条
-                ctx.strokeStyle = `rgba(240, 240, 240, ${alpha})`;
-                
-                // 调整lineWidth更细
-                const baseLineWidth = Math.max(1, this.width * cameraManager.zoom * 0.1);
-                const progress = this.lifetime / this.duration;
-                
-                // 更平滑的动画效果
-                const animProgress = progress < 0.5 ? progress * 2 : 1 - (progress - 0.5) * 2;
-                
-                // 向外延伸的动画效果
-                const animLength = this.length * animProgress;
-                
-                // 设置线宽
-                ctx.lineWidth = baseLineWidth;
-                
-                // 添加鞭子尖端小颗粒特效
-                const particleCount = 5;
-                const particleSize = baseLineWidth * 0.8;
-                
-                // 主要鞭子线条 - 使用曲线制造鞭子甩动效果
+                // 绘制主线条
                 ctx.beginPath();
-                
-                // 从玩家位置开始
-                ctx.moveTo(0, 0);
-                
-                // 控制点参数，调整曲线形状
-                const controlPointDist = animLength * 0.8;
-                const controlY = this.length * 0.2 * Math.sin(progress * Math.PI);
-                
-                // 更细长的鞭子曲线
-                ctx.quadraticCurveTo(controlPointDist * 0.5, controlY, animLength, 0);
-                
+                ctx.moveTo(startPos.x, startPos.y);
+                ctx.lineTo(currentX, currentY);
                 ctx.stroke();
                 
-                // 添加尖端光效
-                if (animProgress > 0.7) {
-                    const tipAlpha = (animProgress - 0.7) * 3.3 * alpha;
-                    ctx.fillStyle = `rgba(255, 255, 255, ${tipAlpha})`;
-                    ctx.beginPath();
-                    ctx.arc(animLength, 0, particleSize * 2, 0, Math.PI * 2);
-                    ctx.fill();
-                }
+                // 在鞭子头部添加光效
+                const glowSize = this.width * 0.8;
+                const gradient = ctx.createRadialGradient(
+                    currentX, currentY, 0,
+                    currentX, currentY, glowSize
+                );
+                gradient.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
+                gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
                 
-                // 沿鞭子添加小颗粒
-                ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.8})`;
-                for (let i = 0; i < particleCount; i++) {
-                    const particlePos = (i + 1) / (particleCount + 1) * animLength;
-                    // 计算颗粒在曲线上的位置
-                    const t = (i + 1) / (particleCount + 1);
-                    const particleX = t * animLength;
-                    const particleY = (1 - t) * t * 4 * controlY;
-                    
-                    ctx.beginPath();
-                    ctx.arc(particleX, particleY, particleSize, 0, Math.PI * 2);
-                    ctx.fill();
-                }
-                
-                // 恢复上下文
-                ctx.restore();
-            }
-        };
-        // 添加到命中框列表
-        this.hitboxes.push(hitbox);
-        
-        // 创建视觉效果
-        const effect = {
-            x: owner.x,
-            y: owner.y,
-            angle: angle,
-            length: length,
-            width: width,
-            duration: duration,
-            lifetime: 0,
-            isGarbage: false,
-            update: function(dt) {
-                // 更新生命周期
-                this.lifetime += dt;
-                // 如果生命周期结束，标记为垃圾
-                if (this.lifetime >= this.duration) {
-                    this.isGarbage = true;
-                    return;
-                }
-            },
-            draw: function(ctx) {
-                if (this.isGarbage) return;
-                
-                // 计算透明度
-                const alpha = 0.8 * (1 - this.lifetime / this.duration);
-                
-                // 获取屏幕坐标
-                const screenPos = cameraManager.worldToScreen(this.x, this.y);
-                
-                // 保存上下文
-                ctx.save();
-                
-                // 平移到玩家位置
-                ctx.translate(screenPos.x, screenPos.y);
-                
-                // 旋转
-                ctx.rotate(this.angle + Math.PI / 2);
-
-                // 使用更细的鞭子线条
-                ctx.strokeStyle = `rgba(240, 240, 240, ${alpha})`;
-                
-                // 调整lineWidth更细
-                const baseLineWidth = Math.max(1, this.width * cameraManager.zoom * 0.1);
-                const progress = this.lifetime / this.duration;
-                
-                // 更平滑的动画效果
-                const animProgress = progress < 0.5 ? progress * 2 : 1 - (progress - 0.5) * 2;
-                
-                // 向外延伸的动画效果
-                const animLength = this.length * animProgress;
-                
-                // 设置线宽
-                ctx.lineWidth = baseLineWidth;
-                
-                // 添加鞭子尖端小颗粒特效
-                const particleCount = 5;
-                const particleSize = baseLineWidth * 0.8;
-                
-                // 主要鞭子线条 - 使用曲线制造鞭子甩动效果
+                ctx.fillStyle = gradient;
                 ctx.beginPath();
+                ctx.arc(currentX, currentY, glowSize, 0, Math.PI * 2);
+                ctx.fill();
                 
-                // 从玩家位置开始
-                ctx.moveTo(0, 0);
-                
-                // 控制点参数，调整曲线形状
-                const controlPointDist = animLength * 0.8;
-                const controlY = this.length * 0.2 * Math.sin(progress * Math.PI);
-                
-                // 更细长的鞭子曲线
-                ctx.quadraticCurveTo(controlPointDist * 0.5, controlY, animLength, 0);
-                
-                ctx.stroke();
-                
-                // 添加尖端光效
-                if (animProgress > 0.7) {
-                    const tipAlpha = (animProgress - 0.7) * 3.3 * alpha;
-                    ctx.fillStyle = `rgba(255, 255, 255, ${tipAlpha})`;
-                    ctx.beginPath();
-                    ctx.arc(animLength, 0, particleSize * 2, 0, Math.PI * 2);
-                    ctx.fill();
-                }
-                
-                // 沿鞭子添加小颗粒
-                ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.8})`;
-                for (let i = 0; i < particleCount; i++) {
-                    const particlePos = (i + 1) / (particleCount + 1) * animLength;
-                    // 计算颗粒在曲线上的位置
-                    const t = (i + 1) / (particleCount + 1);
-                    const particleX = t * animLength;
-                    const particleY = (1 - t) * t * 4 * controlY;
-                    
-                    ctx.beginPath();
-                    ctx.arc(particleX, particleY, particleSize, 0, Math.PI * 2);
-                    ctx.fill();
-                }
-                
-                // 恢复上下文
                 ctx.restore();
             }
         };
         
-        // 添加到视觉效果列表 - 确保visualEffects是全局变量并且存在
-        if (typeof visualEffects !== 'undefined') {
-            visualEffects.push(effect);
-        } else {
-            console.warn('visualEffects is not defined, cannot add whip visual effect');
-        }
+        // 将视觉效果添加到全局效果列表
+        visualEffects.push(whipEffect);
+        
+        return hitbox;
     }
 
     /**

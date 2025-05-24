@@ -318,30 +318,29 @@ class Enemy extends Character {
                 if (this.beamCooldown > 0) {
                     this.beamCooldown -= dt;
                 } else if (this.beamWarningTimer <= 0 && this.target && this.getDistanceSquared(this.target) < 500*500) { // 索敌范围提升到500
-                    this.beamWarningTimer = 0.5; // 0.5秒警告
+                    this.beamWarningTimer = 0.3; // 0.3秒警告
                     // 在警告阶段就确定光束方向，不再跟踪玩家
                     if (this.target) {
                         const dx = this.target.x - this.x;
                         const dy = this.target.y - this.y;
                         const dist = Math.sqrt(dx * dx + dy * dy);
                         this.beamDirection = dist > 0 ? { x: dx / dist, y: dy / dist } : { x: 0, y: 1 };
+                        
+                        // 保存终点位置，以便绘制红线
+                        this.beamEndPoint = {
+                            x: this.x + this.beamDirection.x * 1000,
+                            y: this.y + this.beamDirection.y * 1000
+                        };
                     }
                 }
                 if (this.beamWarningTimer > 0) {
                     this.beamWarningTimer -= dt;
                     if (this.beamWarningTimer <= 0) {
-                        this.isShootingBeam = true;
-                        this.beamTimer = 0;
-                        // 光束方向已在警告阶段确定，不再重新计算
+                        this.startBeamAttack();
                     }
                 }
             } else {
-                // 光束持续
-                this.beamTimer += dt;
-                if (this.beamTimer >= this.beamDuration) {
-                    this.isShootingBeam = false;
-                    this.beamCooldown = this.beamCooldownTime;
-                }
+                this.updateBeamAttack(dt);
             }
         } 
         // 如果正在射出光束，更新光束
@@ -443,27 +442,12 @@ class Enemy extends Character {
      * 开始光束攻击
      */
     startBeamAttack() {
-        if (!this.target) return;
-        
         // 设置光束状态
         this.isShootingBeam = true;
-        this.beamTimer = 0;
-        this.beamTarget = this.target;
+        this.beamAttackTimer = 1.0; // 攻击持续1秒
+        
+        // 这里不再重新计算光束方向，而是使用之前在警告阶段保存的方向
         this.beamHitTargets = new Set();
-        
-        // 计算光束方向
-        const dx = this.target.x - this.x;
-        const dy = this.target.y - this.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        
-        if (dist > 0) {
-            this.beamDirection = {
-                x: dx / dist,
-                y: dy / dist
-            };
-        } else {
-            this.beamDirection = { x: 0, y: 1 }; // 默认向下
-        }
     }
     
     /**
@@ -471,28 +455,36 @@ class Enemy extends Character {
      * @param {number} dt - 时间增量
      */
     updateBeamAttack(dt) {
-        this.beamTimer += dt;
-        if (this.beamTimer >= this.beamDuration) {
+        // 更新攻击计时器
+        this.beamAttackTimer -= dt;
+        if (this.beamAttackTimer <= 0) {
+            // 结束攻击
             this.isShootingBeam = false;
-            this.beamCooldown = this.beamCooldownTime;
+            this.beamCooldown = 3.0; // 3秒冷却
             return;
         }
-        const beamLength = 500;
-        const endX = this.x + this.beamDirection.x * beamLength;
-        const endY = this.y + this.beamDirection.y * beamLength;
-        if (this.target) {
-            const playerToBeamDistSq = pointToLineDistanceSq(
-                this.target.x, this.target.y,
+        
+        // 计算光束终点
+        const beamEndX = this.x + this.beamDirection.x * 1000;
+        const beamEndY = this.y + this.beamDirection.y * 1000;
+        
+        // 检查是否击中玩家
+        if (player && !player.isGarbage && player.isActive && !this.beamHitTargets.has(player.id)) {
+            // 计算玩家到光束的距离
+            const dist = pointToLineDistanceSq(
+                player.x, player.y,
                 this.x, this.y,
-                endX, endY
+                beamEndX, beamEndY
             );
-            const hitWidth = this.beamWidth || 30;
-            if (playerToBeamDistSq < (hitWidth * hitWidth) / 4) {
-                // 只要无敌时间为0就造成一次伤害
-                if (this.target.invincibleTime <= 0) {
-                    this.target.takeDamage(15, this, false, true);
-                    this.target.invincibleTime = 0.5; // 0.5秒无敌
-                }
+            
+            // 如果距离小于碰撞阈值，造成伤害
+            const collisionThreshold = (this.beamWidth * this.beamWidth) / 4 + (player.size * player.size) / 4;
+            if (dist <= collisionThreshold) {
+                // 造成伤害
+                player.takeDamage(this.attackDamage * 2, this); // 光束伤害是普通攻击的2倍
+                
+                // 标记已击中
+                this.beamHitTargets.add(player.id);
             }
         }
     }
@@ -574,8 +566,18 @@ class Enemy extends Character {
     updateMovement(dt) {
         // 如果没有目标或被眩晕，不移动
         if (!this.target || this.isStunned()) return;
-        
-        // 计算方向
+
+        // 初始化防卡住检测属性
+        if (!this._movementState) {
+            this._movementState = {
+                lastX: this.x,
+                lastY: this.y,
+                stuckTimer: 0,
+                randomOffset: { x: 0, y: 0 }
+            };
+        }
+
+        // 计算与目标的距离
         const dx = this.target.x - this.x;
         const dy = this.target.y - this.y;
         const distSq = dx * dx + dy * dy;
@@ -607,6 +609,10 @@ class Enemy extends Character {
                 // 更新位置
                 this.x += dirX * currentSpeed * dt;
                 this.y += dirY * currentSpeed * dt;
+                
+                // 检查防卡住
+                this.checkAndHandleStuck(dt);
+                
                 return;
             }
         }
@@ -622,14 +628,86 @@ class Enemy extends Character {
         // 获取当前速度
         const currentSpeed = this.getCurrentSpeed();
 
+        // 添加随机偏移（如果敌人卡住了）
+        let finalDirX = dirX + this._movementState.randomOffset.x;
+        let finalDirY = dirY + this._movementState.randomOffset.y;
+        
+        // 归一化方向向量
+        const offsetMag = Math.sqrt(finalDirX * finalDirX + finalDirY * finalDirY);
+        if (offsetMag > 0) {
+            finalDirX /= offsetMag;
+            finalDirY /= offsetMag;
+        }
+
         // 更新位置
-        this.x += dirX * currentSpeed * dt;
-        this.y += dirY * currentSpeed * dt;
+        this.x += finalDirX * currentSpeed * dt;
+        this.y += finalDirY * currentSpeed * dt;
+        
+        // 检查防卡住
+        this.checkAndHandleStuck(dt);
+        
         // 检查与目标的碰撞
         if (this.checkCollision(this.target)) {
             // 攻击目标
             this.attack(this.target);
         }
+    }
+
+    /**
+     * 检查并处理敌人卡住的情况
+     * @param {number} dt - 时间增量
+     */
+    checkAndHandleStuck(dt) {
+        // 计算移动距离
+        const moveX = Math.abs(this.x - this._movementState.lastX);
+        const moveY = Math.abs(this.y - this._movementState.lastY);
+        const moved = moveX + moveY;
+        
+        // 如果几乎没有移动，可能卡住了
+        if (moved < 0.5) { // 降低触发门槛，之前是1.0
+            this._movementState.stuckTimer += dt;
+            
+            // 如果卡住超过0.8秒(提高门槛)，添加随机偏移
+            if (this._movementState.stuckTimer > 0.8) {
+                // 生成新的随机偏移，但幅度更小，更平滑
+                this._movementState.randomOffset = {
+                    x: (Math.random() - 0.5) * 0.3, // 从0.5降低到0.3
+                    y: (Math.random() - 0.5) * 0.3  // 从0.5降低到0.3
+                };
+                
+                // 如果已经严重卡住（超过2秒），强制跳出但幅度更小
+                if (this._movementState.stuckTimer > 2.0) { // 从1.5秒提高到2.0秒
+                    // 使用较小的随机跳跃值，避免明显的瞬移
+                    this.x += (Math.random() - 0.5) * 10; // 从20降低到10
+                    this.y += (Math.random() - 0.5) * 10; // 从20降低到10
+                    this._movementState.stuckTimer = 0; // 重置卡住计时器
+                }
+            }
+        } else {
+            // 正常移动，重置卡住计时器和随机偏移
+            // 只有当敌人移动超过一定阈值时才完全清除偏移和计时器
+            if (moved > 1.0) {
+                this._movementState.stuckTimer = 0;
+                this._movementState.randomOffset = { x: 0, y: 0 };
+            } else {
+                // 小幅度移动时，缓慢降低卡住计时器，但不清零
+                this._movementState.stuckTimer = Math.max(0, this._movementState.stuckTimer - dt * 0.5);
+                
+                // 如果随机偏移存在，缓慢减少它，而不是立即设为0
+                if (this._movementState.randomOffset.x !== 0 || this._movementState.randomOffset.y !== 0) {
+                    this._movementState.randomOffset.x *= 0.9; // 每帧减少10%
+                    this._movementState.randomOffset.y *= 0.9; // 每帧减少10%
+                    
+                    // 如果偏移值非常小，直接设为0避免无限接近0
+                    if (Math.abs(this._movementState.randomOffset.x) < 0.01) this._movementState.randomOffset.x = 0;
+                    if (Math.abs(this._movementState.randomOffset.y) < 0.01) this._movementState.randomOffset.y = 0;
+                }
+            }
+        }
+        
+        // 更新上一次位置
+        this._movementState.lastX = this.x;
+        this._movementState.lastY = this.y;
     }
 
     /**
@@ -1109,32 +1187,27 @@ class Enemy extends Character {
             ctx.restore();
         }
 
-        // 绘制堕落天使光束警告
-        if (this.type && this.type.canShootBeam && this.beamWarningTimer > 0) {
-            const screenPos = cameraManager.worldToScreen(this.x, this.y);
-            const angle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
-            ctx.save();
-            ctx.strokeStyle = 'rgba(255,0,0,0.5)';
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.moveTo(screenPos.x, screenPos.y);
-            ctx.lineTo(screenPos.x + Math.cos(angle) * 1000, screenPos.y + Math.sin(angle) * 1000);
-            ctx.stroke();
-            ctx.restore();
-        }
         // 堕落天使光束
-        if (this.type && this.type.canShootBeam && this.isShootingBeam) {
+        if (this.type && this.type.canShootBeam) {
             // 绘制警告线
             if (this.beamWarningTimer > 0) {
-                // 使用已经确定的光束方向绘制警告线
-                const endX = this.x + this.beamDirection.x * 1000;
-                const endY = this.y + this.beamDirection.y * 1000;
+                // 使用已保存的终点位置绘制警告线
+                let endX, endY;
+                if (this.beamEndPoint) {
+                    endX = this.beamEndPoint.x;
+                    endY = this.beamEndPoint.y;
+                } else {
+                    // 向后兼容：如果没有保存终点，则使用方向计算
+                    endX = this.x + this.beamDirection.x * 1000;
+                    endY = this.y + this.beamDirection.y * 1000;
+                }
+                
                 const startScreen = cameraManager.worldToScreen(this.x, this.y);
                 const endScreen = cameraManager.worldToScreen(endX, endY);
                 
                 ctx.save();
                 ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)';
-                ctx.lineWidth = this.beamWidth * cameraManager.zoom * 0.5;
+                ctx.lineWidth = 2; // 修改为细线，固定宽度2
                 ctx.beginPath();
                 ctx.moveTo(startScreen.x, startScreen.y);
                 ctx.lineTo(endScreen.x, endScreen.y);
@@ -1145,8 +1218,18 @@ class Enemy extends Character {
             // 绘制光束
             if (this.isShootingBeam) {
                 const screenPos = cameraManager.worldToScreen(this.x, this.y);
-                const endX = this.x + this.beamDirection.x * 1000;
-                const endY = this.y + this.beamDirection.y * 1000;
+                
+                // 使用已保存的终点位置绘制光束
+                let endX, endY;
+                if (this.beamEndPoint) {
+                    endX = this.beamEndPoint.x;
+                    endY = this.beamEndPoint.y;
+                } else {
+                    // 向后兼容：如果没有保存终点，则使用方向计算
+                    endX = this.x + this.beamDirection.x * 1000;
+                    endY = this.y + this.beamDirection.y * 1000;
+                }
+                
                 const endScreen = cameraManager.worldToScreen(endX, endY);
                 ctx.save();
                 ctx.strokeStyle = 'rgba(255,0,0,0.8)';
@@ -1171,211 +1254,6 @@ class Enemy extends Character {
                 }
             }
         }
-        
-        // 绘制精英僵尸毒气光环
-        if (this.type && this.type.hasPoisonAura) {
-            ctx.save();
-            const auraRadius = this.poisonAuraRadius * cameraManager.zoom;
-            const gradient = ctx.createRadialGradient(
-                screenPos.x, screenPos.y, 0,
-                screenPos.x, screenPos.y, auraRadius
-            );
-            gradient.addColorStop(0, 'rgba(0, 255, 0, 0.2)');
-            gradient.addColorStop(0.7, 'rgba(0, 200, 0, 0.15)');
-            gradient.addColorStop(1, 'rgba(0, 150, 0, 0.1)');
-            
-            ctx.fillStyle = gradient;
-            ctx.beginPath();
-            ctx.arc(screenPos.x, screenPos.y, auraRadius, 0, Math.PI * 2);
-            ctx.fill();
-            
-            // 添加旋转的线条效果
-            const time = gameTime * 0.5;
-            const numLines = 4;
-            ctx.strokeStyle = 'rgba(0, 255, 0, 0.3)';
-            ctx.lineWidth = 2 * cameraManager.zoom;
-            
-            for (let i = 0; i < numLines; i++) {
-                const angle = time + (Math.PI * 2 / numLines) * i;
-                ctx.beginPath();
-                ctx.moveTo(screenPos.x, screenPos.y);
-                ctx.lineTo(
-                    screenPos.x + Math.cos(angle) * auraRadius,
-                    screenPos.y + Math.sin(angle) * auraRadius
-                );
-                ctx.stroke();
-            }
-            ctx.restore();
-        }
-
-        if (this.type === '堕落天使') {
-            // 绘制警告线
-            if (this.beamWarningTimer > 0) {
-                const angle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
-                const distance = 1000;
-                const endX = this.x + Math.cos(angle) * distance;
-                const endY = this.y + Math.sin(angle) * distance;
-                
-                ctx.save();
-                ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)';
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                ctx.moveTo(this.x, this.y);
-                ctx.lineTo(endX, endY);
-                ctx.stroke();
-                ctx.restore();
-            }
-            
-            // 绘制光束
-            if (this.beamAttackTimer > 0) {
-                const angle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
-                const distance = 1000;
-                const endX = this.x + Math.cos(angle) * distance;
-                const endY = this.y + Math.sin(angle) * distance;
-                
-                ctx.save();
-                ctx.strokeStyle = 'rgba(255, 0, 0, 0.8)';
-                ctx.lineWidth = 5;
-                ctx.beginPath();
-                ctx.moveTo(this.x, this.y);
-                ctx.lineTo(endX, endY);
-                ctx.stroke();
-                ctx.restore();
-                
-                // 检查玩家是否在光束范围内
-                if (this.target && this.target instanceof Player) {
-                    const playerAngle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
-                    const angleDiff = Math.abs(angle - playerAngle);
-                    if (angleDiff < 0.2) { // 20度范围内
-                        this.target.takeDamage(this.beamDamage * dt);
-                    }
-                }
-            }
-        }
-    }
-
-    /**
-     * 处理状态效果
-     * @param {number} dt - 时间增量
-     */
-    handleStatusEffects(dt) {
-        // 处理燃烧
-        if (this.statusEffects.burn) {
-            const burn = this.statusEffects.burn;
-            burn.duration -= dt;
-            burn.tickTimer -= dt;
-            
-            if (burn.tickTimer <= 0) {
-                // 造成燃烧伤害
-                this.takeDamage(burn.damage, burn.source, true); // 添加一个 isBurnDamage 标志
-                burn.tickTimer = burn.tickInterval; // 重置计时器
-            }
-            
-            if (burn.duration <= 0) {
-                delete this.statusEffects.burn; // 移除效果
-            }
-        }
-        
-        // 处理中毒
-        if (this.statusEffects.poison) {
-            const poison = this.statusEffects.poison;
-            poison.duration -= dt;
-            poison.tickTimer -= dt;
-            
-            if (poison.tickTimer <= 0) {
-                // 造成中毒伤害
-                this.takeDamage(poison.damage, poison.source, false, true); // 第四个参数表示是中毒伤害
-                poison.tickTimer = poison.tickInterval; // 重置计时器
-            }
-            
-            if (poison.duration <= 0) {
-                delete this.statusEffects.poison; // 移除效果
-            }
-        }
-        
-        // 处理眩晕
-        if (this.statusEffects.stun) {
-            const stun = this.statusEffects.stun;
-            stun.duration -= dt;
-            
-            if (stun.duration <= 0) {
-                delete this.statusEffects.stun; // 移除效果
-            }
-        }
-        
-        // 处理减速
-        if (this.statusEffects.slow) {
-            const slow = this.statusEffects.slow;
-            slow.duration -= dt;
-            
-            if (slow.duration <= 0) {
-                // 恢复原有速度
-                if (slow.originalSpeed) {
-                    this.speed = slow.originalSpeed;
-                }
-                delete this.statusEffects.slow; // 移除效果
-            }
-        }
-    }
-
-    /**
-     * 受到伤害
-     * @param {number} amount - 伤害量
-     * @param {GameObject} source - 伤害来源
-     * @param {boolean} isBurnDamage - 是否是燃烧伤害（可选）
-     * @param {boolean} isAuraDamage - 是否是光环伤害（可选）
-     * @returns {boolean} 是否死亡
-     */
-    takeDamage(amount, source, isBurnDamage = false, isAuraDamage = false) { 
-        if (this.isGarbage) return false;
-
-        let actualDamage = amount;
-        // 燃烧和光环伤害目前不计算护甲或最小伤害调整
-        // 普通攻击计算护甲，且伤害至少为1
-        if (!isBurnDamage && !isAuraDamage) {
-            const armor = this.getStat('armor') || 0; // 确保有 armor 属性或默认为0
-            actualDamage = Math.max(1, amount - armor);
-        } else {
-            actualDamage = amount; // 允许燃烧和光环造成小于1的伤害
-        }
-
-        // 应用时间增长系数到伤害
-        const scaledAmount = actualDamage * this.timeScalingFactor;
-
-        this.health -= scaledAmount;
-
-        // 伤害数字的颜色和文本
-        let damageColor = 'white'; // 默认普通攻击
-        if (isBurnDamage) damageColor = 'orange';
-        // if (isAuraDamage) damageColor = 'purple'; // 紫色可能与经验宝石冲突，暂用默认或特定颜色
-
-        let damageText = scaledAmount.toFixed(0);
-        if (isBurnDamage) damageText = scaledAmount.toFixed(1);
-        if (isAuraDamage) damageText = scaledAmount.toFixed(2); // 光环伤害显示更精确的小数
-
-        // 对于非常小的光环伤害，可以选择不显示，或者累计后再显示
-        // 目前，如果 scaledAmount * dt 非常小，它可能仍然会显示为0.00
-        // 如果是光环伤害，并且伤害量很小 (例如小于0.01)，则不显示伤害数字
-        if (!isAuraDamage || Math.abs(scaledAmount) >= 0.01) {
-             spawnDamageNumber(this.x, this.y - this.size / 2, damageText, damageColor); 
-        }
-
-        // 检查炸弹敌人被攻击时是否应该爆炸
-        if (this.type && this.type.name === "炸弹" && source instanceof Player) {
-            // 如果炸弹被玩家击中且剩余血量很低，则立即爆炸
-            if (this.health <= this.maxHealth * 0.3) {
-                this.health = 0; // 立即致死，触发爆炸
-                this.onDeath(source); // 调用死亡处理
-                return true;
-            }
-        }
-
-        if (this.health <= 0) {
-            // onDeath方法现在会处理泡泡效果，不需要在这里重复处理
-            this.onDeath(source); // killer 应该是 source
-            return true;
-        }
-        return false;
     }
 
     /**
@@ -1414,6 +1292,60 @@ class Enemy extends Character {
         
         // 添加到投射物列表
         enemyProjectiles.push(projectile);
+    }
+
+    /**
+     * 处理状态效果
+     * @param {number} dt - 时间增量
+     */
+    handleStatusEffects(dt) {
+        // 如果没有状态效果，直接返回
+        if (!this.statusEffects) return;
+        
+        // 处理眩晕状态
+        if (this.statusEffects.stun) {
+            this.statusEffects.stun.duration -= dt;
+            if (this.statusEffects.stun.duration <= 0) {
+                delete this.statusEffects.stun;
+            }
+        }
+        
+        // 处理减速状态
+        if (this.statusEffects.slow) {
+            this.statusEffects.slow.duration -= dt;
+            if (this.statusEffects.slow.duration <= 0) {
+                // 恢复原速度
+                this.speed = this.type.speed || BASE_ENEMY_SPEED;
+                delete this.statusEffects.slow;
+            }
+        }
+        
+        // 处理燃烧状态
+        if (this.statusEffects.burn) {
+            this.statusEffects.burn.duration -= dt;
+            this.statusEffects.burn.tickTimer -= dt;
+            
+            // 燃烧伤害每0.5秒触发一次
+            if (this.statusEffects.burn.tickTimer <= 0) {
+                const burnDamage = this.statusEffects.burn.damagePerTick;
+                this.takeDamage(burnDamage, this.statusEffects.burn.source);
+                
+                // 重置计时器
+                this.statusEffects.burn.tickTimer = 0.5;
+            }
+            
+            if (this.statusEffects.burn.duration <= 0) {
+                delete this.statusEffects.burn;
+            }
+        }
+        
+        // 处理冻结状态
+        if (this.statusEffects.freeze) {
+            this.statusEffects.freeze.duration -= dt;
+            if (this.statusEffects.freeze.duration <= 0) {
+                delete this.statusEffects.freeze;
+            }
+        }
     }
 }
 

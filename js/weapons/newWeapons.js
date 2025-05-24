@@ -849,34 +849,62 @@ class FrostStaffWeapon extends Weapon {
         // 获取玩家精确位置，作为所有冰晶的发射起点
         const startX = owner.x;
         const startY = owner.y;
-
-        // 寻找目标，与匕首武器索敌逻辑一致
-        let target = owner.findNearestEnemy(GAME_WIDTH * 1.5) || {
-            x: owner.x + owner.lastMoveDirection.x * 100,
-            y: owner.y + owner.lastMoveDirection.y * 100
-        };
         
-        // 计算方向
-        const dx = target.x - startX;
-        const dy = target.y - startY;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const dirX = dist > 0 ? dx / dist : owner.lastMoveDirection.x;
-        const dirY = dist > 0 ? dy / dist : owner.lastMoveDirection.y;
+        // 与匕首类似的索敌方式
+        // 1. 获取并排序敌人
+        let sortedEnemies = [];
+        if (typeof enemies !== 'undefined' && enemies.length > 0) {
+            sortedEnemies = enemies.filter(e => e && !e.isGarbage && e.isActive && !(e instanceof GhostEnemy)) // 排除幽灵
+                .map(enemy => ({
+                    enemy,
+                    distSq: (enemy.x - owner.x) * (enemy.x - owner.x) + (enemy.y - owner.y) * (enemy.y - owner.y)
+                }))
+                .sort((a, b) => a.distSq - b.distSq)
+                .map(item => item.enemy);
+        }
         
-        // 计算角度和扇形范围
-        const baseAngle = Math.atan2(dirY, dirX);
-        const angleSpread = Math.PI * 0.6;
-
-        // 随机方向发射冰晶
+        // 2. 为每个冰晶确定目标并发射
         for (let i = 0; i < projectileCount; i++) {
-            // 计算发射角度，在敌人方向的扇形范围内
-            const randomAngle = baseAngle + (Math.random() - 0.5) * angleSpread;
+            let dirX, dirY;
             
-            const dirX = Math.cos(randomAngle);
-            const dirY = Math.sin(randomAngle);
+            if (sortedEnemies.length > 0) {
+                // 循环选择目标敌人
+                const targetEnemy = sortedEnemies[i % sortedEnemies.length];
+                const dx = targetEnemy.x - owner.x;
+                const dy = targetEnemy.y - owner.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                dirX = dist > 0 ? dx / dist : owner.lastMoveDirection.x;
+                dirY = dist > 0 ? dy / dist : owner.lastMoveDirection.y;
+                
+                // 添加一点随机性，使冰晶发射更自然
+                const angle = Math.atan2(dirY, dirX);
+                const randomAngle = angle + (Math.random() - 0.5) * Math.PI * 0.1; // 小角度随机偏移
+                dirX = Math.cos(randomAngle);
+                dirY = Math.sin(randomAngle);
+            } else {
+                // 没有敌人时，在玩家朝向的前方扇形区域发射
+                const forwardAngle = Math.atan2(owner.lastMoveDirection.y, owner.lastMoveDirection.x);
+                // 如果只有一个投射物，就直接朝前方发射
+                if (projectileCount === 1) {
+                    dirX = owner.lastMoveDirection.x;
+                    dirY = owner.lastMoveDirection.y;
+                    // 确保有方向
+                    if (dirX === 0 && dirY === 0) {
+                        dirX = 0;
+                        dirY = -1; // 默认向上
+                    }
+                } else {
+                    // 多个投射物时，在扇形区域内均匀分布
+                    const angleStep = Math.PI / 8; // 与匕首类似
+                    const startAngle = forwardAngle - (angleStep * (projectileCount - 1) / 2);
+                    const currentAngle = startAngle + i * angleStep;
+                    dirX = Math.cos(currentAngle);
+                    dirY = Math.sin(currentAngle);
+                }
+            }
             
             // 添加一点随机性到速度
-            const speedVariation = 0.8 + Math.random() * 0.4; // 速度在80%-120%之间变化
+            const speedVariation = 0.9 + Math.random() * 0.2; // 速度在90%-110%之间变化
             const vx = dirX * speed * speedVariation;
             const vy = dirY * speed * speedVariation;
             

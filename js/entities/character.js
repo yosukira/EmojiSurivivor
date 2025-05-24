@@ -244,8 +244,8 @@ class Character extends GameObject {
         // 减少生命值
         this.health -= actualDamage;
 
-        // 创建伤害数字
-        spawnDamageNumber(this.x, this.y - this.size / 2, actualDamage.toString(), GAME_FONT_SIZE, 'red');
+        // 创建伤害数字 - 修改为合适的大小
+        spawnDamageNumber(this.x, this.y - this.size / 2, actualDamage.toString(), 'rgb(255, 80, 80)', GAME_FONT_SIZE * 0.8);
 
         // 设置无敌时间
         this.invincibleTime = 0.1;
@@ -266,8 +266,8 @@ class Character extends GameObject {
         // 增加生命值
         this.health = Math.min(this.health + amount, this.getStat('health'));
 
-        // 创建治疗数字
-        spawnDamageNumber(this.x, this.y - this.size / 2, `+${Math.ceil(amount)}`, GAME_FONT_SIZE, 'green');
+        // 创建治疗数字 - 修改为合适的大小
+        spawnDamageNumber(this.x, this.y - this.size / 2, `+${Math.ceil(amount)}`, 'rgb(50, 200, 50)', GAME_FONT_SIZE * 0.8);
     }
 
     /**
