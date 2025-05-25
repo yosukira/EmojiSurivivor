@@ -3535,14 +3535,6 @@ class VolcanoEruption {
                 
                 // 应用燃烧效果
                 this.applyBurnEffect(enemy);
-                
-                // 轻微击退
-                const dist = Math.sqrt(distSq);
-                if (dist > 0) {
-                    const knockbackFactor = 10 * (1 - dist / this.radius);
-                    enemy.x += dx / dist * knockbackFactor;
-                    enemy.y += dy / dist * knockbackFactor;
-                }
             }
         });
         

@@ -2981,6 +2981,31 @@ class BossEnemy extends Enemy {
         ctx.fillStyle = 'white';
         ctx.fillText(this.type.name, x, barY - 5);
     }
+
+    /**
+     * 覆盖基类的onDeath方法，处理Boss死亡事件
+     * @param {Character} killer - 击杀者
+     */
+    onDeath(killer) {
+        // 如果死亡已处理，不再处理
+        if (this.isGarbage) return;
+
+        // 通知BossManager处理Boss死亡
+        if (bossManager && typeof bossManager.handleBossDeath === 'function') {
+            bossManager.handleBossDeath(this, killer);
+        } else if (window.handleBossDeath) {
+            window.handleBossDeath(this, killer);
+        } else {
+            console.error("无法找到处理Boss死亡的方法！");
+            // 掉落宝箱作为备选方案
+            if (typeof Chest === 'function') {
+                worldObjects.push(new Chest(this.x, this.y));
+            }
+        }
+
+        // 调用父类的onDeath以处理通用逻辑
+        super.onDeath(killer);
+    }
 }
 
 /**
