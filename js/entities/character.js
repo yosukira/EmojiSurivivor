@@ -239,10 +239,21 @@ class Character extends GameObject {
         // 如果无敌，不受伤害
         if (this.invincibleTime > 0) return false;
 
+        // 确保伤害数值有效
+        const safeAmount = isNaN(amount) ? 1 : Math.max(0, amount);
+        const armor = this.getStat('armor') || 0;
+        
         // 计算实际伤害
-        const actualDamage = Math.max(1, amount - this.getStat('armor'));
+        const actualDamage = Math.max(1, safeAmount - armor);
+        
         // 减少生命值
         this.health -= actualDamage;
+        
+        // 确保生命值不是NaN
+        if (isNaN(this.health)) {
+            console.error('Character health became NaN after damage calculation!');
+            this.health = 0; // 设置为0，触发死亡
+        }
 
         // 创建伤害数字 - 修改为合适的大小
         spawnDamageNumber(this.x, this.y - this.size / 2, actualDamage.toString(), 'rgb(255, 80, 80)', GAME_FONT_SIZE * 0.8);

@@ -147,8 +147,11 @@ const cameraManager = {
      */
     worldToScreen(worldX, worldY) {
         // 将世界坐标转换为相对于相机的坐标
-        const x = worldX - this.x + GAME_WIDTH / 2;
-        const y = worldY - this.y + GAME_HEIGHT / 2;
+        // 修复浏览器缩放问题：使用canvas实际尺寸而非GAME_WIDTH/HEIGHT常量
+        const canvasWidth = canvas.width;
+        const canvasHeight = canvas.height;
+        const x = worldX - this.x + canvasWidth / 2;
+        const y = worldY - this.y + canvasHeight / 2;
         return { x, y };
     },
 
@@ -160,8 +163,11 @@ const cameraManager = {
      */
     screenToWorld(screenX, screenY) {
         // 将屏幕坐标转换为世界坐标
-        const x = screenX + this.x - GAME_WIDTH / 2;
-        const y = screenY + this.y - GAME_HEIGHT / 2;
+        // 修复浏览器缩放问题：使用canvas实际尺寸而非GAME_WIDTH/HEIGHT常量
+        const canvasWidth = canvas.width;
+        const canvasHeight = canvas.height;
+        const x = screenX + this.x - canvasWidth / 2;
+        const y = screenY + this.y - canvasHeight / 2;
         return { x, y };
     },
 

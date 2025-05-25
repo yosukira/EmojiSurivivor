@@ -1629,136 +1629,83 @@ class SonicWaveAttack {
      * @param {number} dt - 时间增量
      */
     update(dt) {
-        // 如果已标记为垃圾，不更新
-        if (this.isGarbage) return;
-        
         // 更新生命周期
         this.lifetime += dt;
-        
-        // 更新波浪相位
-        this.wavePhase = (this.wavePhase + dt * this.waveSpeed) % (Math.PI * 2);
-        
-        // 如果已经反弹
-        if (this.hasBounced) {
-            // 更新反弹计时器
-            this.bounceTimer += dt;
-            
-            // 如果反弹结束，标记为垃圾
-            if (this.bounceTimer >= this.bounceDuration || this.lifetime >= this.duration) {
-                this.isGarbage = true;
-                this.isActive = false;
-                return;
-            }
-        } 
-        // 扩展阶段
-        else if (this.lifetime < this.expansion) {
-            // 扩展阶段
-            this.currentLength = (this.lifetime / this.expansion) * this.length;
-        } 
-        // 持续阶段
-        else if (this.lifetime < this.duration - this.expansion) {
-            // 保持最大长度
-            this.currentLength = this.length;
-            
-            // 检测碰撞
-            this.checkCollisions();
-        } 
-        // 收缩阶段
-        else if (this.lifetime < this.duration) {
-            // 收缩阶段
-            const remaining = this.duration - this.lifetime;
-            this.currentLength = (remaining / this.expansion) * this.length;
-        } 
-        // 结束
-        else {
+        if (this.lifetime >= this.duration) {
             this.isGarbage = true;
-            this.isActive = false;
             return;
         }
         
-        // 创建粒子效果
-        this.createParticles(dt);
-    }
-
-    /**
-     * 检测与敌人的碰撞
-     */
-    checkCollisions() {
-        // 跳过无效攻击
-        if (!this.isActive || this.isGarbage) return;
+        // 更新位置（跟随拥有者）
+        this.x = this.owner.x;
+        this.y = this.owner.y;
         
-        // 获取攻击区域的端点坐标
-        const endX = this.x + this.dirX * this.currentLength;
-        const endY = this.y + this.dirY * this.currentLength;
+        // 更新伤害计时器
+        this.damageTimer += dt;
         
-        // 如果启用了反弹和尚未反弹
-        if (this.bounce && !this.hasBounced) {
-            // 检查是否需要反弹
-            this.checkBounce();
+        // 更新旋转角度
+        this.rotationAngle += this.rotationSpeed * dt;
+        this.dirX = Math.cos(this.rotationAngle);
+        this.dirY = Math.sin(this.rotationAngle);
+        
+        // 如果伤害计时器达到间隔，进行伤害检测
+        if (this.damageTimer >= this.damageInterval) {
+            this.damageTimer = 0;
+            this.checkDamage();
         }
+    }
+    
+    /**
+     * 检查伤害
+     */
+    checkDamage() {
+        // 重置命中目标
+        this.hitEnemies.clear();
         
-        // 检查与敌人的碰撞
+        // 计算激光终点
+        const endX = this.x + this.dirX * this.length;
+        const endY = this.y + this.dirY * this.length;
+        
+        // 计算碰撞区域
+        const hitWidth = this.width;
+        
+        // 检查所有敌人
         enemies.forEach(enemy => {
-            // 跳过无效敌人和已命中的敌人
-            if (enemy.isGarbage || !enemy.isActive || this.hitEnemies.has(enemy)) return;
+            // 如果敌人无效或已被标记为垃圾，跳过
+            if (!enemy || enemy.isGarbage || !enemy.isActive) return;
             
-            // 计算敌人到线段的距离
-            const distToLine = this.pointToLineDistanceSq(
-                enemy.x, enemy.y,
-                this.x, this.y,
-                endX, endY
-            );
+            // 计算敌人到线段的距离（使用点到线段距离公式）
+            const distSq = pointToLineDistanceSq(enemy.x, enemy.y, this.x, this.y, endX, endY);
             
-            // 如果在攻击范围内，命中敌人
-            if (distToLine <= (this.width/2 + enemy.radius) * (this.width/2 + enemy.radius)) {
-                // 标记为已命中
-                this.hitEnemies.add(enemy);
+            // 扩大碰撞范围，确保与视觉效果一致
+            const collisionThresholdSq = Math.pow(hitWidth / 2 + enemy.size / 2, 2);
+            
+            // 检查是否碰撞
+            if (distSq <= collisionThresholdSq) {
+                // 检查敌人到激光起点的距离，确保不超过激光长度
+                const dx = enemy.x - this.x;
+                const dy = enemy.y - this.y;
+                const enemyDistSq = dx * dx + dy * dy;
                 
-                // 造成伤害
-                enemy.takeDamage(this.damage, this.owner);
-                
-                // 应用击退
-                this.applyKnockback(enemy);
+                // 如果敌人在激光长度范围内
+                if (enemyDistSq <= this.length * this.length) {
+                    // 计算敌人到激光起点的投影距离
+                    const dotProduct = dx * this.dirX + dy * this.dirY;
+                    
+                    // 如果投影距离为正（敌人在激光方向前方）
+                    if (dotProduct >= 0) {
+                        // 如果激光不穿透，且已经命中过该敌人，跳过
+                        if (!this.piercing && this.hitEnemies.has(enemy)) return;
+                        
+                        // 造成伤害
+                        enemy.takeDamage(this.damage, this.owner);
+                        
+                        // 添加到命中列表
+                        this.hitEnemies.add(enemy);
+                    }
+                }
             }
         });
-    }
-
-    /**
-     * 计算点到线段的距离平方
-     * @param {number} px - 点的X坐标
-     * @param {number} py - 点的Y坐标
-     * @param {number} x1 - 线段起点X坐标
-     * @param {number} y1 - 线段起点Y坐标
-     * @param {number} x2 - 线段终点X坐标
-     * @param {number} y2 - 线段终点Y坐标
-     * @returns {number} 距离平方
-     */
-    pointToLineDistanceSq(px, py, x1, y1, x2, y2) {
-        const lineLength = (x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1);
-        
-        if (lineLength === 0) {
-            // 线段退化为点
-            return (px - x1) * (px - x1) + (py - y1) * (py - y1);
-        }
-        
-        // 计算点在线段上的投影比例
-        const t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / lineLength;
-        
-        if (t < 0) {
-            // 投影在线段起点之前
-            return (px - x1) * (px - x1) + (py - y1) * (py - y1);
-        }
-        
-        if (t > 1) {
-            // 投影在线段终点之后
-            return (px - x2) * (px - x2) + (py - y2) * (py - y2);
-        }
-        
-        // 投影在线段上
-        const projX = x1 + t * (x2 - x1);
-        const projY = y1 + t * (y2 - y1);
-        
-        return (px - projX) * (px - projX) + (py - projY) * (py - projY);
     }
 
     /**

@@ -423,6 +423,7 @@ class Player extends Character {
             this.invincibleSources[sourceId] = 0.5;
         }
         if (this.health <= 0) {
+            this.health = 0; // 确保健康值不为负
             this.onDeath(source);
             return true;
         }

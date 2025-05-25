@@ -83,7 +83,8 @@ const ENEMY_TYPES = [
         damageMult: 0.8,
         xpMult: 1,
         weight: 10,
-        minTime: 0 // 开始就可以刷新
+        minTime: 0, // 开始就可以刷新
+        maxTime: 300 // 5分钟后停止刷新
     },
     {
         name: "蝙蝠",
@@ -93,7 +94,8 @@ const ENEMY_TYPES = [
         damageMult: 0.6,
         xpMult: 1.2,
         weight: 8,
-        minTime: 0 // 开始就可以刷新
+        minTime: 30, // 30秒后开始刷新
+        maxTime: 720 // 12分钟后停止刷新
     },
     {
         name: "骷髅",
@@ -103,7 +105,8 @@ const ENEMY_TYPES = [
         damageMult: 0.9,
         xpMult: 1.3,
         weight: 7,
-        minTime: 180 // 第一个Boss之后出现
+        minTime: 120, // 2分钟后开始刷新
+        maxTime: 420 // 7分钟后停止刷新
     },
     {
         name: "幽灵",
@@ -113,8 +116,8 @@ const ENEMY_TYPES = [
         damageMult: 0.8,
         xpMult: 1.3,
         weight: 7,
-        minTime: 180, // 第一个Boss之后出现
-        // 可以穿墙特性可以在碰撞检测或移动逻辑中处理
+        minTime: 180, // 3分钟后开始刷新
+        maxTime: 540 // 9分钟后停止刷新
     },
     {
         name: "僵尸",
@@ -124,7 +127,8 @@ const ENEMY_TYPES = [
         damageMult: 1.1, // 略高的伤害
         xpMult: 2.5, // 较高经验值
         weight: 10, // 常见敌人
-        minTime: 180 // 3分钟后出现(第一个Boss后)
+        minTime: 300, // 5分钟后开始刷新
+        maxTime: 1200 // 20分钟后停止刷新
     },
     {
         name: "蜘蛛",
@@ -134,7 +138,8 @@ const ENEMY_TYPES = [
         damageMult: 0.8,
         xpMult: 1.3,
         weight: 5,
-        minTime: 240, // 4分钟后出现
+        minTime: 420, // 7分钟后开始刷新
+        maxTime: 1500, // 25分钟后停止刷新
         isRanged: true, // 可以发射蛛网
         attackRange: 180,
         attackCooldownTime: 2.5,
@@ -143,70 +148,82 @@ const ENEMY_TYPES = [
     {
         name: "魔法师",
         emoji: "🧙",
-        healthMult: 0.8, // 降低血量
-        speedMult: 0.9,
-        damageMult: 1.3,
+        healthMult: 1.0,
+        speedMult: 0.8,
+        damageMult: 1.0,
         xpMult: 1.5,
         weight: 5,
-        minTime: 300, // 5分钟后出现
-        isRanged: true,
-        attackRange: 220,
+        minTime: 900, // 15分钟后开始刷新
+        maxTime: 1320, // 22分钟后停止刷新
+        isRanged: true, // 远程攻击
+        attackRange: 300,
         attackCooldownTime: 2.0,
-        projectileSpeed: 160
+        projectileSpeed: 120
     },
     {
         name: "火焰精灵",
         emoji: "🔥",
-        healthMult: 0.5, // 降低血量
+        healthMult: 0.6,
         speedMult: 1.2,
-        damageMult: 1.0,
+        damageMult: 0.7,
         xpMult: 1.4,
         weight: 4,
-        minTime: 300, // 5分钟后出现
-        // 接触时造成燃烧效果可在Enemy.attack方法中实现
-        appliesBurn: true,
-        burnDamage: 2,
+        minTime: 540, // 9分钟后开始刷新
+        appliesBurn: true, // 燃烧效果
+        burnDamage: 3,
         burnDuration: 3
     },
     {
         name: "冰霜精灵",
         emoji: "❄️",
-        healthMult: 0.5, // 降低血量
+        healthMult: 0.6,
         speedMult: 1.2,
-        damageMult: 0.9,
+        damageMult: 0.7,
         xpMult: 1.4,
         weight: 4,
-        minTime: 300, // 5分钟后出现
-        // 接触时造成减速效果可在Enemy.attack方法中实现
-        appliesSlow: true,
-        slowFactor: 0.6,
+        minTime: 540, // 9分钟后开始刷新
+        appliesSlow: true, // 减速效果
+        slowFactor: 0.5,
         slowDuration: 2
     },
     {
         name: "雷电精灵",
         emoji: "⚡",
-        healthMult: 0.5, // 降低血量
-        speedMult: 1.3,
-        damageMult: 1.2,
-        xpMult: 1.5,
+        healthMult: 0.6,
+        speedMult: 1.2,
+        damageMult: 0.7,
+        xpMult: 1.4,
         weight: 4,
-        minTime: 300, // 5分钟后出现
-        // 接触时有几率眩晕玩家可在Enemy.attack方法中实现
-        appliesStun: true,
+        minTime: 540, // 9分钟后开始刷新
+        appliesStun: true, // 眩晕效果
         stunChance: 0.3,
         stunDuration: 1
+    },
+    {
+        name: "炸弹",
+        emoji: "💣",
+        healthMult: 0.6, // 较低血量，容易被打爆
+        speedMult: 1.3, // 移动速度较快
+        damageMult: 0.5, // 直接伤害低
+        xpMult: 1.5, // 较高经验值
+        weight: 4,
+        minTime: 900, // 15分钟后开始刷新
+        // 死亡时爆炸
+        explodeOnDeath: true,
+        explodeRadius: 150, // 爆炸范围
+        explodeDamage: 15 // 修改爆炸伤害为15
     },
     {
         name: "精英史莱姆",
         emoji: "🟣",
         svgPath: "assets/svg/elite_slime.svg",
-        healthMult: 1.7, // 降低血量但保持较高
-        speedMult: 0.8,
-        damageMult: 1.2,
-        xpMult: 2.0,
-        weight: 3,
-        minTime: 360, // 6分钟后出现
-        // 死亡时分裂可在onDeath中处理
+        healthMult: 1.2,
+        speedMult: 0.9,
+        damageMult: 1.0,
+        xpMult: 1.8,
+        weight: 4,
+        minTime: 780, // 13分钟后开始刷新
+        // 死亡时分裂
         splitOnDeath: true,
         splitCount: 2,
         splitType: "史莱姆"
@@ -219,7 +236,7 @@ const ENEMY_TYPES = [
         damageMult: 1.5,
         xpMult: 2.5,
         weight: 3,
-        minTime: 420, // 7分钟后出现
+        minTime: 1020, // 17分钟后开始刷新
         isRanged: true,
         attackRange: 200,
         attackCooldownTime: 1.8,
@@ -233,7 +250,7 @@ const ENEMY_TYPES = [
         damageMult: 1.7,
         xpMult: 3.0,
         weight: 2,
-        minTime: 480, // 8分钟后出现
+        minTime: 1200, // 20分钟后开始刷新
         // 毒气光环可以在update中处理
         hasPoisonAura: true,
         poisonAuraRadius: 100,
@@ -248,7 +265,7 @@ const ENEMY_TYPES = [
         damageMult: 1.2,
         xpMult: 2.0,
         weight: 3,
-        minTime: 480, // 8分钟后出现
+        minTime: 1200, // 20分钟后开始刷新
         isRanged: true,
         attackRange: 190,
         attackCooldownTime: 1.5,
@@ -262,7 +279,7 @@ const ENEMY_TYPES = [
         damageMult: 1.0,
         xpMult: 1.8,
         weight: 3,
-        minTime: 480,
+        minTime: 720, // 12分钟后开始刷新
         canDash: true,
         dashCooldown: 3,
         dashSpeed: 3.75,
@@ -276,7 +293,7 @@ const ENEMY_TYPES = [
         damageMult: 1.0,
         xpMult: 1.5,
         weight: 4,
-        minTime: 540, // 9分钟后出现
+        minTime: 1320, // 22分钟后开始刷新
         isRanged: true,
         attackRange: 250,
         attackCooldownTime: 2.2,
@@ -290,7 +307,7 @@ const ENEMY_TYPES = [
         damageMult: 1.5,
         xpMult: 2.0,
         weight: 3,
-        minTime: 540, // 9分钟后出现
+        minTime: 1500, // 25分钟后开始刷新
         isRanged: true,
         attackRange: 230,
         attackCooldownTime: 2.5,
@@ -308,27 +325,13 @@ const ENEMY_TYPES = [
         damageMult: 1.8,
         xpMult: 2.5,
         weight: 2,
-        minTime: 600, // 10分钟后出现
+        minTime: 1500, // 25分钟后开始刷新
         // 周期性光束攻击可在update中处理
         canShootBeam: true,
         beamCooldown: 5,
         beamDamage: 15,
         beamWidth: 30,
         beamDuration: 1.5
-    },
-    {
-        name: "炸弹",
-        emoji: "💣",
-        healthMult: 0.6, // 较低血量，容易被打爆
-        speedMult: 1.3, // 移动速度较快
-        damageMult: 0.5, // 直接伤害低
-        xpMult: 1.5, // 较高经验值
-        weight: 4,
-        minTime: 360, // 6分钟后出现
-        // 死亡时爆炸
-        explodeOnDeath: true,
-        explodeRadius: 150, // 爆炸范围
-        explodeDamage: 40 // 爆炸伤害提高到40
     }
 ];
 
@@ -462,3 +465,31 @@ const EVOLVED_WEAPON_BONUSES = {
     "诸神黄昏": { eruptionCount: 5, burnDamage: 15, explosionRadius: 150 },
     "事件视界": { blackHoleDuration: 8, blackHoleRadius: 180, collapseDamage: 50 }
 };
+
+function createExplosion(radius, damage) {
+    // 直接使用传入的damage参数，不应用任何修正
+    const explosionDamage = damage; // 直接使用传入的damage(15)
+    
+    // 查找范围内的玩家
+    if (player && !player.isGarbage) {
+        const dx = player.x - this.x;
+        const dy = player.y - this.y;
+        const distSq = dx * dx + dy * dy;
+        
+        if (distSq <= radius * radius) {
+            // 直接应用完整伤害值，不应用距离衰减
+            player.takeDamage(explosionDamage, this);
+            
+            // 可选：添加击退效果
+            const knockbackStrength = 200;
+            const angle = Math.atan2(dy, dx);
+            player.applyKnockback(
+                Math.cos(angle) * knockbackStrength,
+                Math.sin(angle) * knockbackStrength
+            );
+        }
+    }
+    
+    // 爆炸视觉效果
+    createExplosionEffect(this.x, this.y, radius, 'rgba(255, 100, 50, 0.7)');
+}

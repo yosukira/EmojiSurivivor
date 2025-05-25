@@ -57,15 +57,42 @@ class Enemy extends Character {
 
         // Time-based scaling for health and damage
         const minutesPassed = gameTime / 60;
+        
+        // 根据玩家武器和被动道具数量调整难度
+        let playerWeaponScaling = 1.0;
+        let playerPassiveScaling = 1.0;
+        
+        if (player && player.weapons) {
+            // 武器数量影响：每把武器增加10%难度（不考虑等级）
+            playerWeaponScaling += player.weapons.length * 0.10;
+        }
+        
+        if (player && player.passiveItems) {
+            // 被动道具影响：每个被动道具增加5%难度（不考虑等级）
+            playerPassiveScaling += player.passiveItems.length * 0.05;
+        }
+        
         // Health: Starts scaling after 2 mins, no cap on scaling
         let healthScalingFactor = 1.0;
         if (minutesPassed > 2) {
             healthScalingFactor += (minutesPassed - 2) * 0.20; // 0.20 per min after 2 mins, no cap
         }
+        // 应用玩家装备影响
+        healthScalingFactor *= playerWeaponScaling * playerPassiveScaling;
+        
         // Damage: Starts scaling after 3 mins, no cap on scaling
         let damageScalingFactor = 1.0;
         if (minutesPassed > 3) {
             damageScalingFactor += (minutesPassed - 3) * 0.15; // 0.15 per min after 3 mins, no cap
+        }
+        // 应用玩家装备影响，但对伤害的影响减少25%
+        damageScalingFactor *= 1 + ((playerWeaponScaling - 1) * 0.75) * ((playerPassiveScaling - 1) * 0.75);
+
+        // 如果时间超过10分钟，对新种类的敌人增加额外的基础属性提升
+        if (minutesPassed > 10 && type.minTime >= 600) {
+            // 对10分钟后刷新的新敌人，基础属性提高20%
+            healthScalingFactor *= 1.2;
+            damageScalingFactor *= 1.2;
         }
 
         this.stats.health *= healthScalingFactor;
@@ -187,7 +214,8 @@ class Enemy extends Character {
             this.timeScalingFactor += 0.1; // 每60秒增加10%伤害
             this.lastTimeScalingUpdate = 0;
         }
-        // 怪物-怪物简单推挤，避免重叠
+        
+        // 怪物-怪物碰撞处理，使用平滑推挤而非突然位移
         if (!this.isBoss && !this.isGarbage && this.isActive) {
             const minDist = (this.size || 32) * 0.6;
             for (let i = 0; i < enemies.length; i++) {
@@ -195,13 +223,19 @@ class Enemy extends Character {
                 if (other !== this && !other.isBoss && !other.isGarbage && other.isActive) {
                     const dx = this.x - other.x;
                     const dy = this.y - other.y;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    const distSq = dx * dx + dy * dy;
+                    const dist = Math.sqrt(distSq);
                     if (dist > 0 && dist < minDist) {
-                        const push = (minDist - dist) / 2;
-                        this.x += (dx / dist) * push;
-                        this.y += (dy / dist) * push;
-                        other.x -= (dx / dist) * push;
-                        other.y -= (dy / dist) * push;
+                        // 计算推力，但平滑应用
+                        const push = (minDist - dist) / 2.5; // 减小推力，从2到2.5
+                        const pushX = (dx / dist) * push;
+                        const pushY = (dy / dist) * push;
+                        
+                        // 平滑应用推力，降低推力效果，每帧只应用部分推力
+                        this.x += pushX * 0.6; // 减缓推力应用，只应用60%
+                        this.y += pushY * 0.6;
+                        other.x -= pushX * 0.6;
+                        other.y -= pushY * 0.6;
                     }
                 }
             }
@@ -285,7 +319,7 @@ class Enemy extends Character {
                         this.y = this.target.y + Math.sin(this._dogState.angle) * safeDistance;
                     }
                 }
-                // 防止卡住
+                // 防止卡住 - 使用平滑位移
                 if (!this._dogState.lastX) {
                     this._dogState.lastX = this.x;
                     this._dogState.lastY = this.y;
@@ -293,15 +327,41 @@ class Enemy extends Character {
                 const moved = Math.abs(this.x - this._dogState.lastX) + Math.abs(this.y - this._dogState.lastY);
                 if (moved < 0.5) {
                     this._dogState.stuckTimer += dt;
-                    if (this._dogState.stuckTimer > 0.5) {
-                        this.x += (Math.random() - 0.5) * 16;
-                        this.y += (Math.random() - 0.5) * 16;
-                        this._dogState.stuckTimer = 0;
-                        this._dogState.circleReady = false;
-                        this._dogState.mode = 'approach'; // 卡住时切换到approach状态
+                    if (this._dogState.stuckTimer > 1.0) { // 从0.5增加到1.0秒
+                        // 计算平滑跳跃
+                        if (!this._dogState.isJumping) {
+                            const jumpX = (Math.random() - 0.5) * 12; // 从16减少到12
+                            const jumpY = (Math.random() - 0.5) * 12;
+                            this._dogState.targetJumpX = this.x + jumpX;
+                            this._dogState.targetJumpY = this.y + jumpY;
+                            this._dogState.jumpStartX = this.x;
+                            this._dogState.jumpStartY = this.y;
+                            this._dogState.jumpProgress = 0;
+                            this._dogState.isJumping = true;
+                        } else {
+                            // 处理跳跃进度
+                            this._dogState.jumpProgress += dt * 3; // 三分之一秒完成跳跃
+                            if (this._dogState.jumpProgress >= 1) {
+                                // 跳跃完成
+                                this.x = this._dogState.targetJumpX;
+                                this.y = this._dogState.targetJumpY;
+                                this._dogState.isJumping = false;
+                                this._dogState.stuckTimer = 0;
+                                this._dogState.circleReady = false;
+                                this._dogState.mode = 'approach'; // 卡住时切换到approach状态
+                            } else {
+                                // 平滑插值
+                                const progress = Math.sin(this._dogState.jumpProgress * Math.PI / 2);
+                                this.x = this._dogState.jumpStartX + (this._dogState.targetJumpX - this._dogState.jumpStartX) * progress;
+                                this.y = this._dogState.jumpStartY + (this._dogState.targetJumpY - this._dogState.jumpStartY) * progress;
+                            }
+                        }
                     }
                 } else {
-                    this._dogState.stuckTimer = 0;
+                    this._dogState.stuckTimer = Math.max(0, this._dogState.stuckTimer - dt);
+                    if (this._dogState.isJumping) {
+                        this._dogState.isJumping = false; // 如果正常移动了，取消跳跃状态
+                    }
                 }
                 this._dogState.lastX = this.x;
                 this._dogState.lastY = this.y;
@@ -480,8 +540,14 @@ class Enemy extends Character {
             // 如果距离小于碰撞阈值，造成伤害
             const collisionThreshold = (this.beamWidth * this.beamWidth) / 4 + (player.size * player.size) / 4;
             if (dist <= collisionThreshold) {
+                // 确保伤害值有效（不是NaN或Infinity）
+                let beamDamage = this.beamDamage || (this.attackDamage * 2);
+                if (isNaN(beamDamage) || !isFinite(beamDamage)) {
+                    beamDamage = 15; // 如果伤害无效，使用默认值15
+                }
+                
                 // 造成伤害
-                player.takeDamage(this.attackDamage * 2, this); // 光束伤害是普通攻击的2倍
+                player.takeDamage(beamDamage, this);
                 
                 // 标记已击中
                 this.beamHitTargets.add(player.id);
@@ -664,31 +730,53 @@ class Enemy extends Character {
         const moved = moveX + moveY;
         
         // 如果几乎没有移动，可能卡住了
-        if (moved < 0.5) { // 降低触发门槛，之前是1.0
+        if (moved < 0.5) { // 保持较低的触发门槛
             this._movementState.stuckTimer += dt;
             
-            // 如果卡住超过0.8秒(提高门槛)，添加随机偏移
-            if (this._movementState.stuckTimer > 0.8) {
-                // 生成新的随机偏移，但幅度更小，更平滑
+            // 如果卡住超过1秒，添加随机偏移，但更平滑
+            if (this._movementState.stuckTimer > 1.0) { // 从0.8提高到1.0秒，减少频繁触发
+                // 生成新的随机偏移，更加平滑和渐进
                 this._movementState.randomOffset = {
-                    x: (Math.random() - 0.5) * 0.3, // 从0.5降低到0.3
-                    y: (Math.random() - 0.5) * 0.3  // 从0.5降低到0.3
+                    x: (Math.random() - 0.5) * 0.2, // 降低到0.2，更平滑
+                    y: (Math.random() - 0.5) * 0.2  // 降低到0.2，更平滑
                 };
                 
-                // 如果已经严重卡住（超过2秒），强制跳出但幅度更小
-                if (this._movementState.stuckTimer > 2.0) { // 从1.5秒提高到2.0秒
-                    // 使用较小的随机跳跃值，避免明显的瞬移
-                    this.x += (Math.random() - 0.5) * 10; // 从20降低到10
-                    this.y += (Math.random() - 0.5) * 10; // 从20降低到10
-                    this._movementState.stuckTimer = 0; // 重置卡住计时器
+                // 如果已经严重卡住（超过3秒），使用平滑位移而非突然跳跃
+                if (this._movementState.stuckTimer > 3.0) { // 从2秒提高到3秒，减少频繁触发
+                    // 使用线性插值进行平滑移动，而不是突然跳跃
+                    const jumpX = (Math.random() - 0.5) * 15; // 从20减少到15
+                    const jumpY = (Math.random() - 0.5) * 15; // 从20减少到15
+                    
+                    // 存储目标位置，而不是立即跳跃
+                    this._movementState.targetJumpX = this.x + jumpX;
+                    this._movementState.targetJumpY = this.y + jumpY;
+                    this._movementState.jumpProgress = 0; // 初始化插值进度
+                    this._movementState.jumpStartX = this.x; // 记录起始位置
+                    this._movementState.jumpStartY = this.y;
+                    this._movementState.isJumping = true; // 标记正在平滑跳跃
+                    
+                    // 重置卡住计时器，但不是完全清零
+                    this._movementState.stuckTimer = 1.0; // 重置到1秒而不是0
+                    
+                    // 额外的处理：如果敌人被卡住太久，强制重置其AI状态
+                    if (this._dogState) this._dogState = null;
+                    if (this.target && (typeof cameraManager !== 'undefined') && 
+                        !cameraManager.isPositionInView(this.x, this.y, this.size * 2)) {
+                        // 如果敌人在屏幕外，通过强制重新设置目标来尝试"唤醒"它
+                        // 注意：Player对象可能不存在或不是全局变量，需确保有效访问
+                        if (typeof player !== 'undefined' && player) {
+                            this.target = player;
+                        }
+                    }
                 }
             }
         } else {
-            // 正常移动，重置卡住计时器和随机偏移
+            // 正常移动，缓慢重置卡住计时器和随机偏移
             // 只有当敌人移动超过一定阈值时才完全清除偏移和计时器
             if (moved > 1.0) {
-                this._movementState.stuckTimer = 0;
-                this._movementState.randomOffset = { x: 0, y: 0 };
+                this._movementState.stuckTimer = Math.max(0, this._movementState.stuckTimer - dt * 2); // 加快计时器降低速度
+                this._movementState.randomOffset.x *= 0.8; // 更快地减少随机偏移
+                this._movementState.randomOffset.y *= 0.8;
             } else {
                 // 小幅度移动时，缓慢降低卡住计时器，但不清零
                 this._movementState.stuckTimer = Math.max(0, this._movementState.stuckTimer - dt * 0.5);
@@ -702,6 +790,22 @@ class Enemy extends Character {
                     if (Math.abs(this._movementState.randomOffset.x) < 0.01) this._movementState.randomOffset.x = 0;
                     if (Math.abs(this._movementState.randomOffset.y) < 0.01) this._movementState.randomOffset.y = 0;
                 }
+            }
+        }
+        
+        // 处理平滑跳跃
+        if (this._movementState.isJumping) {
+            this._movementState.jumpProgress += dt * 3; // 三分之一秒完成跳跃
+            if (this._movementState.jumpProgress >= 1) {
+                // 跳跃完成
+                this.x = this._movementState.targetJumpX;
+                this.y = this._movementState.targetJumpY;
+                this._movementState.isJumping = false;
+            } else {
+                // 使用平滑插值
+                const progress = Math.sin(this._movementState.jumpProgress * Math.PI / 2); // 使用正弦函数使动作更平滑
+                this.x = this._movementState.jumpStartX + (this._movementState.targetJumpX - this._movementState.jumpStartX) * progress;
+                this.y = this._movementState.jumpStartY + (this._movementState.targetJumpY - this._movementState.jumpStartY) * progress;
             }
         }
         
@@ -850,54 +954,20 @@ class Enemy extends Character {
             }
         }
         
-        // 如果是爆炸敌人，创建爆炸效果
+        // 如果是炸弹敌人，死亡时爆炸
         if (this.type && this.type.explodeOnDeath) {
-            this.createExplosion(this.type.explodeRadius || 120, this.type.explodeDamage || 15);
+            const explodeRadius = this.type.explodeRadius || 150;
+            const explodeDamage = this.type.explodeDamage || 15; // 默认使用15的伤害值
+            
+            // 创建爆炸效果和伤害
+            this.createExplosion(explodeRadius, explodeDamage);
         }
         
-        // 如果击杀者是玩家
-        if (killer instanceof Player) { // 确保 killer 是玩家实例
-            // 增加击杀数
-            killCount++;
-            // 生成经验宝石
-            this.dropXP();
-            // 随机掉落物品 (普通敌人)
-            if (!(this instanceof BossEnemy) && Math.random() < 0.05) { // Boss 不掉落普通小物品
-                this.dropItem();
-            }
-
-            // 检查舍利子回魂
-            const soulRelicItem = killer.passiveItems.find(item => item instanceof SoulRelic);
-            if (soulRelicItem) {
-                // 尝试召唤幽灵，并获取是否成功召唤
-                const reanimated = soulRelicItem.tryReanimate(this.x, this.y, killer);
-                if(reanimated) {
-                    // 如果成功召唤幽灵，可以考虑不掉落宝箱或经验？(当前逻辑保留都掉落)
-                }
-            }
-
-            // --- 新增：如果是 Boss，则掉落宝箱 ---
-            if (this instanceof BossEnemy) {
-                console.log("Boss defeated! Spawning chest...");
-                
-                // 在生成宝箱前播放特效
-                if (typeof createEvolutionEffect === 'function') {
-                    createEvolutionEffect(this.x, this.y);
-                } else {
-                    // 如果 createEvolutionEffect 不可用，可以放一个简单的备用特效或日志
-                    console.warn("createEvolutionEffect function not found. Skipping Boss death effect.");
-                }
-                
-                const chest = new Chest(this.x, this.y);
-                worldObjects.push(chest);
-                // 确保宝箱立即激活（如果 Chest 构造函数没有这么做，或者 isActive 默认为 false）
-                // 并且确保我们操作的是正确的 Chest 实例，以防 worldObjects 中有其他类型的对象
-                if (chest instanceof Chest && !chest.isActive) {
-                     chest.isActive = true;
-                }
-            }
-            // --- 结束新增 ---
-        }
+        // 随机掉落经验值
+        this.dropXP();
+        
+        // 随机掉落物品
+        this.dropItem();
     }
 
     /**
@@ -912,36 +982,39 @@ class Enemy extends Character {
             y: this.y,
             radius: 0,
             maxRadius: radius,
-            lifetime: 0.5,
             timer: 0,
+            maxTime: 0.5,
             isGarbage: false,
             
             update: function(dt) {
                 this.timer += dt;
-                if (this.timer >= this.lifetime) {
+                
+                if (this.timer >= this.maxTime) {
                     this.isGarbage = true;
                     return;
                 }
                 
-                this.radius = (this.timer / this.lifetime) * this.maxRadius;
+                this.radius = this.maxRadius * (this.timer / this.maxTime);
             },
             
             draw: function(ctx) {
                 if (this.isGarbage) return;
                 
-                const screenPos = cameraManager.worldToScreen(this.x, this.y);
-                const alpha = 0.7 - (this.timer / this.lifetime) * 0.7;
-                
                 // 绘制爆炸效果
+                const screenPos = cameraManager.worldToScreen(this.x, this.y);
+                
+                // 创建径向渐变
                 const gradient = ctx.createRadialGradient(
                     screenPos.x, screenPos.y, 0,
                     screenPos.x, screenPos.y, this.radius
                 );
                 
-                gradient.addColorStop(0, `rgba(255, 200, 50, ${alpha})`);
-                gradient.addColorStop(0.7, `rgba(255, 100, 50, ${alpha * 0.7})`);
-                gradient.addColorStop(1, `rgba(255, 50, 50, 0)`);
+                // 设置渐变颜色
+                gradient.addColorStop(0, 'rgba(255, 200, 50, 0.8)');
+                gradient.addColorStop(0.5, 'rgba(255, 100, 50, 0.5)');
+                gradient.addColorStop(1, 'rgba(255, 50, 50, 0)');
                 
+                // 绘制圆形
                 ctx.fillStyle = gradient;
                 ctx.beginPath();
                 ctx.arc(screenPos.x, screenPos.y, this.radius, 0, Math.PI * 2);
@@ -949,6 +1022,7 @@ class Enemy extends Character {
             }
         };
         
+        // 添加到视觉效果列表
         visualEffects.push(explosion);
         
         // 对范围内的玩家造成伤害，应用时间增长系数
@@ -1315,7 +1389,7 @@ class Enemy extends Character {
             this.statusEffects.slow.duration -= dt;
             if (this.statusEffects.slow.duration <= 0) {
                 // 恢复原速度
-                this.speed = this.type.speed || BASE_ENEMY_SPEED;
+                this.speed = this.type.speed || ENEMY_BASE_STATS.speed;
                 delete this.statusEffects.slow;
             }
         }
@@ -1361,13 +1435,34 @@ class BossEnemy extends Enemy {
      * @param {Object} bossType - Boss类型
      */
     constructor(x, y, bossType) {
+        // 修复问题：先确保gameTime存在，否则使用默认值0
+        const currentGameTime = typeof gameTime !== 'undefined' ? gameTime : 0;
+        
         // 计算Boss基础属性 (initial calculation before super call)
         const initialBossStats = { ...ENEMY_BASE_STATS };
-        initialBossStats.health = (bossType.healthBase || ENEMY_BASE_STATS.health * BOSS_BASE_HEALTH_MULTIPLIER) * (bossType.healthMult || 1);
-        initialBossStats.speed = (bossType.speedBase || ENEMY_BASE_STATS.speed) * (bossType.speedMult || 1);
-        initialBossStats.damage = (bossType.damageBase || ENEMY_BASE_STATS.damage * BOSS_BASE_DAMAGE_MULTIPLIER) * (bossType.damageMult || 1);
-        initialBossStats.xp = (bossType.xpBase || ENEMY_BASE_STATS.xp * 10) * (bossType.xpMult || 1);
+        
+        // 确保乘数有效，避免NaN或Infinity
+        const healthMult = bossType.healthMult || 1;
+        const speedMult = bossType.speedMult || 1;
+        const damageMult = bossType.damageMult || 1;
+        const xpMult = bossType.xpMult || 1;
+        
+        // 确保健康乘数正确获取并有默认值
+        const baseHealthMultiplier = typeof BOSS_BASE_HEALTH_MULTIPLIER !== 'undefined' ? BOSS_BASE_HEALTH_MULTIPLIER : 8;
+        const baseDamageMultiplier = typeof BOSS_BASE_DAMAGE_MULTIPLIER !== 'undefined' ? BOSS_BASE_DAMAGE_MULTIPLIER : 2.5;
+        
+        // 正确计算初始属性并确保不为NaN或undefined
+        initialBossStats.health = (bossType.healthBase || ENEMY_BASE_STATS.health * baseHealthMultiplier) * healthMult;
+        initialBossStats.speed = (bossType.speedBase || ENEMY_BASE_STATS.speed) * speedMult;
+        initialBossStats.damage = (bossType.damageBase || ENEMY_BASE_STATS.damage * baseDamageMultiplier) * damageMult;
+        initialBossStats.xp = (bossType.xpBase || ENEMY_BASE_STATS.xp * 10) * xpMult;
         initialBossStats.attackInterval = bossType.attackCooldown || 1.5;
+        
+        // 确保值不为NaN或负数
+        initialBossStats.health = Math.max(1, initialBossStats.health || 1000);
+        initialBossStats.speed = Math.max(1, initialBossStats.speed || 70);
+        initialBossStats.damage = Math.max(1, initialBossStats.damage || 20);
+        initialBossStats.xp = Math.max(1, initialBossStats.xp || 50);
         
         // Call super with a temporary type object that doesn't include multipliers yet for base Enemy constructor,
         // as we will apply scaling after this. The base Enemy constructor already applies type.healthMult etc.
@@ -1379,7 +1474,7 @@ class BossEnemy extends Enemy {
         this.stats = { ...initialBossStats }; // Use a copy
 
         // Time-based scaling for Bosses (more aggressive or starts earlier)
-        const minutesPassed = gameTime / 60;
+        const minutesPassed = currentGameTime / 60;
         // Health: Starts scaling after 1 min, caps at +200% (3x total) around 11 mins
         let bossHealthScaling = 1.0;
         if (minutesPassed > 1) {
@@ -1391,9 +1486,18 @@ class BossEnemy extends Enemy {
             bossDamageScaling += Math.min((minutesPassed - 2) * 0.15, 1.5); // 0.15 per min after 2 mins, up to +150%
         }
 
+        // 确保缩放因子不为NaN或负数
+        bossHealthScaling = Math.max(1.0, bossHealthScaling || 1.0);
+        bossDamageScaling = Math.max(1.0, bossDamageScaling || 1.0);
+
         this.stats.health *= bossHealthScaling;
         this.stats.damage *= bossDamageScaling;
         
+        // 确保最终健康值不为NaN或负数
+        this.stats.health = Math.max(100, this.stats.health || 1000);
+        this.stats.damage = Math.max(5, this.stats.damage || 20);
+        
+        // 设置当前生命值
         this.health = this.stats.health;
         this.maxHealth = this.stats.health; 
         
@@ -1461,6 +1565,9 @@ class BossEnemy extends Enemy {
             this.specialAbilityTimer = 6.0; // 开场即可释放特殊技能
         }
         // --- 结束 巨型僵尸 特定属性 ---
+        
+        // 确认Boss已正确初始化，打印日志
+        console.log(`Boss ${this.type.name} created with health: ${this.health}/${this.maxHealth}, damage: ${this.stats.damage}`);
     }
 
     /**

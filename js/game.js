@@ -132,7 +132,13 @@ const enemyManager = {
             if (gameTime < (enemy.minTime || 0)) {
                 return false;
             }
-            // 移除与 firstBossDefeated 相关的判断逻辑，完全依赖 minTime
+            
+            // 如果有最大时间限制，检查是否超过
+            if (enemy.maxTime && gameTime >= enemy.maxTime) {
+                return false;
+            }
+            
+            // 移除与 firstBossDefeated 相关的判断逻辑，完全依赖 minTime 和 maxTime
             return true; 
         });
         
@@ -146,6 +152,17 @@ const enemyManager = {
         if (availableEnemies.length === 0) {
             console.warn("没有找到符合条件的敌人类型，使用史莱姆作为后备");
             availableEnemies = ENEMY_TYPES.filter(enemy => enemy.name === "史莱姆");
+            // 如果史莱姆也不可用，尝试蝙蝠，然后僵尸
+            if (availableEnemies.length === 0) {
+                availableEnemies = ENEMY_TYPES.filter(enemy => enemy.name === "蝙蝠");
+                if (availableEnemies.length === 0) {
+                    availableEnemies = ENEMY_TYPES.filter(enemy => enemy.name === "僵尸");
+                }
+            }
+            // 如果所有备选都不可用，使用第一个敌人类型
+            if (availableEnemies.length === 0 && ENEMY_TYPES.length > 0) {
+                availableEnemies = [ENEMY_TYPES[0]];
+            }
         }
         
         // 计算总权重

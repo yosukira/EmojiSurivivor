@@ -1139,7 +1139,7 @@ if (typeof LaserPrismWeapon === 'undefined') {
                 damage: 15 + (this.level - 1) * 5,
                 cooldown: Math.max(0.8, 1.5 - (this.level - 1) * 0.07),
                 count: 1 + Math.floor((this.level - 1) / 2),
-                beamWidth: 15 + (this.level - 1) * 2,
+                beamWidth: 15, // 固定宽度，不随等级增加
                 duration: 1.0 + (this.level - 1) * 0.1,
                 piercing: this.level >= 5
             };
@@ -1200,7 +1200,7 @@ if (typeof LaserPrismWeapon === 'undefined') {
                         owner,
                         dirX,
                         dirY,
-                        300, // 激光长度
+                        200, // 激光长度缩短为200（从300减少）
                         this.stats.beamWidth,
                         finalDamage,
                         finalDuration,
