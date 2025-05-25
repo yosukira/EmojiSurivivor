@@ -63,6 +63,11 @@ let activeGhosts = []; // 新增：用于存储活动的幽灵
 let hazards = []; // 新增：用于存储持续性危害物，如藤蔓、火山等
 let particles = []; // 粒子效果
 
+// 鼠标隐藏相关
+let lastMouseMoveTime = Date.now(); // 最后一次鼠标移动的时间
+let mouseIdleTime = 2000; // 鼠标不动多少毫秒后隐藏（2秒）
+let isMouseHidden = false; // 鼠标是否已隐藏
+
 // 对象池
 let inactiveProjectiles = [];
 let inactiveDamageNumbers = []
@@ -653,6 +658,12 @@ function update(dt) {
     }
     // --- 结束新增 ---
 
+    // 检查鼠标闲置时间
+    if (!isMouseHidden && Date.now() - lastMouseMoveTime > mouseIdleTime) {
+        document.body.style.cursor = 'none';
+        isMouseHidden = true;
+    }
+
     if (isGameOver || isPaused || isLevelUp) return;
 
     gameTime += dt;
@@ -684,11 +695,16 @@ function update(dt) {
     // 更新敌人 (包括普通敌人和Boss)
     for (let i = 0; i < enemies.length; i++) {
         if (!enemies[i].isGarbage && enemies[i].isActive) {
-            enemies[i].target = player; // 确保所有敌人都有目标
+            // 确保所有敌人都有目标
+            enemies[i].target = player;
+            
+            // 根据敌人类型调用不同的update方法
             if (enemies[i] instanceof BossEnemy) {
-                enemies[i].update(dt, player); // <--- 确保 BossEnemy 的 update 也接收 player
+                // Boss敌人需要传递player作为参数
+                enemies[i].update(dt, player);
             } else {
-            enemies[i].update(dt);
+                // 普通敌人只需要dt
+                enemies[i].update(dt);
             }
         }
     }
@@ -1487,6 +1503,9 @@ function presentLevelUpOptions() {
     const upgradeOptionsContainer = document.getElementById('upgradeOptions');
     const chestUpgradeInfoElement = document.getElementById('chestUpgradeInfo'); // 获取新DOM元素
 
+    // 显示debug属性面板
+    showLevelUpDebugStats();
+    
     // --- 显示宝箱升级提示 ---
     if (player && player.currentChestTotalUpgrades > 0 && (player.pendingLevelUpsFromChest + 1) > 0) {
         chestUpgradeInfoElement.textContent = `开启宝箱！共 ${player.currentChestTotalUpgrades} 次升级机会，还剩 ${player.pendingLevelUpsFromChest + 1} 次选择。`;
@@ -1503,11 +1522,15 @@ function presentLevelUpOptions() {
         // 清空容器
         upgradeOptionsContainer.innerHTML = '';
         
+        // 当前选中的选项索引（用于键盘操作）
+        let currentSelection = -1;
+        
         // 添加选项
         if (options && options.length > 0) {
-        options.forEach(option => {
+        options.forEach((option, index) => {
             // 创建按钮
             const button = document.createElement('button');
+            button.dataset.index = index; // 保存索引，方便键盘操作
             // 创建图标
             const iconSpan = document.createElement('span');
             iconSpan.className = 'upgradeIcon';
@@ -1536,18 +1559,120 @@ function presentLevelUpOptions() {
             button.appendChild(iconSpan);
             button.appendChild(textSpan);
             button.appendChild(descP);
+            
+            // 添加鼠标悬停效果
+            button.addEventListener('mouseover', () => {
+                selectUpgradeOption(index);
+            });
+            
             // 添加点击事件
             button.onclick = () => {
+                executeUpgradeOption(option, levelUpScreenElement);
+            };
+            
+            // 添加到容器
+            upgradeOptionsContainer.appendChild(button);
+        });
+            
+            // 默认选中第一个选项
+            if (options.length > 0) {
+                selectUpgradeOption(0);
+            }
+            
+            // 添加键盘事件监听
+            const handleKeyDown = (e) => {
+                const key = e.key.toLowerCase();
+                const numOptions = options.length;
+                
+                // 数字键1-4选择
+                if (key >= '1' && key <= '4' && (parseInt(key) <= numOptions)) {
+                    const optionIndex = parseInt(key) - 1;
+                    
+                    if (currentSelection === optionIndex) {
+                        // 如果已经选中，再次按下同一个数字键就确认选择
+                        const option = options[optionIndex];
+                        executeUpgradeOption(option, levelUpScreenElement);
+                    } else {
+                        // 否则只是选中
+                        selectUpgradeOption(optionIndex);
+                    }
+                }
+                // 小键盘数字键1-4选择
+                else if (key === 'numpad1' || key === 'numpad2' || key === 'numpad3' || key === 'numpad4') {
+                    const optionIndex = parseInt(key.replace('numpad', '')) - 1;
+                    if (optionIndex < numOptions) {
+                        if (currentSelection === optionIndex) {
+                            // 如果已经选中，再次按下同一个数字键就确认选择
+                            const option = options[optionIndex];
+                            executeUpgradeOption(option, levelUpScreenElement);
+                        } else {
+                            // 否则只是选中
+                            selectUpgradeOption(optionIndex);
+                        }
+                    }
+                }
+                // W/上方向键选择上一个选项
+                else if (key === 'w' || key === 'arrowup') {
+                    if (currentSelection > 0) {
+                        selectUpgradeOption(currentSelection - 1);
+                    } else {
+                        selectUpgradeOption(numOptions - 1);
+                    }
+                }
+                // S/下方向键选择下一个选项
+                else if (key === 's' || key === 'arrowdown') {
+                    if (currentSelection < numOptions - 1) {
+                        selectUpgradeOption(currentSelection + 1);
+                    } else {
+                        selectUpgradeOption(0);
+                    }
+                }
+                // 空格键确认选择
+                else if (key === ' ' || key === 'enter') {
+                    if (currentSelection >= 0 && currentSelection < numOptions) {
+                        const option = options[currentSelection];
+                        executeUpgradeOption(option, levelUpScreenElement);
+                    }
+                }
+            };
+            
+            // 添加键盘事件监听器
+            window.addEventListener('keydown', handleKeyDown);
+            
+            // 选中指定选项的函数
+            function selectUpgradeOption(index) {
+                // 移除所有选项的选中状态
+                const allButtons = upgradeOptionsContainer.querySelectorAll('button');
+                allButtons.forEach(btn => {
+                    btn.classList.remove('selected');
+                });
+                
+                // 设置当前选中项
+                currentSelection = index;
+                const selectedButton = allButtons[index];
+                if (selectedButton) {
+                    selectedButton.classList.add('selected');
+                }
+            }
+            
+            // 执行升级选项的函数
+            function executeUpgradeOption(option, levelUpScreenElement) {
                 try {
                     // 执行选项操作
                     console.log("Upgrade button clicked. Action:", option.text);
-                        if (typeof option.action === 'function') {
-                    option.action();
-                        }
-                        levelUpScreenElement.classList.add('hidden');
+                    if (typeof option.action === 'function') {
+                        option.action();
+                    }
+                    levelUpScreenElement.classList.add('hidden');
                     console.log("Hiding level up screen. Setting isPaused=false, isLevelUp=false.");
                     isPaused = false;
-                    isLevelUp = false; 
+                    isLevelUp = false;
+
+                    // 隐藏debug面板
+                    hideLevelUpDebugStats();
+
+                    // 移除键盘事件监听器
+                    window.removeEventListener('keydown', handleKeyDown);
 
                     // --- 重置宝箱计数器 (如果适用) ---
                     if (player && player.pendingLevelUpsFromChest === 0) {
@@ -1558,15 +1683,13 @@ function presentLevelUpOptions() {
 
                 } catch (error) {
                     console.error("升级选项执行错误:", error);
-                        levelUpScreenElement.classList.add('hidden');
+                    levelUpScreenElement.classList.add('hidden');
                     console.log("Error in upgrade action. Setting isPaused=false, isLevelUp=false.");
                     isPaused = false;
                     isLevelUp = false;
+                    window.removeEventListener('keydown', handleKeyDown);
                 }
-            };
-            // 添加到容器
-            upgradeOptionsContainer.appendChild(button);
-        });
+            }
         } else {
             // 如果没有有效选项，提供一个默认的关闭方式或提示
             const noOptionText = document.createElement('p');
@@ -1740,6 +1863,17 @@ window.addEventListener('keydown', (e) => {
 
 window.addEventListener('keyup', (e) => {
     keys[e.key.toLowerCase()] = false;
+});
+
+// 添加鼠标移动事件监听器
+window.addEventListener('mousemove', () => {
+    // 如果鼠标被隐藏，则显示
+    if (isMouseHidden) {
+        document.body.style.cursor = '';
+        isMouseHidden = false;
+    }
+    // 更新最后鼠标移动时间
+    lastMouseMoveTime = Date.now();
 });
 
 // 按钮事件
@@ -2535,4 +2669,56 @@ function startGame() {
     
     // 更新UI
     updateUI();
+}
+
+/**
+ * 显示升级时的debug属性面板
+ */
+function showLevelUpDebugStats() {
+    const debugPanel = document.getElementById('levelUpDebugPanel');
+    const debugStatsContainer = document.getElementById('debugStats');
+    
+    if (!debugPanel || !debugStatsContainer || !player) return;
+    
+    // 清空容器
+    debugStatsContainer.innerHTML = '';
+    
+    // 创建并填充属性列表
+    const stats = [
+        { name: "生命值", value: Math.ceil(player.health) + "/" + Math.ceil(player.getStat('health')) },
+        { name: "武器伤害", value: player.getStat('damageMultiplier').toFixed(2) },
+        { name: "攻击速度", value: player.getStat('cooldownMultiplier').toFixed(2) },
+        { name: "攻击范围", value: player.getStat('areaMultiplier').toFixed(2) },
+        { name: "持续时间", value: player.getStat('durationMultiplier').toFixed(2) },
+        { name: "投射物数量", value: player.getStat('projectileCountBonus') },
+        { name: "投射物速度", value: player.getStat('projectileSpeedMultiplier').toFixed(2) },
+        { name: "生命恢复", value: player.getStat('regen').toFixed(1) + "/秒" },
+        { name: "移动速度", value: player.getCurrentSpeed().toFixed(0) },
+        { name: "拾取范围", value: player.getStat('pickupRadius').toFixed(0) },
+        { name: "护甲", value: player.getStat('armor').toFixed(1) },
+        { name: "减伤百分比", value: (player.getStat('damageReductionPercent') * 100).toFixed(1) + "%" },
+        { name: "暴击率", value: (player.getStat('critChance') * 100).toFixed(1) + "%" },
+        { name: "暴击伤害", value: (player.getStat('critMultiplier')).toFixed(2) + "x" },
+        { name: "幸运值", value: player.getStat('luck').toFixed(1) }
+    ];
+    
+    // 动态创建每一行
+    stats.forEach(stat => {
+        const div = document.createElement('div');
+        div.innerHTML = `<span class="statName">${stat.name}</span>: <span class="statValue">${stat.value}</span>`;
+        debugStatsContainer.appendChild(div);
+    });
+    
+    // 显示面板
+    debugPanel.style.display = 'block';
+}
+
+/**
+ * 隐藏升级时的debug属性面板
+ */
+function hideLevelUpDebugStats() {
+    const debugPanel = document.getElementById('levelUpDebugPanel');
+    if (debugPanel) {
+        debugPanel.style.display = 'none';
+    }
 }

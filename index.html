@@ -140,7 +140,7 @@
             align-items: center;
             text-align: center;
             color: white;
-            z-index: 10;
+            z-index: 4; /* 降低z-index，避免遮挡UI */
             font-size: 19px;
         }
 
@@ -171,6 +171,13 @@
         }
 
         .overlayScreen button:hover {
+            background-color: #27ae60;
+        }
+
+        /* 升级选项选中状态样式 */
+        .overlayScreen button.selected {
+            border: 2px solid white;
+            box-shadow: 0 0 10px white, 0 0 15px #4CAF50;
             background-color: #27ae60;
         }
 
@@ -218,6 +225,40 @@
 
         .hidden {
             display: none !important;
+        }
+
+        /* 升级界面中显示的属性面板 */
+        #levelUpDebugPanel {
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 8px;
+            color: white;
+            font-size: 15px;
+            max-width: 200px;
+            max-height: 70vh;
+            overflow-y: auto;
+            z-index: 6;
+            display: none; /* 默认隐藏 */
+        }
+        
+        #levelUpDebugPanel div {
+            margin-bottom: 4px;
+            text-align: left;
+        }
+        
+        #levelUpDebugPanel .statName {
+            color: #aaa;
+            display: inline-block;
+            width: 130px; /* 调整宽度以对齐 */
+        }
+        
+        #levelUpDebugPanel .statValue {
+            color: #eee;
+            font-weight: bold;
         }
     </style>
 </head>
@@ -274,6 +315,12 @@
         <div id="upgradeOptions"></div>
     </div>
 
+    <!-- 升级时显示的玩家属性面板 -->
+    <div id="levelUpDebugPanel">
+        <h3>玩家属性</h3>
+        <div id="debugStats"></div>
+    </div>
+    
     <!-- 暂停屏幕 -->
     <div id="pauseScreen" class="overlayScreen hidden">
         <h1>已暂停</h1>
