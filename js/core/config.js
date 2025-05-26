@@ -3,6 +3,10 @@
  * 定义游戏中的常量
  */
 
+// 调试开关
+const DEBUG_SHOW_PLAYER_HITBOX = false;
+const DEBUG_SHOW_PLAYER_HEALTH = false;
+
 // 游戏尺寸
 let GAME_WIDTH = 1920 // 增加游戏宽度
 let GAME_HEIGHT = 1080// 增加游戏高度

@@ -53,6 +53,10 @@ class Player extends Character {
         this.speed = this.baseSpeed; // 当前速度
 
         this.invincibleSources = {}; // 新增：来源独立无敌时间
+
+        this.facingRight = true; // 新增：玩家朝向，默认为右
+        this.bobbingOffset = 0; // 新增：用于上下浮动的偏移量
+        this.bobbingTimer = 0; // 新增：用于上下浮动的时间计数器
     }
 
     /**
@@ -109,6 +113,11 @@ class Player extends Character {
         if (keys['d'] || keys['arrowright']) dx += 1;
         if (keys['w'] || keys['arrowup']) dy -= 1;
         if (keys['s'] || keys['arrowdown']) dy += 1;
+
+        if (dx !== 0) {
+            this.facingRight = dx > 0;
+        }
+
         if (dx !== 0 || dy !== 0) {
             const length = Math.sqrt(dx * dx + dy * dy);
             dx /= length;
@@ -528,59 +537,74 @@ class Player extends Character {
      * @param {CanvasRenderingContext2D} ctx - 画布上下文
      */
     draw(ctx) {
-        // 如果玩家不活动或已标记为垃圾，不绘制
-        if (!this.isActive || this.isGarbage) return;
+        if (!this.isActive || this.isGarbage || !playerImage || !playerImage.complete || playerImage.naturalHeight === 0) return;
 
-        ctx.save(); // 最外层保存状态
-        ctx.globalAlpha = 1.0; // 确保玩家绘制开始时不透明
+        // 玩家的逻辑屏幕坐标 (可能是脚底或中心，取决于this.x, this.y的定义)
+        const logicalScreenPos = cameraManager.worldToScreen(this.x, this.y);
 
-        const screenPos = cameraManager.worldToScreen(this.x, this.y);
-        const drawSize = this.size; 
+        // 上下浮动效果
+        this.bobbingTimer += 0.05; 
+        this.bobbingOffset = Math.sin(this.bobbingTimer) * 3; // 幅度可以调整
 
-        // 白色边框的逻辑已被注释掉，按用户要求移除
-        /*
-        if (this.statusEffects.slow) {
-            // ... border drawing code ...
+        // 图片实际绘制的视觉中心Y (加入了浮动)
+        const visualCenterY = logicalScreenPos.y + this.bobbingOffset;
+        const visualCenterX = logicalScreenPos.x;
+
+        // 图片尺寸计算 (保持宽高比)
+        const originalWidth = playerImage.naturalWidth;
+        const originalHeight = playerImage.naturalHeight;
+        
+        const desiredVisualHeight = this.size * 1.2; // 系数1.2可以调整
+        const scaleFactor = desiredVisualHeight / originalHeight;
+        const imageToDrawWidth = originalWidth * scaleFactor;
+        const imageToDrawHeight = desiredVisualHeight; 
+
+        const imageDrawX = visualCenterX - imageToDrawWidth / 2;
+        const imageDrawY = visualCenterY - imageToDrawHeight / 2;
+
+        // 绘制影子
+        ctx.save();
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+        ctx.beginPath();
+        const shadowCenterY = logicalScreenPos.y + imageToDrawHeight / 2 + 5; // 5是额外偏移，可调
+        ctx.ellipse(visualCenterX, shadowCenterY, imageToDrawWidth / 2.5, imageToDrawHeight / 7, 0, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.restore();
+
+        // 绘制玩家图片
+        ctx.save();
+        if (!this.facingRight) {
+            ctx.translate(visualCenterX, visualCenterY);
+            ctx.scale(-1, 1);
+            ctx.translate(-visualCenterX, -visualCenterY);
         }
-        */
 
-        // 绘制玩家 (图片或 Emoji)
-        if (playerImage && playerImage.complete && playerImage.naturalHeight !== 0) {
-            // 无敌闪烁的 save/restore 已在内部处理 alpha
-            ctx.save();
         if (this.invincibleTime > 0) {
-            const blinkRate = 10;
-                if (Math.sin(Date.now() / 100 * blinkRate * 2) > 0) { 
-                    ctx.globalAlpha = 0.7; // 提高透明度从0.5到0.7，让玩家更清晰可见
-                }
-            }
-            ctx.drawImage(playerImage, 
-                          screenPos.x - drawSize / 2, 
-                          screenPos.y - drawSize / 2, 
-                          drawSize, 
-                          drawSize);
-            ctx.restore(); // 恢复到此 save 之前的状态 (可能是 globalAlpha = 1.0)
-        } else {
-            // 图片加载失败或未加载时，回退到绘制 Emoji
-            ctx.save();
-            if (this.invincibleTime > 0) {
-                const blinkRate = 10;
-                 if (Math.sin(Date.now() / 100 * blinkRate * 2) > 0) {
-                    ctx.globalAlpha = 0.7; // 提高透明度从0.5到0.7，让玩家更清晰可见
-                }
-            }
-            ctx.font = `${drawSize}px 'Segoe UI Emoji', Arial`;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(this.emoji, screenPos.x, screenPos.y);
-            ctx.restore(); // 恢复到此 save 之前的状态
+            ctx.globalAlpha = 0.5 + Math.sin(Date.now() / 100) * 0.2;
         }
         
-        // 绘制状态效果 (Character.draw 已经处理了状态效果的 save/restore 和 alpha)
-        // 所以这里不需要再次 save/restore 或设置 alpha
-        this.drawStatusEffects(ctx);
+        ctx.drawImage(
+            playerImage,
+            imageDrawX,
+            imageDrawY,
+            imageToDrawWidth,
+            imageToDrawHeight
+        );
+        ctx.restore();
 
-        ctx.restore(); // 恢复到 Player.draw 最开始保存的状态
+        if (DEBUG_SHOW_PLAYER_HITBOX) {
+            ctx.strokeStyle = 'rgba(255, 0, 0, 0.7)';
+            ctx.beginPath();
+            ctx.arc(logicalScreenPos.x, logicalScreenPos.y, this.size / 2, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+        if (DEBUG_SHOW_PLAYER_HEALTH) {
+            this.drawHealthBar(ctx, imageDrawX, imageDrawY - 15, imageToDrawWidth, 8); 
+        }
+
+        if (this.shield && this.shield.isActive) {
+            this.shield.draw(ctx, logicalScreenPos.x, logicalScreenPos.y); 
+        }
     }
 
     /**
