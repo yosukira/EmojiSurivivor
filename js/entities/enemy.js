@@ -45,8 +45,8 @@ class Enemy extends Character {
         // 调用父类构造函数
         super(
             x, y,
-            type.emoji || EMOJI.ENEMY_NORMAL,
-            GAME_FONT_SIZE * 0.7, // 将尺寸改回原来的70%，之前改成了50%
+            type.emoji || EMOJI.ENEMY_NORMAL, // emoji 仍然可以作为备用
+            GAME_FONT_SIZE * 0.7,
             {
                 health: ENEMY_BASE_STATS.health * (type.healthMult || 1),
                 speed: ENEMY_BASE_STATS.speed * (type.speedMult || 1),
@@ -116,6 +116,19 @@ class Enemy extends Character {
         this.attackCooldownTime = type.attackCooldownTime || 1.5;
         // 远程投射物速度
         this.projectileSpeed = type.projectileSpeed || 120;
+
+        // 新增：图片加载和朝向
+        this.image = null;
+        this.imageLoaded = false;
+        this.facingRight = true; // 默认朝右
+
+        if (this.type && this.type.svgPath) { // svgPath 现在用于PNG
+            this.image = new Image();
+            this.image.src = this.type.svgPath;
+            this.image.onload = () => {
+                this.imageLoaded = true;
+            };
+        }
 
         // 特殊能力相关
         // 地狱犬冲刺
@@ -630,91 +643,35 @@ class Enemy extends Character {
      * @param {number} dt - 时间增量
      */
     updateMovement(dt) {
-        // 如果没有目标或被眩晕，不移动
-        if (!this.target || this.isStunned()) return;
-
-        // 初始化防卡住检测属性
-        if (!this._movementState) {
-            this._movementState = {
-                lastX: this.x,
-                lastY: this.y,
-                stuckTimer: 0,
-                randomOffset: { x: 0, y: 0 }
-            };
+        if (!this.target) {
+            // 如果没有目标，随机移动或返回出生点（简化处理）
+            // this.wander(dt); // 可以实现一个徘徊逻辑
+            return;
         }
 
-        // 计算与目标的距离
         const dx = this.target.x - this.x;
         const dy = this.target.y - this.y;
-        const distSq = dx * dx + dy * dy;
+        const distance = Math.sqrt(dx * dx + dy * dy);
 
-        // 如果是炸弹敌人，检查是否玩家进入爆炸范围，如果是则爆炸
-        if (this.type && this.type.name === "炸弹") {
-            const explodeRadius = this.type.explodeRadius || 150;
-            if (distSq <= explodeRadius * explodeRadius * 0.7) { // 使用70%的爆炸半径作为触发距离
-                // 立即引爆
-                this.health = 0; // 将血量设为0，触发死亡处理
-                this.onDeath(this.target); // 调用死亡处理程序，传入玩家作为击杀者
-                return;
+        if (distance > (this.size / 2)) { // 只有在距离大于一定值时才移动
+            const moveSpeed = this.stats.speed * dt * (this.statusEffects && this.statusEffects.slow ? this.statusEffects.slow.factor : 1);
+            this.x += (dx / distance) * moveSpeed;
+            this.y += (dy / distance) * moveSpeed;
+
+            // 更新朝向
+            if (dx > 0) {
+                this.facingRight = true;
+            } else if (dx < 0) {
+                this.facingRight = false;
             }
+            // 如果dx === 0，保持当前朝向
         }
 
-        // 如果是远程敌人且在攻击范围内，保持距离
-        if (this.isRanged && distSq <= this.attackRange * this.attackRange) {
-            // 远程敌人会试图保持在一定距离外
-            const idealDistance = this.attackRange * 0.7;
-            if (distSq < idealDistance * idealDistance) {
-                // 远离玩家
-                const dist = Math.sqrt(distSq);
-                const dirX = -dx / dist;
-                const dirY = -dy / dist;
-
-                // 获取当前速度
-                const currentSpeed = this.getCurrentSpeed() * 0.5;
-
-                // 更新位置
-                this.x += dirX * currentSpeed * dt;
-                this.y += dirY * currentSpeed * dt;
-
-                // 检查防卡住
-                this.checkAndHandleStuck(dt);
-
-                return;
-            }
-        }
-
-        // 常规移动逻辑
-        const dist = Math.sqrt(distSq);
-        // 如果距离为0，不移动
-        if (dist === 0) return;
-        // 计算方向
-        const dirX = dx / dist;
-        const dirY = dy / dist;
-
-        // 获取当前速度
-        const currentSpeed = this.getCurrentSpeed();
-
-        // 不再添加随机偏移，直接使用原始方向
-        let finalDirX = dirX;
-        let finalDirY = dirY;
-        
-        // 归一化方向向量
-        const offsetMag = Math.sqrt(finalDirX * finalDirX + finalDirY * finalDirY);
-        if (offsetMag > 0) {
-            finalDirX /= offsetMag;
-            finalDirY /= offsetMag;
-        }
-
-        // 更新位置
-        this.x += finalDirX * currentSpeed * dt;
-        this.y += finalDirY * currentSpeed * dt;
-
-        // 检查防卡住
+        // 处理卡住的情况 (简化版)
         this.checkAndHandleStuck(dt);
 
-        // 检查与目标的碰撞
-        if (this.checkCollision(this.target)) {
-            // 攻击目标
+        // 检查与目标的碰撞并攻击
+        if (this.target && this.checkCollision(this.target)) {
             this.attack(this.target);
         }
     }
@@ -911,11 +868,12 @@ class Enemy extends Character {
                     }
 
                     // 应用眩晕效果
-                    const stunDuration = this.type.stunDuration || 1;
+                    const stunDuration = this.type.stunDuration || 1; // 应为 0.5
 
                     target.statusEffects.stun = {
                         duration: stunDuration,
-                        source: this
+                        source: this,
+                        icon: '⭐' // 添加图标属性
                     };
                 }
             }
@@ -1160,117 +1118,89 @@ class Enemy extends Character {
             ctx.globalAlpha = 0.7;
         }
 
-        // 眩晕效果
-        if (this.isStunned && this.stunTimer % 0.5 < 0.25) {
-            // 绘制眩晕星星
+        // 新增：为精英僵尸绘制毒气光环 (如果hasPoisonAura为true)
+        if (this.type && this.type.hasPoisonAura && this.type.name === "精英僵尸") {
             ctx.save();
-            ctx.font = `${GAME_FONT_SIZE * 0.5}px Arial`;
-            ctx.fillStyle = 'yellow';
-            ctx.fillText('✨', screenPos.x - GAME_FONT_SIZE * 0.5, screenPos.y - GAME_FONT_SIZE * 0.8);
-            ctx.fillText('✨', screenPos.x + GAME_FONT_SIZE * 0.5, screenPos.y - GAME_FONT_SIZE * 0.8);
-            ctx.restore();
-        }
-
-        // 绘制减速效果
-        if (this.statusEffects && this.statusEffects.slow) {
-            ctx.save();
-            ctx.globalAlpha = 0.5;
-            ctx.fillStyle = '#3498db';
+            const auraRadius = (this.type.poisonAuraRadius || 100) * cameraManager.zoom; 
+            const auraTime = gameTime; // For animations
+            
+            // 基础光环
+            const gradient = ctx.createRadialGradient(
+                screenPos.x, screenPos.y, auraRadius * 0.1,
+                screenPos.x, screenPos.y, auraRadius
+            );
+            const baseAuraAlpha = 0.15; // 精英僵尸的光环稍微透明一些
+            gradient.addColorStop(0, `rgba(0, 180, 80, ${baseAuraAlpha * 0.4})`);
+            gradient.addColorStop(0.7, `rgba(0, 150, 50, ${baseAuraAlpha})`);
+            gradient.addColorStop(1, `rgba(0, 120, 30, ${baseAuraAlpha * 0.3})`);
+            ctx.fillStyle = gradient;
             ctx.beginPath();
-            ctx.arc(screenPos.x, screenPos.y, this.size * 0.6, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.restore();
-
-            // 添加蜗牛图标表示减速状态
-            ctx.save();
-            ctx.globalAlpha = 1.0;
-            ctx.font = `${GAME_FONT_SIZE * 0.5}px 'Segoe UI Emoji', Arial`;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('🐌', screenPos.x, screenPos.y - this.size * 0.8);
-            ctx.restore();
-        }
-
-        // 绘制燃烧效果
-        if (this.statusEffects && this.statusEffects.burn) {
-            ctx.save();
-            ctx.globalAlpha = 0.5;
-            ctx.fillStyle = '#e74c3c';
-            ctx.beginPath();
-            ctx.arc(screenPos.x, screenPos.y, this.size * 0.7, 0, Math.PI * 2);
+            ctx.arc(screenPos.x, screenPos.y, auraRadius, 0, Math.PI * 2);
             ctx.fill();
 
-            // 添加火焰小图标 - 提高显示位置和透明度
-            ctx.globalAlpha = 0.9;
-            ctx.font = `${GAME_FONT_SIZE * 0.6}px Arial`;
-            ctx.fillStyle = 'orange';
-            ctx.fillText('🔥', screenPos.x, screenPos.y - this.size * 0.5);
-            ctx.restore();
-        }
+            // 添加清晰的边缘
+            ctx.strokeStyle = `rgba(0, 220, 100, ${baseAuraAlpha * 2.5 > 1 ? 1 : baseAuraAlpha * 2.5})`; // 更亮且更不透明的绿色边缘
+            ctx.lineWidth = 2 * cameraManager.zoom; // 边框宽度
+            ctx.stroke(); // 绘制描边
 
-        // 绘制毒素效果
-        if (this.statusEffects && this.statusEffects.poison) {
-            ctx.save();
-            ctx.globalAlpha = 0.5;
-            ctx.fillStyle = '#2ecc71';
-            ctx.beginPath();
-            ctx.arc(screenPos.x, screenPos.y, this.size * 0.65, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.restore();
-
-            // 添加毒素小图标
-            ctx.save();
-            ctx.globalAlpha = 0.7;
-            ctx.font = `${GAME_FONT_SIZE * 0.5}px Arial`;
-            ctx.fillStyle = 'green';
-            ctx.fillText('☠️', screenPos.x - GAME_FONT_SIZE * 0.5, screenPos.y - GAME_FONT_SIZE * 0.3);
+            // 旋转线条增加动态感
+            const numLines = 3;
+            const lineLength = auraRadius * 0.8;
+            ctx.strokeStyle = `rgba(0, 200, 80, ${baseAuraAlpha * 1.2})`; 
+            ctx.lineWidth = 1.5 * cameraManager.zoom;
+            for (let i = 0; i < numLines; i++) {
+                const angle = (auraTime * 0.3 + (Math.PI * 2 / numLines) * i) % (Math.PI * 2);
+                ctx.beginPath();
+                ctx.moveTo(screenPos.x, screenPos.y);
+                ctx.lineTo(
+                    screenPos.x + Math.cos(angle) * lineLength,
+                    screenPos.y + Math.sin(angle) * lineLength
+                );
+                ctx.stroke();
+            }
             ctx.restore();
         }
 
         // 绘制敌人
         try {
-            if (this.type && this.type.svgPath) {
-                // 使用SVG图像
-                if (!this.svgImage) {
-                    this.svgImage = new Image();
-                    this.svgImage.src = this.type.svgPath;
+            ctx.save(); // 保存当前绘图状态，以便翻转后恢复
+            if (this.image && this.imageLoaded) {
+                // 使用图片
+                const size = this.size * 2; // 可以根据图片实际尺寸调整
+                
+                let drawX = screenPos.x - size / 2;
+                const drawY = screenPos.y - size / 2;
 
-                    // 预加载图像，避免闪烁
-                    this.svgImage.onload = () => {
-                        this.svgImageLoaded = true;
-                    };
-
-                    // 立即尝试使用emoji作为后备，直到图像加载完成
-                    ctx.font = `${this.size * 2}px Arial`;
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
-                    ctx.fillText(this.type.emoji, screenPos.x, screenPos.y);
-                } else if (this.svgImageLoaded) {
-                    // 如果SVG图像已加载，绘制它
-                    const size = this.size * 2;
-                    ctx.drawImage(
-                        this.svgImage,
-                        screenPos.x - size / 2,
-                        screenPos.y - size / 2,
-                        size,
-                        size
-                    );
-                } else {
-                    // 图像仍在加载中，使用emoji作为后备
-                    ctx.font = `${this.size * 2}px Arial`;
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
-                    ctx.fillText(this.type.emoji, screenPos.x, screenPos.y);
+                if (!this.facingRight) {
+                    ctx.scale(-1, 1);
+                    drawX = -screenPos.x - size / 2; // 翻转后，x坐标也需要调整
                 }
-            } else {
-                // 没有SVG图像，使用emoji
+                
+                ctx.drawImage(
+                    this.image,
+                    drawX,
+                    drawY,
+                    size,
+                    size
+                );
+            } else if (this.type && this.type.emoji) {
+                // 没有图片或图片未加载，使用emoji作为备用
                 ctx.font = `${this.size * 2}px Arial`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
-                ctx.fillText(this.type.emoji, screenPos.x, screenPos.y);
+                let emojiX = screenPos.x;
+                if (!this.facingRight) {
+                    // Emoji 通常是字符，翻转效果可能不理想，但可以尝试
+                    // 或者对于emoji，不进行翻转，或者用特定朝向的emoji
+                    ctx.scale(-1, 1);
+                    emojiX = -screenPos.x;
+                }
+                ctx.fillText(this.type.emoji, emojiX, screenPos.y);
             }
+            ctx.restore(); // 恢复绘图状态
         } catch (e) {
             console.error("绘制敌人时出错:", e);
+            ctx.restore(); // 确保在出错时也恢复状态
 
             // 发生错误时，确保至少显示emoji
             ctx.font = `${this.size * 2}px Arial`;

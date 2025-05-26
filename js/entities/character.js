@@ -34,6 +34,8 @@ class Character extends GameObject {
         };
         // 无敌时间
         this.invincibleTime = 0;
+        // 眩晕免疫计时器
+        this.stunImmunityTimer = 0;
     }
 
     /**
@@ -115,11 +117,21 @@ class Character extends GameObject {
             return;
         }
 
-        // 对于眩晕效果，如果已经存在效果，则选择持续时间更长的那个
+        // 对于眩晕效果
         if (type === 'stun') {
-            if (this.statusEffects[type] && this.statusEffects[type].duration > effectData.duration) {
-                return; // 已有更强的同类效果
+            // 如果当前正被眩晕或处于眩晕免疫中，则不施加新的眩晕
+            if (this.statusEffects.stun || this.stunImmunityTimer > 0) {
+                return;
             }
+            // 如果新的眩晕效果比现有的弱（虽然上面已经return了，但保留逻辑完整性）
+            // 确保 effectData.duration 存在且有效
+            const newDuration = (effectData && typeof effectData.duration === 'number') ? effectData.duration : 0;
+            if (this.statusEffects[type] && this.statusEffects[type].duration > newDuration) {
+                return; 
+            }
+            // 施加眩晕效果时不启动免疫计时器
+            this.statusEffects[type] = { ...effectData, icon: '💫', duration: newDuration }; 
+            return; 
         }
         
         this.statusEffects[type] = { ...effectData };
@@ -146,6 +158,23 @@ class Character extends GameObject {
      * @param {number} dt - 时间增量
      */
     updateStatusEffects(dt) {
+        // 更新眩晕免疫计时器
+        if (this.stunImmunityTimer > 0) {
+            this.stunImmunityTimer -= dt;
+            if (this.stunImmunityTimer < 0) {
+                this.stunImmunityTimer = 0;
+            }
+        }
+
+        // 更新眩晕效果
+        if (this.statusEffects.stun) {
+            this.statusEffects.stun.duration -= dt;
+            if (this.statusEffects.stun.duration <= 0) {
+                this.statusEffects.stun = null;
+                this.stunImmunityTimer = 1.0; // 眩晕结束后开始1秒免疫
+            }
+        }
+
         // 更新冻结效果
         if (this.statusEffects.freeze) {
             this.statusEffects.freeze.duration -= dt;
@@ -183,14 +212,6 @@ class Character extends GameObject {
         } else {
             // 如果没有减速效果，恢复基础速度
             this.speed = this.getStat('speed');
-        }
-
-        // 更新眩晕效果
-        if (this.statusEffects.stun) {
-            this.statusEffects.stun.duration -= dt;
-            if (this.statusEffects.stun.duration <= 0) {
-                this.statusEffects.stun = null;
-            }
         }
 
         // 更新燃烧效果
@@ -336,84 +357,79 @@ class Character extends GameObject {
      * @param {CanvasRenderingContext2D} ctx - 画布上下文
      */
     draw(ctx) {
-        // 如果角色不活动或已标记为垃圾，不绘制
-        if (!this.isActive || this.isGarbage) return;
+        if (this.isGarbage || !this.isActive) return;
 
-        // --- 绘制主要角色Emoji ---
-        ctx.save(); 
         const screenPos = cameraManager.worldToScreen(this.x, this.y);
-        ctx.globalAlpha = 1.0; // 默认不透明
-        
-        if (this.isStunned()) { // Enemy.draw 中已有类似效果，但 Character 基类也可以有基础视觉
-            // ctx.filter = 'opacity(0.6) drop-shadow(0 0 5px yellow)'; // Stun effect
-        }
-        
-        if (this.invincibleTime > 0) {
-            const blinkRate = 10; // 与 Player.js 中的闪烁率保持一致或协调
-            // 使用 gameTime 或 Date.now() 确保独立于 dt 的稳定闪烁
-            if (Math.sin(gameTime * blinkRate * Math.PI) > 0) { 
-                ctx.globalAlpha = 0.7;
-            }
-        }
-        
-        ctx.font = `${this.size}px 'Segoe UI Emoji', Arial`;
+
+        // 绘制表情符号
+        ctx.font = `${this.size}px Arial`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(this.emoji, screenPos.x, screenPos.y);
-        ctx.restore();
 
-        // --- 绘制状态效果图标 --- (确保它们不透明)
-        ctx.save();
-        ctx.globalAlpha = 1.0; // 确保状态图标总是完全不透明
-        this.drawStatusEffects(ctx); // screenPos 已在上面计算，drawStatusEffects内部会再次获取
-        ctx.restore();
+        // 绘制状态效果图标
+        this.drawStatusEffects(ctx, screenPos);
     }
 
     /**
-     * 绘制状态效果
+     * 绘制状态效果图标
      * @param {CanvasRenderingContext2D} ctx - 画布上下文
+     * @param {{x: number, y: number}} screenPos - 屏幕坐标
      */
-    drawStatusEffects(ctx) {
-        ctx.save(); // 为状态效果图标的绘制包裹 save/restore
-        ctx.globalAlpha = 1.0; // 强制不透明
+    drawStatusEffects(ctx, screenPos) {
+        if (!this.isActive || this.isGarbage) return;
 
-        // 获取屏幕坐标
-        const screenPos = cameraManager.worldToScreen(this.x, this.y);
+        let iconYOffset = -this.size * 0.8; // 图标基准Y偏移，稍微调高一点给旋转星星留空间
+        const iconSpacing = GAME_FONT_SIZE * 0.5; 
 
-        // 状态效果图标
-        const icons = [];
-        let iconYOffset = -this.size * 0.7; // 图标初始Y偏移
+        ctx.save();
+        ctx.font = `${GAME_FONT_SIZE * 0.5}px 'Segoe UI Emoji', Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
 
-        // 添加眩晕效果图标
-        if (this.statusEffects.stun) {
-            icons.push('💫'); // 眩晕图标
+        // 绘制眩晕图标 (旋转的星星)
+        if (this.statusEffects.stun && this.statusEffects.stun.duration > 0) {
+            const stunRadius = this.size * 0.5; // 星星旋转半径
+            const angularSpeed = 4; // 星星旋转速度 (弧度/秒)
+            const numStars = 3;
+            const starEmoji = '⭐'; // 修改为⭐
+            ctx.fillStyle = 'yellow';
+
+            for (let i = 0; i < numStars; i++) {
+                const angle = (gameTime * angularSpeed + (i * (Math.PI * 2 / numStars))) % (Math.PI * 2);
+                const starX = screenPos.x + Math.cos(angle) * stunRadius;
+                const starY = screenPos.y + iconYOffset + Math.sin(angle) * stunRadius * 0.5; // Y方向椭圆一些
+                ctx.fillText(starEmoji, starX, starY);
+            }
+            iconYOffset -= iconSpacing * 1.5; // 为旋转星星多留一些空间再显示其他图标
         }
-        // 添加减速效果图标
-        if (this.statusEffects.slow && this.statusEffects.slow.icon) {
-            icons.push(this.statusEffects.slow.icon);
+
+        // 绘制减速图标 (🐌)
+        if (this.statusEffects.slow && this.statusEffects.slow.duration > 0 && this.statusEffects.slow.icon) {
+            ctx.fillText(this.statusEffects.slow.icon, screenPos.x, screenPos.y + iconYOffset);
+            iconYOffset -= iconSpacing; 
         }
 
-        // 绘制图标
-        if (icons.length > 0) {
-            ctx.font = `${this.size * 0.4}px 'Segoe UI Emoji', Arial`;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            icons.forEach(icon => {
-                ctx.fillText(icon, screenPos.x, screenPos.y + iconYOffset);
-                iconYOffset += this.size * 0.3; // 每个图标稍微向下偏移
-            });
+        // 绘制燃烧图标 (🔥)
+        if (this.statusEffects.burn && this.statusEffects.burn.duration > 0 && this.statusEffects.burn.icon) {
+            ctx.globalAlpha = 0.8; 
+            ctx.fillStyle = 'orange'; 
+            ctx.fillText(this.statusEffects.burn.icon, screenPos.x, screenPos.y + iconYOffset);
+            ctx.globalAlpha = 1.0;
+            ctx.fillStyle = 'white'; // 恢复默认颜色
+            iconYOffset -= iconSpacing;
         }
-        
-        // 绘制燃烧效果 (如果 Character 基类需要处理，目前 Enemy 类自行处理)
-        // if (this.statusEffects.burn) {
-        //     const burnSize = this.size * 0.4;
-        //     const burnX = screenPos.x;
-        //     const burnY = screenPos.y - this.size * 0.6; 
-        //     ctx.font = `${burnSize}px 'Segoe UI Emoji', Arial`;
-        //     ctx.textAlign = 'center';
-        //     ctx.textBaseline = 'middle';
-        //     ctx.fillText('🔥', burnX + Math.random()*4-2, burnY + Math.random()*4-2);
-        // }
-        ctx.restore(); // 恢复状态
+
+        // 绘制中毒图标 (☠️)
+        if (this.statusEffects.poison && this.statusEffects.poison.duration > 0 && this.statusEffects.poison.icon) {
+            ctx.globalAlpha = 0.8;
+            ctx.fillStyle = 'green'; 
+            ctx.fillText(this.statusEffects.poison.icon, screenPos.x, screenPos.y + iconYOffset);
+            ctx.globalAlpha = 1.0;
+            ctx.fillStyle = 'white'; // 恢复默认颜色
+            iconYOffset -= iconSpacing; // 如果还有其他图标
+        }
+
+        ctx.restore();
     }
 }

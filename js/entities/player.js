@@ -57,6 +57,7 @@ class Player extends Character {
         this.facingRight = true; // 新增：玩家朝向，默认为右
         this.bobbingOffset = 0; // 新增：用于上下浮动的偏移量
         this.bobbingTimer = 0; // 新增：用于上下浮动的时间计数器
+        this.isMoving = false; // 新增：玩家是否正在移动
     }
 
     /**
@@ -129,9 +130,10 @@ class Player extends Character {
             let newY = this.y + dy * currentSpeed * dt;
             this.x = newX;
             this.y = newY;
+            this.isMoving = true;
         } else {
             // 松开所有方向键时，立即停止移动
-            // 不做任何位置更新
+            this.isMoving = false;
         }
     }
 
@@ -539,14 +541,24 @@ class Player extends Character {
     draw(ctx) {
         if (!this.isActive || this.isGarbage || !playerImage || !playerImage.complete || playerImage.naturalHeight === 0) return;
 
-        // 玩家的逻辑屏幕坐标 (可能是脚底或中心，取决于this.x, this.y的定义)
         const logicalScreenPos = cameraManager.worldToScreen(this.x, this.y);
 
         // 上下浮动效果
-        this.bobbingTimer += 0.05; 
-        this.bobbingOffset = Math.sin(this.bobbingTimer) * 3; // 幅度可以调整
+        let bobbingSpeedFactor = 1.0;
+        if (this.isStunned()) {
+            this.bobbingOffset = 0; // 眩晕时不浮动
+        } else {
+            if (this.statusEffects.slow) {
+                bobbingSpeedFactor = this.statusEffects.slow.factor || 0.5; // 如果有减速效果，浮动变慢
+            }
+            if (this.isMoving) {
+                this.bobbingTimer += 0.05 * bobbingSpeedFactor; 
+                this.bobbingOffset = Math.sin(this.bobbingTimer) * 3; 
+            } else {
+                this.bobbingOffset = 0; // 不移动则不浮动
+            }
+        }
 
-        // 图片实际绘制的视觉中心Y (加入了浮动)
         const visualCenterY = logicalScreenPos.y + this.bobbingOffset;
         const visualCenterX = logicalScreenPos.x;
 
@@ -591,6 +603,11 @@ class Player extends Character {
             imageToDrawHeight
         );
         ctx.restore();
+
+        // 在绘制玩家图片后，绘制状态效果图标
+        // 注意：传递给 drawStatusEffects 的 y 坐标需要是角色视觉中心或头顶，考虑浮动
+        const statusIconScreenPos = { x: visualCenterX, y: visualCenterY }; // 使用视觉中心作为基准
+        this.drawStatusEffects(ctx, statusIconScreenPos); // 调用 Character 类的方法绘制状态图标
 
         if (DEBUG_SHOW_PLAYER_HITBOX) {
             ctx.strokeStyle = 'rgba(255, 0, 0, 0.7)';

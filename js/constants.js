@@ -122,7 +122,7 @@ const ENEMY_TYPES = [
     {
         name: "僵尸",
         emoji: "🧟",
-        healthMult: 2.0, // 较高的生命值
+        healthMult: 1.5, // 从 2.0 降低到 1.5
         speedMult: 0.7, // 较慢的移动速度
         damageMult: 1.1, // 略高的伤害
         xpMult: 2.5, // 较高经验值
@@ -163,6 +163,7 @@ const ENEMY_TYPES = [
     {
         name: "火焰精灵",
         emoji: "🔥",
+        svgPath: "assets/enemy/firewisp.png",
         healthMult: 0.6,
         speedMult: 1.2,
         damageMult: 0.7,
@@ -176,6 +177,7 @@ const ENEMY_TYPES = [
     {
         name: "冰霜精灵",
         emoji: "❄️",
+        svgPath: "assets/enemy/frostwisp.png",
         healthMult: 0.6,
         speedMult: 1.2,
         damageMult: 0.7,
@@ -189,6 +191,7 @@ const ENEMY_TYPES = [
     {
         name: "雷电精灵",
         emoji: "⚡",
+        svgPath: "assets/enemy/lightingwisp.png",
         healthMult: 0.6,
         speedMult: 1.2,
         damageMult: 0.7,
@@ -197,7 +200,7 @@ const ENEMY_TYPES = [
         minTime: 540, // 9分钟后开始刷新
         appliesStun: true, // 眩晕效果
         stunChance: 0.3,
-        stunDuration: 1
+        stunDuration: 0.5 // 修改为0.5秒
     },
     {
         name: "炸弹",
@@ -245,7 +248,7 @@ const ENEMY_TYPES = [
     {
         name: "精英僵尸",
         emoji: "🧟‍♂️",
-        healthMult: 3.5, // 降低血量但保持较高
+        healthMult: 2.8, // 从 3.5 降低到 2.8
         speedMult: 0.6,
         damageMult: 1.7,
         xpMult: 3.0,
@@ -340,6 +343,7 @@ const BOSS_TYPES = [
     {
         name: "骷髅王",
         emoji: EMOJI.BOSS_SKELETON,
+        healthBase: 350, // 新增：固定基础血量为350
         healthMult: 1.6, // 降低血量
         speedMult: 0.8,
         damageMult: 1.0,
