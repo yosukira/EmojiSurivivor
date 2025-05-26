@@ -694,10 +694,10 @@ class Enemy extends Character {
         // 获取当前速度
         const currentSpeed = this.getCurrentSpeed();
 
-        // 添加随机偏移（如果敌人卡住了）
-        let finalDirX = dirX + this._movementState.randomOffset.x;
-        let finalDirY = dirY + this._movementState.randomOffset.y;
-
+        // 不再添加随机偏移，直接使用原始方向
+        let finalDirX = dirX;
+        let finalDirY = dirY;
+        
         // 归一化方向向量
         const offsetMag = Math.sqrt(finalDirX * finalDirX + finalDirY * finalDirY);
         if (offsetMag > 0) {
@@ -725,14 +725,51 @@ class Enemy extends Character {
      */
     checkAndHandleStuck(dt) {
         // 计算移动距离
-        const moveX = Math.abs(this.x - this._movementState.lastX);
-        const moveY = Math.abs(this.y - this._movementState.lastY);
-        const moved = moveX + moveY;
+        // const moveX = Math.abs(this.x - this._movementState.lastX);
+        // const moveY = Math.abs(this.y - this._movementState.lastY);
+        // const moved = moveX + moveY;
+        
+        // 暂时完全禁用卡死处理逻辑，观察基础移动和碰撞表现
 
-        // 如果几乎没有移动，可能卡住了
-        if (moved < 0.5) { // 保持较低的触发门槛
+        /*
+        // Boss特殊处理：不应用随机偏移，只在完全卡住时才使用前向跳跃
+        if (this.isBoss) {
+            // 始终确保Boss没有随机偏移
+            this._movementState.randomOffset = {x: 0, y: 0};
+            
+            if (moved < 0.3) { // Boss需要更小的触发阈值
+                this._movementState.stuckTimer += dt;
+                // 只有完全卡住超过2秒才进行处理
+                if (this._movementState.stuckTimer > 2.0) {
+                    // 获取目标方向
+                    if (this.target) {
+                        const dx = this.target.x - this.x;
+                        const dy = this.target.y - this.y;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        
+                        if (dist > 0) {
+                            // 沿目标方向前进一小段距离
+                            const jumpDistance = 10; // 前进距离较小
+                            this._movementState.targetJumpX = this.x + (dx / dist) * jumpDistance;
+                            this._movementState.targetJumpY = this.y + (dy / dist) * jumpDistance;
+                            this._movementState.jumpProgress = 0;
+                            this._movementState.jumpStartX = this.x;
+                            this._movementState.jumpStartY = this.y;
+                            this._movementState.isJumping = true;
+                        }
+                    }
+                    // 重置卡住计时器
+                    this._movementState.stuckTimer = 0;
+                }
+            } else {
+                // 正常移动时重置计时器
+                this._movementState.stuckTimer = 0;
+            }
+        }
+        // 普通敌人原有逻辑
+        else if (moved < 0.5) { // 保持较低的触发门槛
             this._movementState.stuckTimer += dt;
-
+            
             // 如果卡住超过1秒，添加随机偏移，但更平滑
             if (this._movementState.stuckTimer > 1.0) { // 从0.8提高到1.0秒，减少频繁触发
                 // 生成新的随机偏移，更加平滑和渐进
@@ -740,13 +777,13 @@ class Enemy extends Character {
                     x: (Math.random() - 0.5) * 0.2, // 降低到0.2，更平滑
                     y: (Math.random() - 0.5) * 0.2  // 降低到0.2，更平滑
                 };
-
+                
                 // 如果已经严重卡住（超过3秒），使用平滑位移而非突然跳跃
                 if (this._movementState.stuckTimer > 3.0) { // 从2秒提高到3秒，减少频繁触发
                     // 使用线性插值进行平滑移动，而不是突然跳跃
                     const jumpX = (Math.random() - 0.5) * 15; // 从20减少到15
                     const jumpY = (Math.random() - 0.5) * 15; // 从20减少到15
-
+                    
                     // 存储目标位置，而不是立即跳跃
                     this._movementState.targetJumpX = this.x + jumpX;
                     this._movementState.targetJumpY = this.y + jumpY;
@@ -754,13 +791,13 @@ class Enemy extends Character {
                     this._movementState.jumpStartX = this.x; // 记录起始位置
                     this._movementState.jumpStartY = this.y;
                     this._movementState.isJumping = true; // 标记正在平滑跳跃
-
+                    
                     // 重置卡住计时器，但不是完全清零
                     this._movementState.stuckTimer = 1.0; // 重置到1秒而不是0
-
+                    
                     // 额外的处理：如果敌人被卡住太久，强制重置其AI状态
                     if (this._dogState) this._dogState = null;
-                    if (this.target && (typeof cameraManager !== 'undefined') &&
+                    if (this.target && (typeof cameraManager !== 'undefined') && 
                         !cameraManager.isPositionInView(this.x, this.y, this.size * 2)) {
                         // 如果敌人在屏幕外，通过强制重新设置目标来尝试"唤醒"它
                         // 注意：Player对象可能不存在或不是全局变量，需确保有效访问
@@ -780,19 +817,19 @@ class Enemy extends Character {
             } else {
                 // 小幅度移动时，缓慢降低卡住计时器，但不清零
                 this._movementState.stuckTimer = Math.max(0, this._movementState.stuckTimer - dt * 0.5);
-
+                
                 // 如果随机偏移存在，缓慢减少它，而不是立即设为0
                 if (this._movementState.randomOffset.x !== 0 || this._movementState.randomOffset.y !== 0) {
                     this._movementState.randomOffset.x *= 0.9; // 每帧减少10%
                     this._movementState.randomOffset.y *= 0.9; // 每帧减少10%
-
+                    
                     // 如果偏移值非常小，直接设为0避免无限接近0
                     if (Math.abs(this._movementState.randomOffset.x) < 0.01) this._movementState.randomOffset.x = 0;
                     if (Math.abs(this._movementState.randomOffset.y) < 0.01) this._movementState.randomOffset.y = 0;
                 }
             }
         }
-
+        
         // 处理平滑跳跃
         if (this._movementState.isJumping) {
             this._movementState.jumpProgress += dt * 3; // 三分之一秒完成跳跃
@@ -808,10 +845,13 @@ class Enemy extends Character {
                 this.y = this._movementState.jumpStartY + (this._movementState.targetJumpY - this._movementState.jumpStartY) * progress;
             }
         }
-
-        // 更新上一次位置
-        this._movementState.lastX = this.x;
-        this._movementState.lastY = this.y;
+        */
+        
+        // 更新上一次位置，这对于任何基于上一帧位置的计算仍然是必要的
+        if (this._movementState) { // 确保_movementState已初始化
+            this._movementState.lastX = this.x;
+            this._movementState.lastY = this.y;
+        }
     }
 
     /**
