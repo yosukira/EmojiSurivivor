@@ -261,7 +261,7 @@ canvas {
 .bossHealthFill {
     height: 100%;
     width: 100%;
-    background-color: #e74c3c;
+    background-color: #e74c3c; /* 恢复为原来的红色 */
     transition: width 0.3s ease-in-out;
 }
 
@@ -275,3 +275,91 @@ canvas {
     text-shadow: 0px 0px 3px rgba(0, 0, 0, 1);
     z-index: 6;
 }
+
+/* Boss 血条样式 */
+#bossHealthUIContainer {
+    position: absolute;
+    bottom: 20px; /* 可以根据缩放后的视觉效果调整此值 */
+    left: 50%;
+    /* 使用 transform 来定位和缩放 */
+    transform: translateX(-50%) scale(0.5); /* 水平居中后整体缩放至50% */
+    transform-origin: center bottom; /* 以底部中心为缩放基点 */
+    
+    width: 977px;  /* 保持图片原始尺寸 */
+    height: 268px; /* 保持图片原始尺寸 */
+    z-index: 10;
+    pointer-events: none;
+}
+
+#bossHealthBarBackground {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+
+#bossHealthBarArea {
+    position: absolute;
+    top: 116px;    /* (118px - 2px) */
+    left: 260px;  /* 用户提供的填充区X坐标 */
+    width: 659px; /* 用户提供的填充区宽度W */
+    height: 100px; /* (96px + 2px + 2px) */
+    overflow: hidden; 
+}
+
+#bossHealthBarFill {
+    background-color: #333333; /* 深灰色，表示已损失 */ 
+    height: 100%; 
+    width: 0%; /* 初始为0，代表0损失 */
+    position: absolute; 
+    top: 0;
+    /* left: 0; */ /* 移除 left: 0; */
+    right: 0; /* 新增: 从右边开始填充 */
+    /* 为右侧添加圆角，左侧因为有头像通常是直角切断或被遮挡 */
+    /* 你可能需要根据你的图片精确调整这个圆角值，例如 10px, 15px, 20px 等 */
+    border-top-right-radius: 15px;    /* 估算的右上圆角半径 */
+    border-bottom-right-radius: 15px; /* 估算的右下圆角半径 */
+    /* 如果左右圆角对称且都需要，可以只用一行: border-radius: 15px; */
+    transition: width 0.2s ease-out;
+}
+
+/* 新增：Boss血量具体数值的文本样式 */
+#bossHealthValueText {
+    position: absolute;
+    width: 100%; 
+    top: 62%;    /* 再次调整垂直位置，更靠下 */
+    left: 60.3%; /* 基于#bossHealthBarArea中点调整水平位置 */
+    transform: translate(-50%, -50%); 
+    text-align: center; 
+    font-size: 34px; /* 再次增大字体大小 */
+    color: white;    
+    font-weight: bold;
+    text-shadow: 
+        -1.5px -1.5px 0 #000,
+         1.5px -1.5px 0 #000,
+        -1.5px  1.5px 0 #000,
+         1.5px  1.5px 0 #000, 
+        -1.5px 0 0 #000, 1.5px 0 0 #000, 0 -1.5px 0 #000, 0 1.5px 0 #000, /* 加强描边 */
+        -2px -2px 4px rgba(0,0,0,0.8), /* 调整阴影 */
+         2px  2px 4px rgba(0,0,0,0.8);
+    pointer-events: none; /* 避免遮挡鼠标事件 */
+    z-index: 12; /* 确保在填充条之上 */
+}
+
+/*
+#bossHealthText {
+    position: absolute;
+    top: 40px;    
+    left: 280px;  
+    font-size: 22px; 
+    color: white;
+    font-weight: bold;
+    text-shadow: 1px 1px 3px black; 
+    white-space: nowrap; 
+}
+*/
+/* .hidden 类已经在 index.html 的 <style> 中定义了，确保它存在 */
+/* .hidden {
+    display: none !important;
+} */

@@ -1608,6 +1608,10 @@ class BossEnemy extends Enemy {
 
         // 确认Boss已正确初始化，打印日志
         console.log(`Boss ${this.type.name} created with health: ${this.health}/${this.maxHealth}, damage: ${this.stats.damage}`);
+
+        // 为血条系统明确设置 currentHP 和 maxHP
+        this.currentHP = this.health;
+        this.maxHP = this.maxHealth;
     }
 
     /**
@@ -2985,6 +2989,12 @@ class BossEnemy extends Enemy {
      * @param {number} y - 屏幕Y坐标
      */
     drawBossHealthBar(ctx, x, y) {
+        // 此方法原用于绘制Boss头顶的自定义UI（如骷髅王名称和小红条）
+        // 由于现在使用屏幕下方的大血条，此方法不再需要绘制任何内容。
+        return; 
+
+        // 原有代码保留在此注释下方，以备将来参考或恢复
+        /*
         // 设置生命条尺寸和位置
         const barWidth = this.size * 1.5; // 修改：使宽度与 Boss 大小成比例
         const barHeight = 10;
@@ -3020,6 +3030,7 @@ class BossEnemy extends Enemy {
         // 主要文字
         ctx.fillStyle = 'white';
         ctx.fillText(this.type.name, x, barY - 5);
+        */
     }
 
     /**

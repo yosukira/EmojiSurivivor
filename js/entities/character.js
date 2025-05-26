@@ -248,7 +248,12 @@ class Character extends GameObject {
         
         // 减少生命值
         this.health -= actualDamage;
-        
+
+        // 如果是Boss，添加Boss受伤日志
+        if (this instanceof BossEnemy) {
+            console.log(`[BOSS_TAKE_DAMAGE] Boss ${this.name || (this.type && this.type.name) || 'UnknownBoss'} took ${actualDamage} damage. New HP: ${this.health}/${this.maxHealth}`);
+        }
+
         // 确保生命值不是NaN
         if (isNaN(this.health)) {
             console.error('Character health became NaN after damage calculation!');

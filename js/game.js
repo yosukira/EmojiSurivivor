@@ -269,6 +269,7 @@ const bossManager = {
             
             // 重置当前Boss
             this.currentBoss = null;
+            hideBossHealthBar(); // <--- 新增：隐藏Boss血条
         }
 
         // 如果正在显示警告，更新警告计时器
@@ -340,7 +341,9 @@ const bossManager = {
 
         // 设置当前Boss
         this.currentBoss = boss;
-        
+        console.log('[BOSS_SPAWN] Boss object for health bar:', this.currentBoss); // DEBUG
+        showBossHealthBar(this.currentBoss); 
+
         // 创建Boss战场，限制玩家移动范围
         const bossArenaRadius = 800; // 设置一个较大的战场半径
         cameraManager.activateBossArena(x, y, bossArenaRadius);
@@ -472,8 +475,11 @@ const bossManager = {
     
     // 处理Boss死亡
     handleBossDeath(boss, killer) {
-        console.log(`Boss ${boss.name} 被击败!`);
-        
+        console.log(`[BossManager.handleBossDeath] Called for Boss: ${boss.type.name}. Preparing to hide health bar and cleanup.`); // 新增日志
+        if (!boss || boss.isGarbage) {
+            console.warn("[BossManager.handleBossDeath] Boss already marked as garbage or null, skipping.");
+            return;
+        }
         // 增加击杀计数
         killCount++;
         
@@ -488,6 +494,15 @@ const bossManager = {
         
         // 将Boss标记为垃圾，确保不会再次触发其他处理
         boss.isGarbage = true;
+
+        // 确保隐藏血条
+        if (this.currentBoss === boss || currentBossForHealthBar === boss) {
+            console.log(`[BossManager.handleBossDeath] Hiding health bar for defeated boss: ${boss.type.name}`);
+            hideBossHealthBar();
+            this.currentBoss = null; // 也清除管理器中的当前Boss引用
+        } else {
+            console.warn(`[BossManager.handleBossDeath] Defeated boss ${boss.type.name} does not match currentBoss ${this.currentBoss ? this.currentBoss.type.name : 'null'} or currentBossForHealthBar ${currentBossForHealthBar ? currentBossForHealthBar.type.name : 'null'}. Health bar may not hide as expected.`);
+        }
     }
 };
 
@@ -654,7 +669,7 @@ function spawnDamageNumber(x, y, text, color = 'rgb(255, 80, 80)', size = GAME_F
 function update(dt) {
     // --- 新增：日志记录 ---
     if (player) {
-        console.log(`Update Start: isPaused=${isPaused}, isLevelUp=${isLevelUp}, pendingChestUps=${player.pendingLevelUpsFromChest}`);
+        // console.log(`Update Start: isPaused=${isPaused}, isLevelUp=${isLevelUp}, pendingChestUps=${player.pendingLevelUpsFromChest}`);
     }
     // --- 结束新增 ---
 
@@ -824,6 +839,11 @@ function update(dt) {
 
     // 更新UI
     updateUI();
+
+    // 更新Boss血条 (如果显示中)
+    if (currentBossForHealthBar && bossHealthUIContainer && !bossHealthUIContainer.classList.contains('hidden')) {
+        updateBossHealthBar();
+    }
 }
 
 /**
@@ -2763,3 +2783,73 @@ function hideLevelUpDebugStats() {
         debugPanel.style.display = 'none';
     }
 }
+
+// Boss 血条 UI 控制
+const bossHealthUIContainer = document.getElementById('bossHealthUIContainer');
+const bossHealthBarFill = document.getElementById('bossHealthBarFill');
+const bossHealthValueText = document.getElementById('bossHealthValueText'); // 新增：获取血量数值的span
+let currentBossForHealthBar = null;
+
+function showBossHealthBar(boss) {
+    console.log('[showBossHealthBar] Called. Boss object:', boss, 'UI Container:', bossHealthUIContainer); // DEBUG
+    if (!bossHealthUIContainer || !boss) return;
+    currentBossForHealthBar = boss;
+    bossHealthUIContainer.classList.remove('hidden');
+    updateBossHealthBar(); // 初始更新一次
+    console.log("Boss health bar shown for:", boss.name || 'Unknown Boss');
+}
+
+function hideBossHealthBar() {
+    console.log('[hideBossHealthBar] Called. UI Container:', bossHealthUIContainer, 'currentBossForHealthBar:', currentBossForHealthBar); // DEBUG
+    if (!bossHealthUIContainer) return;
+    bossHealthUIContainer.classList.add('hidden');
+    currentBossForHealthBar = null;
+    console.log("Boss health bar hidden.");
+}
+
+function updateBossHealthBar() {
+    if (!bossHealthBarFill || !currentBossForHealthBar || typeof currentBossForHealthBar.health === 'undefined' || typeof currentBossForHealthBar.maxHealth === 'undefined') {
+        console.warn('[updateBossHealthBar] Fill element, current boss, or boss health/maxHealth is missing/undefined. Boss:', currentBossForHealthBar);
+        if (currentBossForHealthBar) {
+            console.warn(`[updateBossHealthBar] Boss Details: health=${currentBossForHealthBar.health}, maxHealth=${currentBossForHealthBar.maxHealth}`);
+        }
+        // 如果血量文本元素存在，清空它或显示占位符
+        if (bossHealthValueText) {
+            bossHealthValueText.textContent = ''; 
+        }
+        return;
+    }
+
+    const health = Math.max(0, currentBossForHealthBar.health);
+    const maxHealth = Math.max(1, currentBossForHealthBar.maxHealth);
+    const lostHealthPercentage = Math.max(0, (1 - (health / maxHealth)) * 100);
+    bossHealthBarFill.style.width = lostHealthPercentage + '%';
+
+    // 更新血量数值文本
+    if (bossHealthValueText) {
+        bossHealthValueText.textContent = `${Math.ceil(health)} / ${Math.ceil(maxHealth)}`;
+    }
+
+    console.log(`[updateBossHealthBar] Boss: ${currentBossForHealthBar.type.name}, Health: ${health}/${maxHealth}, Lost Health %: ${lostHealthPercentage.toFixed(2)}%`);
+}
+
+// 你需要在你的游戏逻辑中找到合适的地方调用这些函数。
+// 例如，在生成Boss的函数末尾：
+// if (newBoss.isBoss) { // 假设你的Boss对象有一个 isBoss 属性
+//     showBossHealthBar(newBoss);
+// }
+
+// 在Boss受到伤害的逻辑中：
+// if (bossWasHit && currentBossForHealthBar === thatBoss) {
+//     updateBossHealthBar();
+// }
+
+// 在Boss死亡的逻辑中：
+// if (bossDied && currentBossForHealthBar === thatBoss) {
+//     hideBossHealthBar();
+// }
+
+// 也可以考虑在游戏主循环 (game loop) 中定期调用 updateBossHealthBar() 
+// if (currentBossForHealthBar && !bossHealthUIContainer.classList.contains('hidden')) {
+//     updateBossHealthBar();
+// }

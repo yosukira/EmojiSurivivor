@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Emoji 幸存者</title>
+    <link rel="stylesheet" href="css/style.css">
     <style>
         /* 全局样式 */
         body {
@@ -339,6 +340,15 @@
 
     <!-- Boss警告 -->
     <div id="bossWarning">👹 BOSS 来袭! 👹</div>
+
+    <!-- Boss 血条 -->
+    <div id="bossHealthUIContainer" class="hidden">
+        <img src="assets/UI/bossHealthBar.png" alt="Boss 血条背景" id="bossHealthBarBackground">
+        <div id="bossHealthBarArea">
+             <div id="bossHealthBarFill"></div>
+        </div>
+        <span id="bossHealthValueText"></span>
+    </div>
 
     <!-- 游戏脚本 -->
     <!-- 核心脚本 -->
