@@ -1515,6 +1515,28 @@ function presentLevelUpOptions() {
     }
     // --- 结束提示 ---
 
+    // 添加键盘操作提示
+    const keyboardHint = document.getElementById('keyboardHint');
+    if (keyboardHint) {
+        keyboardHint.textContent = "使用数字键 1-4 选择并确认升级，或用鼠标点击。";
+    } else {
+        const hintElement = document.createElement('p');
+        hintElement.id = 'keyboardHint';
+        hintElement.textContent = "使用数字键 1-4 选择并确认升级，或用鼠标点击。";
+        hintElement.style.fontSize = "0.9em";
+        hintElement.style.color = "#ccc";
+        hintElement.style.marginTop = "-10px"; // 调整与上方元素的间距
+        hintElement.style.marginBottom = "20px";
+        // 插入到 upgradeOptionsContainer 之前，并且在<h1>和<p id="chestUpgradeInfo">之后
+        const h1Element = levelUpScreenElement.querySelector('h1');
+        if (h1Element && h1Element.nextSibling) {
+            levelUpScreenElement.insertBefore(hintElement, h1Element.nextSibling.nextSibling); // 插入到第二个p之后
+        } else if (h1Element) {
+            levelUpScreenElement.insertBefore(hintElement, h1Element.nextSibling);
+        }
+
+    }
+
     try {
         // 获取升级选项
         const options = getAvailableUpgrades(player);
@@ -1531,6 +1553,14 @@ function presentLevelUpOptions() {
             // 创建按钮
             const button = document.createElement('button');
             button.dataset.index = index; // 保存索引，方便键盘操作
+            
+            // 创建数字提示
+            const keyHintSpan = document.createElement('span');
+            keyHintSpan.className = 'upgradeKeyHint';
+            keyHintSpan.textContent = `[${index + 1}] `;
+            keyHintSpan.style.marginRight = "8px";
+            keyHintSpan.style.color = "#ffd700"; // 金色提示
+
             // 创建图标
             const iconSpan = document.createElement('span');
             iconSpan.className = 'upgradeIcon';
@@ -1556,6 +1586,7 @@ function presentLevelUpOptions() {
             const descP = document.createElement('p');
             descP.textContent = option.description || '';
             // 添加到按钮
+            button.appendChild(keyHintSpan); // 添加数字按键提示
             button.appendChild(iconSpan);
             button.appendChild(textSpan);
             button.appendChild(descP);
@@ -1588,30 +1619,35 @@ function presentLevelUpOptions() {
                 if (key >= '1' && key <= '4' && (parseInt(key) <= numOptions)) {
                     const optionIndex = parseInt(key) - 1;
                     
-                    if (currentSelection === optionIndex) {
-                        // 如果已经选中，再次按下同一个数字键就确认选择
-                        const option = options[optionIndex];
-                        executeUpgradeOption(option, levelUpScreenElement);
-                    } else {
-                        // 否则只是选中
-                        selectUpgradeOption(optionIndex);
-                    }
+                    // 直接执行选项，不再需要先选中再确认的逻辑了，因为鼠标可以悬停选中
+                    // if (currentSelection === optionIndex) {
+                    // 如果已经选中，再次按下同一个数字键就确认选择
+                    const selectedOption = options[optionIndex];
+                    executeUpgradeOption(selectedOption, levelUpScreenElement);
+                    // } else {
+                    //     // 否则只是选中
+                    //     selectUpgradeOption(optionIndex);
+                    // }
                 }
                 // 小键盘数字键1-4选择
                 else if (key === 'numpad1' || key === 'numpad2' || key === 'numpad3' || key === 'numpad4') {
                     const optionIndex = parseInt(key.replace('numpad', '')) - 1;
                     if (optionIndex < numOptions) {
-                        if (currentSelection === optionIndex) {
-                            // 如果已经选中，再次按下同一个数字键就确认选择
-                            const option = options[optionIndex];
-                            executeUpgradeOption(option, levelUpScreenElement);
-                        } else {
-                            // 否则只是选中
-                            selectUpgradeOption(optionIndex);
-                        }
+                        // 直接执行选项
+                        const selectedOption = options[optionIndex];
+                        executeUpgradeOption(selectedOption, levelUpScreenElement);
+                        // if (currentSelection === optionIndex) {
+                        //     // 如果已经选中，再次按下同一个数字键就确认选择
+                        //     const option = options[optionIndex];
+                        //     executeUpgradeOption(option, levelUpScreenElement);
+                        // } else {
+                        //     // 否则只是选中
+                        //     selectUpgradeOption(optionIndex);
+                        // }
                     }
                 }
-                // W/上方向键选择上一个选项
+                // W/上方向键选择上一个选项 (注释掉)
+                /*
                 else if (key === 'w' || key === 'arrowup') {
                     if (currentSelection > 0) {
                         selectUpgradeOption(currentSelection - 1);
@@ -1619,7 +1655,9 @@ function presentLevelUpOptions() {
                         selectUpgradeOption(numOptions - 1);
                     }
                 }
-                // S/下方向键选择下一个选项
+                */
+                // S/下方向键选择下一个选项 (注释掉)
+                /*
                 else if (key === 's' || key === 'arrowdown') {
                     if (currentSelection < numOptions - 1) {
                         selectUpgradeOption(currentSelection + 1);
@@ -1627,13 +1665,16 @@ function presentLevelUpOptions() {
                         selectUpgradeOption(0);
                     }
                 }
-                // 空格键确认选择
+                */
+                // 空格键或Enter键确认选择 (注释掉)
+                /*
                 else if (key === ' ' || key === 'enter') {
                     if (currentSelection >= 0 && currentSelection < numOptions) {
                         const option = options[currentSelection];
                         executeUpgradeOption(option, levelUpScreenElement);
                     }
                 }
+                */
             };
             
             // 添加键盘事件监听器

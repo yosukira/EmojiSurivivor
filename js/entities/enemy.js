@@ -3030,6 +3030,32 @@ class BossEnemy extends Enemy {
         // 如果死亡已处理，不再处理
         if (this.isGarbage) return;
 
+        // --- 巨型僵尸死亡时特殊处理：移除玩家身上的毒圈减速 ---
+        if (this.type.name === "巨型僵尸" && this.target && this.target.statusEffects && 
+            this.target.statusEffects.slow && this.target.statusEffects.slow.source === this &&
+            this.target.statusEffects.slow.isAuraEffect) {
+            
+            delete this.target.statusEffects.slow;
+            // 恢复普通减速（如果有）或原速
+            if (this.target._pendingNormalSlow) {
+                this.target.statusEffects.slow = { ...this.target._pendingNormalSlow };
+                this.target.speed = this.target.getStat('speed') * this.target._pendingNormalSlow.factor;
+                delete this.target._pendingNormalSlow;
+            } else if (this.target.getStat) { // 确保 getStat 方法存在
+                this.target.speed = this.target.getStat('speed');
+            }
+            console.log("巨型僵尸死亡，移除了玩家的毒圈减速效果。Source check passed.");
+        } else if (this.type.name === "巨型僵尸") {
+            // 添加一些日志，帮助调试为什么没有移除减速
+            console.log("巨型僵尸死亡，但未满足移除减速条件：");
+            if (!this.target) console.log("- Boss没有目标 (this.target 为空)");
+            if (this.target && !this.target.statusEffects) console.log("- 目标没有 statusEffects 属性");
+            if (this.target && this.target.statusEffects && !this.target.statusEffects.slow) console.log("- 目标没有减速效果");
+            if (this.target && this.target.statusEffects && this.target.statusEffects.slow && this.target.statusEffects.slow.source !== this) console.log("- 减速效果来源不是此Boss实例");
+            if (this.target && this.target.statusEffects && this.target.statusEffects.slow && !this.target.statusEffects.slow.isAuraEffect) console.log("- 减速效果不是光环效果");
+        }
+        // --- 结束 巨型僵尸死亡特殊处理 ---
+
         // 通知BossManager处理Boss死亡
         if (bossManager && typeof bossManager.handleBossDeath === 'function') {
             bossManager.handleBossDeath(this, killer);
