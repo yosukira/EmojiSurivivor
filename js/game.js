@@ -528,7 +528,7 @@ function init() {
 
     // 加载玩家图片
     playerImage = new Image();
-    playerImage.src = 'assets/ninja.png';
+    playerImage.src = 'assets/playerR.png';
     playerImage.onload = () => {
         console.log("玩家图片加载完成。");
     };
@@ -1354,6 +1354,19 @@ function getAvailableUpgrades(player) {
         
         console.log("玩家已有被动物品集合:", Array.from(playerHasPassives));
         
+        const BANNED_PASSIVE_NAMES = [
+            "魔法水晶", "MagicCrystal",
+            "神秘卡片", "MysteryCard", "Card",
+            "神秘符咒", "OccultCharm", "Charm",
+            "咒术护符", // 新增中文名
+            "CursedRelic", "SpellboundAmulet", "RitualTalisman", // 新增可能的英文/ID，具体根据实际道具名称调整
+            "寒冰之心", "FrostHeart", "Heart",
+            "龙息香料", "DragonSpice", "Spice",
+            "雷光护符", "ThunderAmulet", "Amulet",
+            "毒素宝珠", "PoisonOrb", "Orb",
+            "磁力球", "MagnetSphere", "MagnetBall", "Magnet"
+        ];
+        
         BASE_PASSIVES.forEach(PassiveClass => {
             if (!PassiveClass) {
                 console.warn("BASE_PASSIVES中存在无效的被动物品类");
@@ -1370,6 +1383,21 @@ function getAvailableUpgrades(player) {
             if (!PassiveClass.prototype) {
                 console.warn(`类没有原型:`, PassiveClass);
                 return;
+            }
+
+            // 检查是否为被禁用的被动道具
+            // 我们需要实例化一个临时对象来获取其名称，或者检查类名（如果一致）
+            let tempPassiveName = PassiveClass.name; // 尝试用类名
+            try {
+                const tempInstance = new PassiveClass();
+                tempPassiveName = tempInstance.name || PassiveClass.name; // 优先用实例的name属性
+            } catch (e) {
+                // 实例化失败，继续使用类名
+            }
+
+            if (BANNED_PASSIVE_NAMES.includes(tempPassiveName)) {
+                console.log(`Skipping banned passive item by name: ${tempPassiveName}`);
+                return; // 跳过被禁用的道具
             }
             
             // 检查玩家是否已经拥有此类被动物品

@@ -79,7 +79,7 @@ const BOSS_BASE_DAMAGE_MULTIPLIER = 2.5;
 // 其他游戏设定
 const MAX_ENEMIES_ON_SCREEN = 200; // 屏幕上允许的最大敌人数量（修改为200）
 const BOSS_INTERVAL = 300; // Boss出现间隔时间（秒）：5分钟
-const FIRST_BOSS_TIME = 180; // 第一个Boss出现时间（秒）：3分钟
+const FIRST_BOSS_TIME = 300; // 第一个Boss出现时间（秒）：修改为5分钟 (原为180)
 // SPAWN_PADDING 和 ENEMY_ATTACK_RANGE 已在下面定义，将检查并使用新值如果不同
 
 // 敌人生成边界距离 - 确保敌人从屏幕外生成

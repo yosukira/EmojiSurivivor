@@ -347,7 +347,7 @@ const BOSS_TYPES = [
         attackPattern: "melee",
         minTime: 180, // 第一个Boss在3分钟出现
         earthquakeRadius: 280,
-        earthquakeDamageMultiplier: 1.8,
+        earthquakeDamageMultiplier: 0.9,
         earthquakeDuration: 2.0,
         specialAbilityCooldown: 4.5,
         specialAttackWarningDuration: 1.0,

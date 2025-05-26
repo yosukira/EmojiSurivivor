@@ -970,6 +970,14 @@ class Enemy extends Character {
         // 调用父类死亡处理
         super.onDeath(killer);
 
+        // 增加击杀计数 (为所有非Boss敌人增加)
+        // Boss的击杀计数在 bossManager.handleBossDeath 中处理
+        if (!(this instanceof BossEnemy)) {
+             if (typeof killCount !== 'undefined') {
+                killCount++;
+            }
+        }
+
         // 如果是精英史莱姆，死亡时分裂
         if (this.type && this.type.splitOnDeath) {
             const splitCount = this.type.splitCount || 2;
@@ -1515,15 +1523,15 @@ class BossEnemy extends Enemy {
 
         // Time-based scaling for Bosses (more aggressive or starts earlier)
         const minutesPassed = currentGameTime / 60;
-        // Health: Starts scaling after 1 min, caps at +200% (3x total) around 11 mins
+        // Health: Starts scaling after 1 min, no cap on scaling (removed cap)
         let bossHealthScaling = 1.0;
         if (minutesPassed > 1) {
-            bossHealthScaling += Math.min((minutesPassed - 1) * 0.20, 2.0); // 0.20 per min after 1 min, up to +200%
+            bossHealthScaling += (minutesPassed - 1) * 0.20; // 0.20 per min after 1 min
         }
-        // Damage: Starts scaling after 2 mins, caps at +150% (2.5x total) around 12 mins
+        // Damage: Starts scaling after 2 mins, no cap on scaling (removed cap)
         let bossDamageScaling = 1.0;
         if (minutesPassed > 2) {
-            bossDamageScaling += Math.min((minutesPassed - 2) * 0.15, 1.5); // 0.15 per min after 2 mins, up to +150%
+            bossDamageScaling += (minutesPassed - 2) * 0.15; // 0.15 per min after 2 mins
         }
 
         // 确保缩放因子不为NaN或负数
@@ -1533,9 +1541,27 @@ class BossEnemy extends Enemy {
         this.stats.health *= bossHealthScaling;
         this.stats.damage *= bossDamageScaling;
 
+        // 根据玩家武器和被动道具数量调整难度 (与普通敌人逻辑类似)
+        let playerWeaponScaling = 1.0;
+        let playerPassiveScaling = 1.0;
+
+        if (typeof player !== 'undefined' && player && player.weapons) {
+            playerWeaponScaling += player.weapons.length * 0.10;
+        }
+
+        if (typeof player !== 'undefined' && player && player.passiveItems) {
+            playerPassiveScaling += player.passiveItems.length * 0.05;
+        }
+
+        // 应用玩家装备影响 - Boss也受此影响
+        // 血量缩放 (可以考虑是否对Boss也应用无上限，或者设置不同的系数/上限)
+        this.stats.health *= playerWeaponScaling * playerPassiveScaling;
+
+        // 伤害缩放 (对Boss伤害的影响也减少25%)
+        this.stats.damage *= (1 + ((playerWeaponScaling - 1) * 0.75) * ((playerPassiveScaling - 1) * 0.75));
+
         // 确保最终健康值不为NaN或负数
-        this.stats.health = Math.max(100, this.stats.health || 1000);
-        this.stats.damage = Math.max(5, this.stats.damage || 20);
+        this.stats.health = Math.max(100, this.stats.health || 1000); // 保持Boss最低血量
 
         // 设置当前生命值
         this.health = this.stats.health;
