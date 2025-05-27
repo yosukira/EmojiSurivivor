@@ -121,16 +121,14 @@ class Character extends GameObject {
         if (type === 'stun') {
             // 如果当前正被眩晕或处于眩晕免疫中，则不施加新的眩晕
             if (this.statusEffects.stun || this.stunImmunityTimer > 0) {
+                console.log(`Stun application blocked for ${this.constructor.name}. Has stun: ${!!this.statusEffects.stun}, Immunity timer: ${this.stunImmunityTimer.toFixed(2)}`);
                 return;
             }
             // 如果新的眩晕效果比现有的弱（虽然上面已经return了，但保留逻辑完整性）
             // 确保 effectData.duration 存在且有效
             const newDuration = (effectData && typeof effectData.duration === 'number') ? effectData.duration : 0;
-            if (this.statusEffects[type] && this.statusEffects[type].duration > newDuration) {
-                return; 
-            }
-            // 施加眩晕效果时不启动免疫计时器
-            this.statusEffects[type] = { ...effectData, icon: '💫', duration: newDuration }; 
+            console.log(`Stun applied via applyStatusEffect to ${this.constructor.name}. Duration: ${newDuration.toFixed(2)}, Current Stun Immunity: ${this.stunImmunityTimer.toFixed(2)}`);
+            this.statusEffects[type] = { ...effectData, icon: '⭐', duration: newDuration }; 
             return; 
         }
         
@@ -158,20 +156,27 @@ class Character extends GameObject {
      * @param {number} dt - 时间增量
      */
     updateStatusEffects(dt) {
+        // console.log(`Character updateStatusEffects dt: ${dt.toFixed(4)}, Entity: ${this.constructor.name}`); // 注释掉这行日志
+
         // 更新眩晕免疫计时器
         if (this.stunImmunityTimer > 0) {
             this.stunImmunityTimer -= dt;
             if (this.stunImmunityTimer < 0) {
                 this.stunImmunityTimer = 0;
             }
+            if (!this.statusEffects.stun && this.stunImmunityTimer > 0) {
+                console.log(`Stun immunity active for ${this.constructor.name}. Remaining: ${this.stunImmunityTimer.toFixed(2)}`);
+            }
         }
 
         // 更新眩晕效果
         if (this.statusEffects.stun) {
+            console.log(`Updating stun for ${this.constructor.name}. Remaining duration: ${this.statusEffects.stun.duration.toFixed(2)}, Immunity timer: ${this.stunImmunityTimer.toFixed(2)}`);
             this.statusEffects.stun.duration -= dt;
             if (this.statusEffects.stun.duration <= 0) {
+                console.log(`Stun duration reached zero for ${this.constructor.name}. Clearing stun. Starting immunity.`);
                 this.statusEffects.stun = null;
-                this.stunImmunityTimer = 1.0; // 眩晕结束后开始1秒免疫
+                this.stunImmunityTimer = 1.0;
             }
         }
 

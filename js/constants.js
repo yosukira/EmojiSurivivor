@@ -343,7 +343,7 @@ const BOSS_TYPES = [
     {
         name: "骷髅王",
         emoji: EMOJI.BOSS_SKELETON,
-        healthBase: 350, // 新增：固定基础血量为350
+        healthBase: 500, // 修改为500
         healthMult: 1.6, // 降低血量
         speedMult: 0.8,
         damageMult: 1.0,

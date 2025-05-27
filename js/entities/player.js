@@ -1139,4 +1139,32 @@ class Player extends Character {
         // 应用所有加成
         this.applyAllBuffs();
     }
+
+    applyAllBuffs() {
+        // (确保 applyAllBuffs 方法存在或按需实现)
+        // 例如：
+        // this.speed = this.baseSpeed * (this.getStat('speedMultiplier') || 1) + (this.getStat('speedBonus') || 0);
+        // this.maxHealth = this.baseMaxHealth * (this.getStat('maxHealthMultiplier') || 1) + (this.getStat('maxHealthBonus') || 0);
+        // ... 其他属性
+    }
+
+    /**
+     * 处理敌人死亡事件，尝试触发被动效果（如舍利子回魂）
+     * @param {Enemy} deadEnemy - 死去的敌人实例
+     */
+    handleEnemyDeath(deadEnemy) {
+        if (!deadEnemy || !this.passiveItems || this.passiveItems.length === 0) {
+            return;
+        }
+
+        console.log(`[Player] Handling death of enemy: ${deadEnemy.type ? deadEnemy.type.name : 'UnknownType'} at (${deadEnemy.x}, ${deadEnemy.y})`);
+
+        for (const item of this.passiveItems) {
+            if (item instanceof SoulRelic && typeof item.tryReanimate === 'function') {
+                console.log(`[Player] Found SoulRelic. Attempting to reanimate...`);
+                item.tryReanimate(deadEnemy.x, deadEnemy.y, this);
+                // SoulRelic.tryReanimate 内部应该有自己的日志来表明成功或失败
+            }
+        }
+    }
 }

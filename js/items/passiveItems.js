@@ -816,13 +816,16 @@ class SoulRelic extends PassiveItem {
     tryReanimate(x, y, owner) {
         // 获取复活几率
         const chance = this.bonuses.reanimateChance || 0.05;
-        
+        const randomRoll = Math.random();
+        console.log(`[SoulRelic] Attempting reanimation. Chance: ${chance}, Roll: ${randomRoll}`);
+
         // 随机判断是否复活
-        if (Math.random() < chance) {
+        if (randomRoll < chance) {
             // 获取幽灵属性
             const duration = this.bonuses.ghostDuration || 5;
             const damage = this.bonuses.ghostDamage || 3;
             const hasAOE = this.bonuses.ghostAOE || false;
+            console.log(`[SoulRelic] Reanimation success! Ghost params - Duration: ${duration}, Damage: ${damage}, AOE: ${hasAOE}`);
             
             // 创建幽灵效果
             const effects = {};
@@ -839,9 +842,11 @@ class SoulRelic extends PassiveItem {
                     
                     // 将幽灵添加到全局数组
                     if (typeof activeGhosts !== 'undefined') {
+                        console.log(`[SoulRelic] Before push, activeGhosts.length: ${activeGhosts.length}`);
                         activeGhosts.push(ghost);
+                        console.log(`[SoulRelic] After push, activeGhosts.length: ${activeGhosts.length}, Ghost created:`, ghost);
                     } else {
-                        console.warn("activeGhosts数组未定义，无法添加幽灵!");
+                        console.warn("[SoulRelic] activeGhosts数组未定义，无法添加幽灵!");
                     }
                     
                     // 创建复活特效
@@ -849,13 +854,15 @@ class SoulRelic extends PassiveItem {
                     
                     return true;
                 } else {
-                    console.error("无法创建幽灵: GhostEnemy类未定义");
+                    console.error("[SoulRelic] 无法创建幽灵: GhostEnemy类未定义");
                     return false;
                 }
             } catch (error) {
-                console.error("创建幽灵时出错:", error);
+                console.error("[SoulRelic] 创建幽灵时出错:", error);
                 return false;
             }
+        } else {
+            console.log("[SoulRelic] Reanimation failed by chance.");
         }
         
         return false;

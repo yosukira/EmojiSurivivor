@@ -59,7 +59,8 @@ let xpGems = [];
 let worldObjects = [];
 let visualEffects = [];
 let damageNumbers = [];
-let activeGhosts = []; // 新增：用于存储活动的幽灵
+// let activeGhosts = []; // 旧的声明将被替换
+window.activeGhosts = []; // 新增：使其成为 window 的属性，以便 SoulRelic 可以正确访问
 let hazards = []; // 新增：用于存储持续性危害物，如藤蔓、火山等
 let particles = []; // 粒子效果
 
@@ -242,9 +243,10 @@ const bossManager = {
     currentBoss: null,
     bossWarningTimer: 0,
     showingWarning: false,
-    pendingBossType: null, // 新增：用于存储待生成的Boss类型
-    defeatedBossCount: 0, // 跟踪已击败的Boss数量
-    bossArenaEffect: null, // 存储Boss战场边界效果
+    pendingBossType: null,
+    defeatedBossCount: 0, 
+    bossArenaEffect: null,
+    lastSpawnedBossName: null, // 新增：存储上一个生成的Boss名称
 
     update(dt, gameTime, player) {
         // 如果当前有Boss，更新Boss
@@ -292,9 +294,27 @@ const bossManager = {
         if (gameTime >= this.nextBossTime) {
             const availableBosses = BOSS_TYPES.filter(boss => gameTime >= (boss.minTime || 0));
             if (availableBosses.length > 0) {
-                // 随机选择一个Boss并存储
-                this.pendingBossType = availableBosses[Math.floor(Math.random() * availableBosses.length)];
-                this.showBossWarning(this.pendingBossType.name); // 用选定的Boss名字显示警告
+                // 随机选择一个Boss
+                let selectedBossType = availableBosses[Math.floor(Math.random() * availableBosses.length)];
+
+                // 如果选择的Boss与上一个相同，并且有其他可选Boss，则重新选择
+                if (availableBosses.length > 1 && selectedBossType.name === this.lastSpawnedBossName) {
+                    let newSelection = selectedBossType;
+                    let attempts = 0; // 防止无限循环
+                    while (newSelection.name === this.lastSpawnedBossName && attempts < availableBosses.length * 2) {
+                        newSelection = availableBosses[Math.floor(Math.random() * availableBosses.length)];
+                        attempts++;
+                    }
+                    selectedBossType = newSelection;
+                    if (selectedBossType.name === this.lastSpawnedBossName) {
+                        console.log("Could not pick a different boss, will spawn the same one:", selectedBossType.name);
+                    } else {
+                         console.log("Avoided spawning same boss. New boss:", selectedBossType.name);
+                    }
+                }
+                
+                this.pendingBossType = selectedBossType;
+                this.showBossWarning(this.pendingBossType.name); 
                 this.showingWarning = true;
             } else {
                 // 如果没有可用的Boss（理论上不应发生，除非BOSS_TYPES为空或minTime都过高）
@@ -341,6 +361,7 @@ const bossManager = {
 
         // 设置当前Boss
         this.currentBoss = boss;
+        this.lastSpawnedBossName = bossTypeToSpawn.name; // 新增：记录本次生成的Boss名称
         console.log('[BOSS_SPAWN] Boss object for health bar:', this.currentBoss); // DEBUG
         showBossHealthBar(this.currentBoss); 
 
@@ -970,30 +991,26 @@ function draw() {
             }
         }
         
-        // 绘制活动的幽灵 (与敌人同层但优先级更低)
+        // 绘制敌人 (第三层)
+        for (let i = 0; i < enemies.length; i++) {
+            if (!enemies[i].isGarbage && enemies[i].isActive) {
+                 // 确保敌人的绘制也在 globalAlpha = 1 的上下文中
+                offscreenCtx.save();
+                offscreenCtx.globalAlpha = 1.0; // 确保敌人完全不透明，除非其自身draw方法修改
+                enemies[i].draw(offscreenCtx);
+                offscreenCtx.restore();
+            }
+        }
+
+        // 新增：绘制活动的幽灵 (在敌人之后，玩家之前)
         for (let i = 0; i < activeGhosts.length; i++) {
             if (activeGhosts[i] && !activeGhosts[i].isGarbage && activeGhosts[i].isActive) {
+                // 幽灵的draw方法应该自己处理透明度（例如基于lifetime）
                 activeGhosts[i].draw(offscreenCtx);
             }
         }
 
-        // 绘制敌人 (最顶层之一)
-        for (let i = 0; i < enemies.length; i++) {
-            if (!enemies[i].isGarbage && enemies[i].isActive) {
-                // 特殊处理Boss，使其更加明显
-                if (enemies[i].isBoss) {
-                    offscreenCtx.save();
-                    offscreenCtx.globalAlpha = 1.0; // 保持Boss完全不透明
-                    enemies[i].draw(offscreenCtx);
-                    offscreenCtx.restore();
-                } else {
-                    // 普通敌人
-                    enemies[i].draw(offscreenCtx);
-                }
-            }
-        }
-        
-        // 绘制玩家 (最顶层)
+        // 绘制玩家 (第五层)
         if (player && !player.isGarbage && player.isActive) {
             // 确保玩家始终可见
             offscreenCtx.save();

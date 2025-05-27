@@ -860,21 +860,18 @@ class Enemy extends Character {
             // 处理眩晕效果 (雷电精灵)
             if (this.type.appliesStun) {
                 const stunChance = this.type.stunChance || 0.3;
+                const stunDuration = this.type.stunDuration || 0.5;
 
-                // 按几率触发眩晕
                 if (Math.random() < stunChance) {
-                    if (!target.statusEffects) {
-                        target.statusEffects = {};
+                    // 调用目标的 applyStatusEffect 方法以确保免疫逻辑得到遵守
+                    if (target && typeof target.applyStatusEffect === 'function') {
+                        console.log(`敌人 ${this.type.name} 尝试对 ${target.constructor.name} 施加眩晕。持续时间: ${stunDuration}`);
+                        target.applyStatusEffect('stun', { duration: stunDuration, source: this });
+                    } else {
+                        console.warn("目标没有 applyStatusEffect 方法或目标为空。");
                     }
-
-                    // 应用眩晕效果
-                    const stunDuration = this.type.stunDuration || 1; // 应为 0.5
-
-                    target.statusEffects.stun = {
-                        duration: stunDuration,
-                        source: this,
-                        icon: '⭐' // 添加图标属性
-                    };
+                } else {
+                    console.log(`敌人 ${this.type.name} 的眩晕效果因几率问题未对 ${target.constructor.name} 生效。`);
                 }
             }
 
@@ -974,6 +971,12 @@ class Enemy extends Character {
 
         // 随机掉落物品
         this.dropItem();
+
+        // --- 新增：通知击杀者（如果是玩家）处理被动效果 ---
+        if (killer && killer instanceof Player && typeof killer.handleEnemyDeath === 'function') {
+            killer.handleEnemyDeath(this);
+        }
+        // --- 结束新增 ---
     }
 
     /**
@@ -1451,51 +1454,64 @@ class BossEnemy extends Enemy {
         // Now, directly assign the pre-calculated initialBossStats (which already has boss-specific multipliers)
         this.stats = { ...initialBossStats }; // Use a copy
 
-        // Time-based scaling for Bosses (more aggressive or starts earlier)
-        const minutesPassed = currentGameTime / 60;
-        // Health: Starts scaling after 1 min, no cap on scaling (removed cap)
-        let bossHealthScaling = 1.0;
-        if (minutesPassed > 1) {
-            bossHealthScaling += (minutesPassed - 1) * 0.20; // 0.20 per min after 1 min
+        // --- START: 第一个骷髅王固定血量逻辑 ---
+        if (bossType.name === "骷髅王" && bossType.healthBase && !window.firstSkeletonKingHealthApplied) {
+            this.stats.health = bossType.healthBase; // healthBase 应该是 500
+            this.health = this.stats.health;
+            this.maxHealth = this.stats.health;
+            window.firstSkeletonKingHealthApplied = true; // 标记已应用
+            console.log(`First Skeleton King spawned with fixed health: ${this.stats.health}`);
+        } else {
+            // Time-based scaling for Bosses (more aggressive or starts earlier)
+            const minutesPassed = currentGameTime / 60;
+            // Health: Starts scaling after 1 min, no cap on scaling (removed cap)
+            let bossHealthScaling = 1.0;
+            if (minutesPassed > 1) {
+                bossHealthScaling += (minutesPassed - 1) * 0.20; // 0.20 per min after 1 min
+            }
+            // Damage: Starts scaling after 2 mins, no cap on scaling (removed cap)
+            let bossDamageScaling = 1.0;
+            if (minutesPassed > 2) {
+                bossDamageScaling += (minutesPassed - 2) * 0.15; // 0.15 per min after 2 mins
+            }
+
+            // 确保缩放因子不为NaN或负数
+            bossHealthScaling = Math.max(1.0, bossHealthScaling || 1.0);
+            bossDamageScaling = Math.max(1.0, bossDamageScaling || 1.0);
+
+            this.stats.health *= bossHealthScaling;
+            this.stats.damage *= bossDamageScaling;
+
+            // 根据玩家武器和被动道具数量调整难度 (与普通敌人逻辑类似)
+            let playerWeaponScaling = 1.0;
+            let playerPassiveScaling = 1.0;
+
+            if (typeof player !== 'undefined' && player && player.weapons) {
+                playerWeaponScaling += player.weapons.length * 0.10;
+            }
+
+            if (typeof player !== 'undefined' && player && player.passiveItems) {
+                playerPassiveScaling += player.passiveItems.length * 0.05;
+            }
+
+            // 应用玩家装备影响 - Boss也受此影响
+            // 血量缩放 (可以考虑是否对Boss也应用无上限，或者设置不同的系数/上限)
+            this.stats.health *= playerWeaponScaling * playerPassiveScaling;
+
+            // 伤害缩放 (对Boss伤害的影响也减少25%)
+            this.stats.damage *= (1 + ((playerWeaponScaling - 1) * 0.75) * ((playerPassiveScaling - 1) * 0.75));
+
+            // 确保最终健康值不为NaN或负数
+            this.stats.health = Math.max(100, this.stats.health || 1000); // 保持Boss最低血量
+
+            // 设置当前生命值
+            this.health = this.stats.health;
+            this.maxHealth = this.stats.health;
+             if (bossType.name === "骷髅王") {
+                console.log(`Subsequent Skeleton King spawned with scaled health: ${this.stats.health}`);
+            }
         }
-        // Damage: Starts scaling after 2 mins, no cap on scaling (removed cap)
-        let bossDamageScaling = 1.0;
-        if (minutesPassed > 2) {
-            bossDamageScaling += (minutesPassed - 2) * 0.15; // 0.15 per min after 2 mins
-        }
-
-        // 确保缩放因子不为NaN或负数
-        bossHealthScaling = Math.max(1.0, bossHealthScaling || 1.0);
-        bossDamageScaling = Math.max(1.0, bossDamageScaling || 1.0);
-
-        this.stats.health *= bossHealthScaling;
-        this.stats.damage *= bossDamageScaling;
-
-        // 根据玩家武器和被动道具数量调整难度 (与普通敌人逻辑类似)
-        let playerWeaponScaling = 1.0;
-        let playerPassiveScaling = 1.0;
-
-        if (typeof player !== 'undefined' && player && player.weapons) {
-            playerWeaponScaling += player.weapons.length * 0.10;
-        }
-
-        if (typeof player !== 'undefined' && player && player.passiveItems) {
-            playerPassiveScaling += player.passiveItems.length * 0.05;
-        }
-
-        // 应用玩家装备影响 - Boss也受此影响
-        // 血量缩放 (可以考虑是否对Boss也应用无上限，或者设置不同的系数/上限)
-        this.stats.health *= playerWeaponScaling * playerPassiveScaling;
-
-        // 伤害缩放 (对Boss伤害的影响也减少25%)
-        this.stats.damage *= (1 + ((playerWeaponScaling - 1) * 0.75) * ((playerPassiveScaling - 1) * 0.75));
-
-        // 确保最终健康值不为NaN或负数
-        this.stats.health = Math.max(100, this.stats.health || 1000); // 保持Boss最低血量
-
-        // 设置当前生命值
-        this.health = this.stats.health;
-        this.maxHealth = this.stats.health;
+        // --- END: 第一个骷髅王固定血量逻辑 ---
 
         // Boss特定属性
         this.type = bossType; // 确保 this.type 是 bossType 对象
@@ -3057,67 +3073,60 @@ class GhostEnemy extends Character {
      * @param {Object} effects - 额外效果 (例如减速)
      */
     constructor(x, y, owner, damage, duration, speed = 150, effects = {}) {
-        // 使用幽灵 emoji 和基础属性
         super(x, y, '👻', GAME_FONT_SIZE * 0.9, { health: 1, speed: speed, damage: damage, xp: 0 });
         this.owner = owner;
         this.lifetime = 0;
         this.maxLifetime = duration;
         this.targetEnemy = null;
         this.attackCooldown = 0;
-        this.attackInterval = 0.8; // 攻击间隔
-        this.attackRangeSq = 50 * 50; // 攻击范围平方
-        this.searchRangeSq = 300 * 300; // 搜索敌人范围平方
-        this.effects = effects; // 如 { slow: { factor: 0.8, duration: 0.5 } }
+        this.attackInterval = 0.8;
+        this.attackRangeSq = 50 * 50;
+        this.searchRangeSq = 300 * 300;
+        this.effects = effects;
 
-        // 添加到全局幽灵列表
-        if (typeof activeGhosts !== 'undefined') {
-            activeGhosts.push(this);
-        } else {
-            console.warn("activeGhosts 数组未定义!");
-        }
+        console.log(`[GhostEnemy] Constructed. Pos: (${x}, ${y}), Dmg: ${damage}, Dur: ${duration}. Initial activeGhosts.length: ${typeof activeGhosts !== 'undefined' ? activeGhosts.length : 'undefined'}`);
+
+        // 移除：不再由构造函数添加。 SoulRelic.tryReanimate 会处理添加。
+        // if (typeof activeGhosts !== 'undefined') {
+        //     activeGhosts.push(this);
+        // } else {
+        //     console.warn("activeGhosts 数组未定义!");
+        // }
     }
 
     update(dt) {
         if (this.isGarbage || !this.isActive) return;
+        // console.log(`[GhostEnemy] Update. Pos: (${this.x.toFixed(1)}, ${this.y.toFixed(1)}), Lifetime: ${this.lifetime.toFixed(2)}/${this.maxLifetime}, Target: ${this.targetEnemy ? this.targetEnemy.type.name : 'None'}, ActiveGhosts: ${activeGhosts.length}`);
 
-        // 更新生命周期
         this.lifetime += dt;
         if (this.lifetime >= this.maxLifetime) {
             this.destroy();
             return;
         }
 
-        // 更新攻击冷却
         if (this.attackCooldown > 0) {
             this.attackCooldown -= dt;
         }
 
-        // 寻找目标
         if (!this.targetEnemy || this.targetEnemy.isGarbage || !this.targetEnemy.isActive) {
             this.findTargetEnemy();
         }
 
-        // 移动和攻击
         if (this.targetEnemy) {
             const dx = this.targetEnemy.x - this.x;
             const dy = this.targetEnemy.y - this.y;
             const distSq = dx * dx + dy * dy;
 
             if (distSq > this.attackRangeSq) {
-                // 移动向目标
                 const dist = Math.sqrt(distSq);
                 const moveX = (dx / dist) * this.stats.speed * dt;
                 const moveY = (dy / dist) * this.stats.speed * dt;
                 this.x += moveX;
                 this.y += moveY;
             } else if (this.attackCooldown <= 0) {
-                // 在攻击范围内，进行攻击
                 this.attack(this.targetEnemy);
                 this.attackCooldown = this.attackInterval;
             }
-        } else {
-            // 没有目标时随机漂移或返回玩家附近? (可选)
-            // 简单处理：原地不动或缓慢移动
         }
     }
 
@@ -3168,6 +3177,7 @@ class GhostEnemy extends Character {
 
     draw(ctx) {
         if (this.isGarbage || !this.isActive) return;
+        // console.log(`[GhostEnemy] Draw. Pos: (${this.x.toFixed(1)}, ${this.y.toFixed(1)}), Lifetime: ${this.lifetime.toFixed(2)}`);
 
         const screenPos = cameraManager.worldToScreen(this.x, this.y);
         // 增加基础透明度，并让淡出效果不那么剧烈
