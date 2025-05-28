@@ -945,7 +945,10 @@ class ChaosDiceProjectile extends Projectile {
                 const chainCount = Math.floor(2 * this.effectPower);
                 const chainRange = 100 * this.effectPower;
                 
-                                // 链式伤害                if (typeof this.chainLightning === 'function') {                    this.chainLightning(enemy, chainDamage, chainCount, chainRange);                }                break;
+                if (typeof this.chainLightning === 'function') {
+                    this.chainLightning(enemy, chainDamage, chainCount, chainRange);
+                }
+                break;
                 
             case "击退":
                 // 应用击退效果
@@ -2362,7 +2365,7 @@ class VineHazard {
                 this.affectedEnemies.delete(enemy);
             }
         });
-        // 对范围内的敌人和玩家造成伤害
+        // 对范围内的敌人造成伤害
         enemies.forEach(enemy => {
             if (enemy.isGarbage || !enemy.isActive) return;
             const dx = enemy.x - this.x;
@@ -2374,7 +2377,8 @@ class VineHazard {
                 this.affectedEnemies.add(enemy);
             }
         });
-        // 新增：对玩家生效
+        // 新增：对玩家生效 (注释掉此部分以避免对玩家造成伤害)
+        /*
         if (typeof player !== 'undefined' && player && player.isActive) {
             const dx = player.x - this.x;
             const dy = player.y - this.y;
@@ -2386,6 +2390,7 @@ class VineHazard {
                 }
             }
         }
+        */
     };
     
     /**
@@ -3629,7 +3634,8 @@ class VolcanoEruption {
                     });
                 }
                 
-                // 新增：对玩家生效
+                // 新增：对玩家生效 (注释掉此部分以避免对玩家造成伤害)
+                /*
                 if (typeof player !== 'undefined' && player && player.isActive) {
                     const dx = player.x - this.x;
                     const dy = player.y - this.y;
@@ -3641,6 +3647,7 @@ class VolcanoEruption {
                         }
                     }
                 }
+                */
                 // 产生气泡效果
                 if (Math.random() < 0.1) {
                     this.createBubbleEffect();

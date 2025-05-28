@@ -690,7 +690,15 @@ function init() {
     // 标记游戏为运行状态
     isGameRunning = true;
 
-    console.log("Emoji 幸存者 - 重构版 已初始化。");
+    // 游戏实际开始时显示游戏内主要UI
+    const topLeftUI = document.getElementById('topLeftUI');
+    const topRightUI = document.getElementById('topRightUI');
+    const bottomLeftUI = document.getElementById('bottomLeftUI');
+    if (topLeftUI) topLeftUI.classList.remove('hidden');
+    if (topRightUI) topRightUI.classList.remove('hidden');
+    if (bottomLeftUI) bottomLeftUI.classList.remove('hidden');
+
+    console.log("Emoji 幸存者 - 重构版 已初始化。游戏开始！"); // 修改日志以反映游戏真正开始
 }
 
 
@@ -2808,6 +2816,14 @@ function resetGame() {
  */
 function startGame() {
     if (isGameRunning) return;
+
+    // 在加载和开始屏幕时隐藏游戏内 주요 UI
+    const topLeftUI = document.getElementById('topLeftUI');
+    const topRightUI = document.getElementById('topRightUI');
+    const bottomLeftUI = document.getElementById('bottomLeftUI');
+    if (topLeftUI) topLeftUI.classList.add('hidden');
+    if (topRightUI) topRightUI.classList.add('hidden');
+    if (bottomLeftUI) bottomLeftUI.classList.add('hidden');
 
     // 显示加载屏幕，隐藏开始屏幕
     document.getElementById('loadingScreen').classList.remove('hidden');
