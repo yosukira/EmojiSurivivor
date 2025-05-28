@@ -123,11 +123,31 @@ class Enemy extends Character {
         this.facingRight = true; // 默认朝右
 
         if (this.type && this.type.svgPath) { // svgPath 现在用于PNG
-            this.image = new Image();
-            this.image.src = this.type.svgPath;
-            this.image.onload = () => {
+            // 从预加载的资源中获取图像
+            let assetName = this.type.svgPath.split('/').pop().split('.')[0]; // 例如: assets/enemy/firewisp.png -> firewisp
+            // 为了匹配 ASSETS_TO_LOAD 中的命名，可能需要更复杂的映射或统一命名
+            // 这里简单处理，假设 ASSETS_TO_LOAD 中的 name 与文件名（无后缀）一致或相似
+            if (assetName === 'slime') assetName = 'slimeSvg';
+            if (assetName === 'elite_slime') assetName = 'eliteSlimeSvg';
+            if (assetName === 'firewisp') assetName = 'firewispPng';
+            if (assetName === 'frostwisp') assetName = 'frostwispPng';
+            if (assetName === 'lightningwisp') assetName = 'lightningwispPng';
+
+            this.image = loadedAssets[assetName];
+            if (this.image) {
                 this.imageLoaded = true;
-            };
+            } else {
+                // console.warn(`图片 ${assetName} (${this.type.svgPath}) 未在 loadedAssets 中找到. 将使用 emoji.`);
+                // 如果预加载的图片未找到，可以尝试动态加载作为备用，或直接使用emoji
+                this.image = new Image();
+                this.image.src = this.type.svgPath;
+                this.image.onload = () => {
+                    this.imageLoaded = true;
+                };
+                this.image.onerror = () => {
+                    console.error(`备用加载失败: ${this.type.svgPath}`);
+                }
+            }
         }
 
         // 特殊能力相关

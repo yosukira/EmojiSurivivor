@@ -32,6 +32,75 @@ let canvas, ctx;
 // 添加离屏画布
 let offscreenCanvas, offscreenCtx;
 
+// 新增：资源加载相关
+const ASSETS_TO_LOAD = [
+    { name: 'player', type: 'image', src: 'assets/playerR.png' },
+    { name: 'background', type: 'image', src: 'assets/grassbg.png' },
+    { name: 'bossHealthBar', type: 'image', src: 'assets/UI/bossHealthBar.png' },
+    { name: 'slimeSvg', type: 'image', src: 'assets/svg/slime.svg' },
+    { name: 'firewispPng', type: 'image', src: 'assets/enemy/firewisp.png' },
+    { name: 'frostwispPng', type: 'image', src: 'assets/enemy/frostwisp.png' },
+    { name: 'lightningwispPng', type: 'image', src: 'assets/enemy/lightingwisp.png' },
+    { name: 'eliteSlimeSvg', type: 'image', src: 'assets/svg/elite_slime.svg' }
+];
+const loadedAssets = {};
+let assetsLoadedCount = 0;
+let totalAssetsToLoad = ASSETS_TO_LOAD.length;
+
+// 新增：加载资源的函数
+function loadAssets(callback) {
+    const loadingScreen = document.getElementById('loadingScreen');
+    const progressBar = document.getElementById('loadingProgressBar');
+    const loadingStatus = document.getElementById('loadingStatus');
+
+    // Ensure DOM elements exist before trying to use them
+    if (!loadingScreen || !progressBar || !loadingStatus) {
+        console.error("Loading screen UI elements not found!");
+        // Optionally, proceed without visual feedback or halt
+        if (totalAssetsToLoad === 0 && callback) {
+            callback();
+            return;
+        }
+        // Fallback or error handling if critical UI is missing
+    }
+
+    if (totalAssetsToLoad === 0) {
+        if (loadingStatus) loadingStatus.textContent = "没有需要加载的资源";
+        if (progressBar) progressBar.style.width = '100%';
+        if (callback) callback();
+        return;
+    }
+
+    if (loadingStatus) loadingStatus.textContent = `正在加载: ${assetsLoadedCount} / ${totalAssetsToLoad}`;
+    if (progressBar) progressBar.style.width = '0%'; // Initialize progress bar
+
+    ASSETS_TO_LOAD.forEach(assetInfo => {
+        if (assetInfo.type === 'image') {
+            const img = new Image();
+            img.src = assetInfo.src;
+            img.onload = () => {
+                loadedAssets[assetInfo.name] = img;
+                assetsLoadedCount++;
+                if (progressBar) progressBar.style.width = (assetsLoadedCount / totalAssetsToLoad) * 100 + '%';
+                if (loadingStatus) loadingStatus.textContent = `正在加载: ${assetsLoadedCount} / ${totalAssetsToLoad}`;
+                if (assetsLoadedCount === totalAssetsToLoad) {
+                    if (callback) callback();
+                }
+            };
+            img.onerror = () => {
+                console.error(`无法加载资源: ${assetInfo.name} (${assetInfo.src})`);
+                assetsLoadedCount++; // Still count it as an attempt
+                if (progressBar) progressBar.style.width = (assetsLoadedCount / totalAssetsToLoad) * 100 + '%';
+                if (loadingStatus) loadingStatus.textContent = `正在加载: ${assetsLoadedCount} / ${totalAssetsToLoad}`;
+                if (assetsLoadedCount === totalAssetsToLoad) {
+                    if (callback) callback(); // Proceed even if some assets fail
+                }
+            };
+        }
+        // TODO: Add support for other asset types like audio if needed
+    });
+}
+
 // 游戏状态
 let isGameRunning = false;
 let isGameOver = false;
@@ -531,6 +600,8 @@ const bossManager = {
  * 初始化游戏
  */
 function init() {
+    resetGame(); //确保在初始化前重置所有状态
+
     console.log("初始化游戏...");
 
     // 获取画布和上下文
@@ -547,27 +618,16 @@ function init() {
     offscreenCanvas.height = GAME_HEIGHT;
     offscreenCtx = offscreenCanvas.getContext('2d');
 
-    // 加载玩家图片
-    playerImage = new Image();
-    playerImage.src = 'assets/playerR.png';
-    playerImage.onload = () => {
-        console.log("玩家图片加载完成。");
-    };
-    playerImage.onerror = () => {
-        console.error("无法加载玩家图片！");
-        playerImage = null; // 加载失败则不使用图片
-    };
+    // 从预加载的资源中获取图像
+    playerImage = loadedAssets.player;
+    backgroundImage = loadedAssets.background;
 
-    // 加载背景图片
-    backgroundImage = new Image();
-    backgroundImage.src = 'assets/grassbg.png';
-    backgroundImage.onload = () => {
-        console.log("背景图片加载完成。");
-    };
-    backgroundImage.onerror = () => {
-        console.error("无法加载背景图片！");
-        backgroundImage = null; // 加载失败则使用纯色背景
-    };
+    if (!playerImage) {
+        console.error("玩家图片未能从预加载资源中获取！");
+    }
+    if (!backgroundImage) {
+        console.warn("背景图片未能从预加载资源中获取，将使用纯色背景。");
+    }
 
     // 清空对象池和活动列表
     inactiveProjectiles = [];
@@ -1982,10 +2042,10 @@ window.addEventListener('mousemove', () => {
     lastMouseMoveTime = Date.now();
 });
 
-// 按钮事件
-startButton.addEventListener('click', init);
-restartButton.addEventListener('click', init);
-resumeButton.addEventListener('click', resumeGame);
+// 按钮事件 (这些将在 loadAssets 回调中重新绑定或已绑定)
+// startButton.addEventListener('click', init); // 已移至 loadAssets
+// restartButton.addEventListener('click', init); // 已移至 loadAssets
+// resumeButton.addEventListener('click', resumeGame); // 已移至 loadAssets
 
 // 窗口大小调整
 window.addEventListener('resize', () => {
@@ -2747,35 +2807,68 @@ function resetGame() {
  * 开始游戏
  */
 function startGame() {
-    // 重置游戏状态
-    resetGame();
-    
-    // 隐藏开始屏幕
+    if (isGameRunning) return;
+
+    // 显示加载屏幕，隐藏开始屏幕
+    document.getElementById('loadingScreen').classList.remove('hidden');
     document.getElementById('startScreen').classList.add('hidden');
-    
-    // 创建玩家
-    player = new Player(400, 300);
-    window.player = player;
-    
-    // 创建初始武器
-    const dagger = new DaggerWeapon();
-    player.addWeapon(dagger);
-    
-    // 设置游戏状态
-    isGameRunning = true;
-    isGameOver = false;
-    gameTime = 0;
-    
-    // 重置摄像机
-    cameraManager.following = player;
-    
-    // 启动游戏循环
-    lastTime = 0;
-    animationFrameId = requestAnimationFrame(gameLoop);
-    
-    // 更新UI
-    updateUI();
+    document.getElementById('gameOverScreen').classList.add('hidden');
+    document.getElementById('levelUpScreen').classList.add('hidden');
+    document.getElementById('pauseScreen').classList.add('hidden');
+
+
+    loadAssets(() => {
+        // 资源加载完成后
+        document.getElementById('loadingScreen').classList.add('hidden');
+        document.getElementById('startScreen').classList.remove('hidden'); // 显示开始屏幕
+
+        // 游戏开始按钮事件 (移到这里，确保资源加载后才绑定)
+        const startButton = document.getElementById('startButton');
+        // 移除旧的事件监听器，防止重复绑定
+        const newStartButton = startButton.cloneNode(true);
+        startButton.parentNode.replaceChild(newStartButton, startButton);
+
+        newStartButton.addEventListener('click', () => {
+            console.log("开始游戏按钮被点击");
+            document.getElementById('startScreen').classList.add('hidden');
+            // isGameRunning = true; // 这将在 init() 中设置
+            // isPaused = false;
+            // isGameOver = false;
+            // isLevelUp = false;
+            // resetGame(); // 这将在 init() 的开头调用
+            init(); // 直接调用init开始游戏
+            // lastTime = performance.now();
+            // gameLoop(lastTime); // init() 将负责启动游戏循环
+            console.log("游戏已开始，isGameRunning:", isGameRunning); // isGameRunning 的状态将在 init 后更新
+        });
+
+        // 其他按钮的事件监听器也应该在资源加载后，或者在它们各自的显示逻辑中处理
+        // 但确保在游戏开始前，这些屏幕是隐藏的
+        document.getElementById('resumeButton').addEventListener('click', resumeGame);
+        document.getElementById('restartButton').addEventListener('click', () => {
+            document.getElementById('gameOverScreen').classList.add('hidden');
+            init(); // 重新开始游戏，直接调用 init
+        });
+
+        // 初始时，不直接调用 init 和 gameLoop，而是等待用户点击开始按钮
+        // init(); // init 会在resetGame中被调用，或者在用户点击开始后
+        console.log("资源加载完毕，等待用户点击开始游戏。");
+    });
 }
+
+// 确保在DOM加载完成后调用startGame来启动加载过程
+window.addEventListener('DOMContentLoaded', () => {
+    console.log("DOM 已加载，准备开始资源加载流程。");
+    // 初始隐藏所有覆盖屏幕，除了加载屏幕（如果立即开始加载）
+    // 或者，我们可以让startGame来处理屏幕的初始可见性
+    document.getElementById('startScreen').classList.add('hidden');
+    document.getElementById('gameOverScreen').classList.add('hidden');
+    document.getElementById('levelUpScreen').classList.add('hidden');
+    document.getElementById('pauseScreen').classList.add('hidden');
+    document.getElementById('loadingScreen').classList.remove('hidden'); // 确保加载屏幕是可见的
+
+    startGame(); // 开始加载资源，加载完毕后显示开始屏幕
+});
 
 /**
  * 显示升级时的debug属性面板

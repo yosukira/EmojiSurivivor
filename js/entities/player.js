@@ -552,7 +552,9 @@ class Player extends Character {
                 bobbingSpeedFactor = this.statusEffects.slow.factor || 0.5; // 如果有减速效果，浮动变慢
             }
             if (this.isMoving) {
-                this.bobbingTimer += 0.05 * bobbingSpeedFactor; 
+                // 使用 deltaTime 来更新 bobbingTimer，使其与帧率无关
+                // deltaTime 通常是秒为单位，我们希望 bobbingTimer 大约每秒变化 5.0 个周期（可调整）
+                this.bobbingTimer += deltaTime * 10.0 * bobbingSpeedFactor; 
                 this.bobbingOffset = Math.sin(this.bobbingTimer) * 3; 
             } else {
                 this.bobbingOffset = 0; // 不移动则不浮动

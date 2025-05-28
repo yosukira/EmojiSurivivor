@@ -261,6 +261,11 @@
             color: #eee;
             font-weight: bold;
         }
+
+        /* 加载屏幕特定样式 */
+        #loadingScreen {
+            z-index: 100; /* 确保在最顶层 */
+        }
     </style>
 </head>
 <body>
@@ -298,10 +303,19 @@
     <!-- 游戏画布 -->
     <canvas id="gameCanvas"></canvas>
 
+    <!-- 加载屏幕 -->
+    <div id="loadingScreen" class="overlayScreen">
+        <h1>正在加载资源...</h1>
+        <div id="loadingProgressContainer" style="width: 300px; height: 20px; background-color: #555; border-radius: 5px; overflow: hidden; margin-bottom: 20px;">
+            <div id="loadingProgressBar" style="width: 0%; height: 100%; background-color: #2ecc71; transition: width 0.1s ease-in-out;"></div>
+        </div>
+        <p id="loadingStatus">正在加载: 0 / 0</p>
+    </div>
+
     <!-- 开始屏幕 -->
-    <div id="startScreen" class="overlayScreen">
+    <div id="startScreen" class="overlayScreen hidden">
         <h1>Emoji 幸存者 - 忍者版</h1>
-        <p><img src="assets/ninja.png" alt="忍者图标" style="width: 1em; height: 1em; vertical-align: middle; margin-right: 0.2em;"> 使用 WASD 移动。</p>
+        <p><img src="assets/playerR.png" alt="忍者图标" style="width: 1em; height: 1em; vertical-align: middle; margin-right: 0.2em;"> 使用 WASD 移动。</p>
         <p>💀 在怪物群中活下来！</p>
         <p>✨ 收集宝石升级。</p>
         <p>🅿️ 按 P 暂停/取消暂停。</p>
