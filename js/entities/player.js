@@ -413,12 +413,15 @@ class Player extends Character {
     takeDamage(amount, source, isBurnDamage = false, isAuraDamage = false) {
         const sourceId = source && source.type && source.type.name ? source.type.name : (source && source.name ? source.name : 'unknown');
         if (!isAuraDamage && !isBurnDamage && this.invincibleSources[sourceId] > 0) return false;
+        
         let actualDamage;
         let reduction = 0;
+        
         // 读取结界符文减伤
         if (!isAuraDamage && !isBurnDamage) {
             reduction = this.getStat && typeof this.getStat === 'function' ? (this.getStat('damageReductionPercent') || 0) : 0;
         }
+        
         if (isAuraDamage || isBurnDamage) {
             actualDamage = amount;
         } else {
@@ -428,11 +431,16 @@ class Player extends Character {
                 actualDamage = Math.max(1, actualDamage * (1 - reduction));
             }
         }
+        
         this.health -= actualDamage;
-        spawnDamageNumber(this.x, this.y - this.size / 2, `-${actualDamage.toString()}`, GAME_FONT_SIZE, 'red');
+        
+        // 显示受伤数字 - 使用红色表示玩家受伤
+        spawnDamageNumber(this.x, this.y - this.size / 2, `-${Math.floor(actualDamage)}`, '#FF4444', GAME_FONT_SIZE * 0.8, 0.8, false);
+        
         if (!isAuraDamage && !isBurnDamage) {
             this.invincibleSources[sourceId] = 0.5;
         }
+        
         if (this.health <= 0) {
             this.health = 0; // 确保健康值不为负
             this.onDeath(source);
@@ -606,6 +614,9 @@ class Player extends Character {
         );
         ctx.restore();
 
+        // 绘制血条（仅在不满血时显示）- 使用视觉中心位置
+        this.drawHealthBar(ctx, { x: visualCenterX, y: visualCenterY });
+
         // 在绘制玩家图片后，绘制状态效果图标
         // 注意：传递给 drawStatusEffects 的 y 坐标需要是角色视觉中心或头顶，考虑浮动
         const statusIconScreenPos = { x: visualCenterX, y: visualCenterY }; // 使用视觉中心作为基准
@@ -624,14 +635,66 @@ class Player extends Character {
         if (this.shield && this.shield.isActive) {
             this.shield.draw(ctx, logicalScreenPos.x, logicalScreenPos.y); 
         }
+
+        // 绘制护盾效果（如果有）
+        if (this.shieldEffect && !this.shieldEffect.isGarbage) {
+            this.shieldEffect.draw(ctx);
+        }
     }
 
     /**
-     * 绘制拾取范围
+     * 绘制玩家血条
      * @param {CanvasRenderingContext2D} ctx - 画布上下文
+     * @param {{x: number, y: number}} screenPos - 屏幕坐标
      */
-    drawPickupRadius(ctx) {
-        // 不绘制拾取范围，可能是图中看到的白色圆
+    drawHealthBar(ctx, screenPos) {
+        const maxHealth = this.getStat('health');
+        const currentHealth = this.health;
+        
+        // 仅在不满血时显示血条
+        if (currentHealth >= maxHealth) {
+            return;
+        }
+        
+        const barWidth = this.size * 1.2; // 血条宽度稍微比玩家大一点
+        const barHeight = 6; // 血条高度
+        const barX = screenPos.x - barWidth / 2;
+        const barY = screenPos.y - this.size * 0.8; // 血条位置在玩家上方
+        
+        ctx.save();
+        
+        // 绘制血条背景（黑色）
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(barX - 1, barY - 1, barWidth + 2, barHeight + 2);
+        
+        // 绘制血条边框（深灰色）
+        ctx.strokeStyle = 'rgba(100, 100, 100, 0.8)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(barX, barY, barWidth, barHeight);
+        
+        // 计算血量百分比
+        const healthPercent = Math.max(0, currentHealth / maxHealth);
+        
+        // 绘制血条填充（红色渐变）
+        const gradient = ctx.createLinearGradient(barX, barY, barX + barWidth, barY);
+        if (healthPercent > 0.6) {
+            // 健康状态：绿色到黄色
+            gradient.addColorStop(0, '#4CAF50');
+            gradient.addColorStop(1, '#8BC34A');
+        } else if (healthPercent > 0.3) {
+            // 中等状态：黄色到橙色
+            gradient.addColorStop(0, '#FF9800');
+            gradient.addColorStop(1, '#FFC107');
+        } else {
+            // 危险状态：红色
+            gradient.addColorStop(0, '#F44336');
+            gradient.addColorStop(1, '#E57373');
+        }
+        
+        ctx.fillStyle = gradient;
+        ctx.fillRect(barX, barY, barWidth * healthPercent, barHeight);
+        
+        ctx.restore();
     }
 
     /**

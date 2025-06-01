@@ -100,9 +100,6 @@ class UpgradeableItem {
             level: this.level + 1,
             action: () => {
                 this.upgrade();
-                if (this instanceof Weapon || this instanceof PassiveItem) {
-                    checkEvolution(player, this);
-                }
             }
         }];
     }

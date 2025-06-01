@@ -736,16 +736,16 @@ function spawnProjectile(x, y, emoji, size, vx, vy, damage, pierce, duration, ow
  * @param {string} [color='white'] - 文本颜色
  * @param {number} [size=GAME_FONT_SIZE * 0.8] - 文本大小
  * @param {number} [duration=0.7] - 持续时间
+ * @param {boolean} [isCrit=false] - 是否暴击
  * @returns {DamageNumber} 生成的伤害数字
  */
-function spawnDamageNumber(x, y, text, color = 'rgb(255, 80, 80)', size = GAME_FONT_SIZE * 0.8, duration = 0.7) {
+function spawnDamageNumber(x, y, text, color = 'white', size = GAME_FONT_SIZE * 0.8, duration = 0.7, isCrit = false) {
     let damageNumber = null;
     if (inactiveDamageNumbers.length > 0) {
         damageNumber = inactiveDamageNumbers.pop();
-        // 需要确保 init 方法也更新，或者在获取时设置属性
-        damageNumber.init(x, y, text, size, color, duration);
+        damageNumber.init(x, y, text, size, color, duration, isCrit);
     } else {
-        damageNumber = new DamageNumber(x, y, text, size, color, duration);
+        damageNumber = new DamageNumber(x, y, text, size, color, duration, isCrit);
     }
     damageNumbers.push(damageNumber);
     return damageNumber;
@@ -1351,7 +1351,6 @@ function getAvailableUpgrades(player) {
                     action: () => {
                         weapon.upgrade(); // 或者 weapon.levelUp()，确保与武器类中的方法一致
                         if(player) player.recalculateStats(); // 确保玩家对象存在
-                        checkEvolution(player, weapon); // 升级后检查进化
                     }
                 }];
             }
@@ -1379,7 +1378,6 @@ function getAvailableUpgrades(player) {
                     action: () => {
                         passive.upgrade(); // 或者 passive.levelUp()
                         if(player) player.recalculateStats();
-                        // checkEvolutionForPassive(player, passive); // 如果被动有进化
                     }
                 }];
             }
@@ -1550,7 +1548,6 @@ function getAvailableUpgrades(player) {
             action: () => {
                         weaponToUpgrade.upgrade();
                         if(player) player.recalculateStats();
-                        checkEvolution(player, weaponToUpgrade);
                     }
                 }];
             }
@@ -1893,55 +1890,7 @@ function presentLevelUpOptions() {
  * @param {Player} player - 玩家对象
  * @param {UpgradeableItem} item - 可升级物品
  */
-function checkEvolution(player, item) {
-    console.log("检查进化可能性...");
-    let evolutionOccurred = false;
-
-    // 检查武器进化
-    for (let i = 0; i < player.weapons.length; i++) {
-        const weapon = player.weapons[i];
-
-        // 跳过已进化或没有进化信息的武器
-        if (!weapon || weapon.isEvolved || !weapon.constructor || !weapon.constructor.Evolution) {
-            continue;
-        }
-
-        const evolutionInfo = weapon.constructor.Evolution;
-        const requiredPassiveName = evolutionInfo.requires;
-        const evolvedClassName = evolutionInfo.evolvesTo; // e.g., "ThunderSword", "DeathGrip"
-
-        // 检查是否满足进化条件 (武器满级，且拥有特定被动物品)
-        const hasRequiredPassive = player.passiveItems.some(passive => passive.name === requiredPassiveName);
-
-        if (weapon.isMaxLevel() && hasRequiredPassive) {
-            console.log(`武器 ${weapon.name} 满足进化条件 (需求: ${requiredPassiveName}), 尝试进化为 ${evolvedClassName}`);
-
-            // 尝试从全局作用域获取进化后的类定义
-            const EvolvedClass = window[evolvedClassName];
-
-            if (typeof EvolvedClass === 'function') {
-                try {
-                    const evolvedWeapon = new EvolvedClass(weapon); // 传递旧武器实例，供进化武器构造函数使用
-                    evolvedWeapon.owner = player; // 确保设置拥有者
-                    player.weapons[i] = evolvedWeapon; // 替换原武器
-                evolutionOccurred = true;
-                    console.log(`${weapon.name} 成功进化为 ${evolvedWeapon.name}!`);
-                createEvolutionEffect(player.x, player.y);
-                    // 一次只进化一个武器，避免潜在的数组修改问题
-                break;
-                } catch (e) {
-                    console.error(`进化 ${weapon.name} 到 ${evolvedClassName} 时出错: ${e}. 确保 ${evolvedClassName} 类已定义并正确加载。`, e);
-                }
-            } else {
-                console.warn(`进化失败: 找不到类 ${evolvedClassName}。确保它已在加载的脚本中定义 (例如 advancedWeapons.js)。`);
-            }
-        }
-    }
-
-    if (evolutionOccurred) {
-        updateUI(); // 更新UI以显示进化后的武器
-    }
-}
+// 进化系统已移除 - checkEvolution函数不再需要
 
 /**
  * 创建通用爆炸特效
@@ -1998,18 +1947,7 @@ function createExplosionEffect(x, y, maxRadius, color, lifetime = 0.5) {
  * @param {number} x - X坐标
  * @param {number} y - Y坐标
  */
-function createEvolutionEffect(x, y) {
-    // 创建爆炸特效
-    createExplosionEffect(x, y, 200, 'rgba(255, 215, 0, 0.6)');
-    // 创建第二层爆炸
-    setTimeout(() => {
-        createExplosionEffect(x, y, 150, 'rgba(255, 255, 255, 0.7)');
-    }, 200);
-    // 创建第三层爆炸
-    setTimeout(() => {
-        createExplosionEffect(x, y, 100, 'rgba(255, 215, 0, 0.8)');
-    }, 400);
-}
+// 进化系统已移除 - createEvolutionEffect函数不再需要
 
 /**
  * 随机打乱数组
@@ -2057,18 +1995,24 @@ window.addEventListener('mousemove', () => {
 
 // 窗口大小调整
 window.addEventListener('resize', () => {
-    GAME_WIDTH = Math.min(window.innerWidth * 0.95, 1280);
-    GAME_HEIGHT = Math.min(window.innerHeight * 0.95, 720);
-    canvas.width = GAME_WIDTH;
-    canvas.height = GAME_HEIGHT;
-    // 更新离屏画布尺寸
-    offscreenCanvas.width = GAME_WIDTH;
-    offscreenCanvas.height = GAME_HEIGHT;
-    // 更新玩家位置（确保在屏幕内）
-    if (player) {
-        player.x = Math.max(player.size / 2, Math.min(GAME_WIDTH - player.size / 2, player.x));
-        player.y = Math.max(player.size / 2, Math.min(GAME_HEIGHT - player.size / 2, player.y));
+    GAME_WIDTH = window.innerWidth;
+    GAME_HEIGHT = window.innerHeight;
+    
+    // 更新主画布尺寸 - 只有在canvas存在时才更新
+    if (canvas) {
+        canvas.width = GAME_WIDTH;
+        canvas.height = GAME_HEIGHT;
     }
+    
+    // 更新离屏画布尺寸 - 只有在offscreenCanvas存在时才更新
+    if (offscreenCanvas) {
+        offscreenCanvas.width = GAME_WIDTH;
+        offscreenCanvas.height = GAME_HEIGHT;
+    }
+    
+    // 不需要调整玩家位置，因为游戏使用无限大世界
+    // 相机会自动跟随玩家，玩家在世界中的绝对位置应该保持不变
+    
     // 如果游戏正在运行，重新绘制
     if (player && !isGameOver && !isPaused && !isLevelUp) {
         draw();
@@ -3007,3 +2951,66 @@ function updateBossHealthBar() {
 // if (currentBossForHealthBar && !bossHealthUIContainer.classList.contains('hidden')) {
 //     updateBossHealthBar();
 // }
+
+/**
+ * 计算并显示伤害数字
+ * @param {GameObject} target - 目标对象
+ * @param {number} baseDamage - 基础伤害
+ * @param {GameObject} attacker - 攻击者
+ * @param {string} damageType - 伤害类型 ('normal', 'heal', 'xp')
+ * @returns {Object} 包含实际伤害和是否暴击的信息
+ */
+function calculateAndShowDamage(target, baseDamage, attacker = null, damageType = 'normal') {
+    let finalDamage = baseDamage;
+    let isCrit = false;
+    let color = 'white';
+    let displayText = '';
+    
+    if (damageType === 'normal') {
+        // 暴击检测 - 只有玩家攻击时才能暴击
+        if (attacker && attacker === player) {
+            const critChance = attacker.getStat('critChance') || 0.05; // 默认5%暴击率
+            const critMultiplier = attacker.getStat('critMultiplier') || 1.5; // 默认1.5倍暴击伤害
+            
+            if (Math.random() < critChance) {
+                isCrit = true;
+                finalDamage *= critMultiplier;
+            }
+        }
+        
+        // 应用护甲减伤
+        if (target && typeof target.getStat === 'function') {
+            const armor = target.getStat('armor') || 0;
+            finalDamage = Math.max(1, finalDamage - armor);
+        }
+        
+        displayText = Math.floor(finalDamage).toString();
+        color = isCrit ? '#FFD700' : 'white'; // 暴击金色，普通白色
+        
+    } else if (damageType === 'heal') {
+        displayText = `+${Math.floor(finalDamage)}`;
+        color = '#50C850'; // 绿色
+        
+    } else if (damageType === 'xp') {
+        displayText = `+${Math.floor(finalDamage)}`;
+        color = '#4FC3F7'; // 蓝色
+    }
+    
+    // 显示伤害数字 - 从目标头顶弹出
+    const offsetY = target.size ? target.size / 2 : 20;
+    spawnDamageNumber(
+        target.x, 
+        target.y - offsetY, 
+        displayText, 
+        color, 
+        GAME_FONT_SIZE * (isCrit ? 1.0 : 0.8), 
+        isCrit ? 1.0 : 0.8,
+        isCrit
+    );
+    
+    return {
+        damage: finalDamage,
+        isCrit: isCrit,
+        displayText: displayText
+    };
+}

@@ -7,9 +7,9 @@
 const DEBUG_SHOW_PLAYER_HITBOX = false;
 const DEBUG_SHOW_PLAYER_HEALTH = false;
 
-// 游戏尺寸
-let GAME_WIDTH = 1920 // 增加游戏宽度
-let GAME_HEIGHT = 1080// 增加游戏高度
+// 游戏尺寸 - 默认铺满整个浏览器窗口
+let GAME_WIDTH = window.innerWidth
+let GAME_HEIGHT = window.innerHeight
 
 // 游戏字体大小
 const GAME_FONT_SIZE = 20;
@@ -65,7 +65,12 @@ const PLAYER_DEFAULT_STATS = {
     cooldownMultiplier: 1.0,
     projectileCountBonus: 0,
     maxWeapons: 20,
-    maxPassives: 20
+    maxPassives: 20,
+    // 添加遗漏的属性
+    critChance: 0.05,        // 基础暴击率 5%
+    critMultiplier: 1.5,     // 基础暴击伤害倍数
+    luck: 1.0,               // 基础幸运值
+    magnetBonus: 0           // 磁铁加成
 };
 
 // 基础敌人属性
@@ -91,6 +96,15 @@ const SPAWN_PADDING = 100;  // (原为 250)
 
 // 敌人攻击屏幕范围限制
 const ENEMY_ATTACK_RANGE = 800; // (原为 GAME_WIDTH * 1.2)
+
+// 相机设置
+const CAMERA_LERP = 0.1; // 相机平滑移动系数
+
+// 世界设置
+const WORLD_SIZE = 10000; // 世界大小
+
+// 对象池设置
+const MAX_DAMAGE_NUMBERS = 30; // 伤害数字对象池最大数量
 
 /**
  * 生成Boss

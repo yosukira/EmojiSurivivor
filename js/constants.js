@@ -424,52 +424,6 @@ const BOSS_TYPES = [
     }
 ];
 
-// 武器进化组合
-const WEAPON_EVOLUTIONS = {
-    // 现有组合
-    "短刀 + 菠菜": "瘟疫刃",
-    "刀波 + 护腕": "光刃",
-    "岚刀 + 空心胸甲": "闪灵之刃",
-    "握握手 + 龙息香料": "狂怒之手",
-    "大蒜 + 寒冰之心": "霜冻环绕",
-    "鞭子 + 雷光护符": "雷霆鞭",
-    
-    // 新武器组合
-    "泡泡魔棒 + 古树精华": "生命之泉",
-    "混沌骰子 + 神秘卡片": "命运之轮",
-    "磁力枪 + 磁力球": "引力崩溃",
-    "声波号角 + 结界符文": "守护之音",
-    "毒瓶 + 毒素宝珠": "瘟疫风暴",
-    "冰晶杖 + 寒冰之心": "永冬之触",
-    "藤蔓种子 + 古树精华": "世界树之根",
-    "光棱塔 + 护腕": "棱镜核心",
-    "火山杖 + 龙息香料": "诸神黄昏",
-    "黑洞球 + 磁力球": "事件视界"
-};
-
-// 进化武器额外属性
-const EVOLVED_WEAPON_BONUSES = {
-    // 现有进化武器
-    "瘟疫刃": { piercing: 3, burnChance: 0.3, poisonChance: 0.5 },
-    "光刃": { areaMultiplier: 1.5, projectileSpeedMultiplier: 1.3 },
-    "闪灵之刃": { count: 5, cooldownMultiplier: 0.7 },
-    "狂怒之手": { stunChance: 0.2, burnDamage: 8, burnDuration: 3 },
-    "霜冻环绕": { knockbackMultiplier: 2, freezeChance: 0.3 },
-    "雷霆鞭": { chainChance: 0.4, lightningDamage: 12 },
-    
-    // 新进化武器
-    "生命之泉": { healAmount: 1, regenDuration: 5, bubbleLifetime: 8 },
-    "命运之轮": { extraEffectChance: 0.5, effectDuration: 2, extraDamage: 10 },
-    "引力崩溃": { attractRadius: 200, attractStrength: 3, explosionDamage: 20 },
-    "守护之音": { shieldDuration: 3, knockback: 50, damageReduction: 0.3 },
-    "瘟疫风暴": { spreadRadius: 100, poisonDamage: 8, poisonDuration: 4 },
-    "永冬之触": { freezeDuration: 3, slowStrength: 0.7, areaDamage: 15 },
-    "世界树之根": { vineCount: 8, vineDuration: 10, healingRate: 0.5 },
-    "棱镜核心": { beamCount: 8, beamDamage: 20, rotationSpeed: 1.5 },
-    "诸神黄昏": { eruptionCount: 5, burnDamage: 15, explosionRadius: 150 },
-    "事件视界": { blackHoleDuration: 8, blackHoleRadius: 180, collapseDamage: 50 }
-};
-
 function createExplosion(radius, damage) {
     // 直接使用传入的damage参数，不应用任何修正
     const explosionDamage = damage; // 直接使用传入的damage(15)

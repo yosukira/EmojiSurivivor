@@ -359,7 +359,7 @@ window.DebugPanel = {
     },
 
     getKnownItemClasses: function() {
-        const items = { weapons: {}, passives: {}, evolutions: {} };
+        const items = { weapons: {}, passives: {} };
         
         // 基础武器
         if (typeof DaggerWeapon !== 'undefined') items.weapons['Dagger'] = DaggerWeapon;
@@ -409,13 +409,6 @@ window.DebugPanel = {
         if (typeof PoisonOrb !== 'undefined') items.passives['PoisonOrb'] = PoisonOrb;
         if (typeof MagnetSphere !== 'undefined') items.passives['MagnetSphere'] = MagnetSphere;
         if (typeof AncientTreeSap !== 'undefined') items.passives['AncientTreeSap'] = AncientTreeSap;
-        
-        // 添加进化组合信息
-        if (typeof WEAPON_EVOLUTIONS === 'object') {
-            for (const [combo, result] of Object.entries(WEAPON_EVOLUTIONS)) {
-                items.evolutions[combo] = result;
-            }
-        }
         
         return items;
     },
@@ -513,9 +506,6 @@ window.DebugPanel = {
                                 }
                                 if (upgraded) {
                                     if (player.recalculateStats) player.recalculateStats();
-                                    if (type === 'weapon' && typeof checkEvolution === 'function') {
-                                        checkEvolution(player, existingItem);
-                                    }
                                 }
                             } else {
                             }
@@ -545,26 +535,6 @@ window.DebugPanel = {
 
         // 创建被动道具按钮
         createOrUpdateItemButtons('passive', knownItems.passives, "被动道具 (Passive Items)");
-
-        // 创建进化组合信息
-        if (Object.keys(knownItems.evolutions).length > 0) {
-            const { section, content } = this.createCollapsibleSection("进化组合 (Evolutions)", true);
-            itemsDiv.appendChild(section);
-
-            const evoList = document.createElement('ul');
-            evoList.style.listStyle = 'none';
-            evoList.style.padding = '0';
-            evoList.style.margin = '0';
-
-            for (const [combo, result] of Object.entries(knownItems.evolutions)) {
-                const li = document.createElement('li');
-                li.style.padding = '5px';
-                li.style.borderBottom = '1px dotted #444';
-                li.innerHTML = `<span style="color:#aaf">${combo}</span> → <span style="color:#faa">${result}</span>`;
-                evoList.appendChild(li);
-            }
-            content.appendChild(evoList);
-        }
     },
 
     addGlobalSettingsControls: function() {
@@ -1019,10 +989,6 @@ if (typeof VineSeedWeapon === 'undefined') {
         static Name = "藤蔓种子";
         static Emoji = "🌱";
         static MaxLevel = 10;
-        static Evolution = {
-            requires: "AncientTreeSap",
-            evolvesTo: "LifeForest"
-        };
 
         constructor() {
             super(VineSeedWeapon.Name, VineSeedWeapon.Emoji, 2.0, VineSeedWeapon.MaxLevel);
@@ -1125,10 +1091,6 @@ if (typeof LaserPrismWeapon === 'undefined') {
         static Name = "光棱塔";
         static Emoji = "🔆";
         static MaxLevel = 10;
-        static Evolution = {
-            requires: "Bracer",
-            evolvesTo: "LaserCore"
-        };
 
         constructor() {
             super(LaserPrismWeapon.Name, LaserPrismWeapon.Emoji, 1.5, LaserPrismWeapon.MaxLevel);
@@ -1233,10 +1195,6 @@ if (typeof PoisonVialWeapon === 'undefined') {
         static Name = "毒瓶";
         static Emoji = "🧪";
         static MaxLevel = 10;
-        static Evolution = {
-            requires: "PoisonOrb",
-            evolvesTo: "PlagueVial"
-        };
 
         constructor() {
             super(PoisonVialWeapon.Name, PoisonVialWeapon.Emoji, 1.8, PoisonVialWeapon.MaxLevel);
@@ -1377,10 +1335,6 @@ if (typeof FrostStaffWeapon === 'undefined') {
         static Name = "冰晶杖";
         static Emoji = "❄️";
         static MaxLevel = 10;
-        static Evolution = {
-            requires: "FrostHeart",
-            evolvesTo: "GlacierStaff"
-        };
 
         constructor() {
             super(FrostStaffWeapon.Name, FrostStaffWeapon.Emoji, 1.5, FrostStaffWeapon.MaxLevel);

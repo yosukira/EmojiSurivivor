@@ -54,6 +54,8 @@ class ExperienceGem extends GameObject {
         // 如果碰到玩家，给予经验并销毁
         if (this.checkCollision(target)) {
             target.gainXP(this.value);
+            // 显示经验获得数字
+            calculateAndShowDamage(target, this.value, null, 'xp');
             this.isGarbage = true;
             this.isActive = false;
         }
@@ -125,10 +127,8 @@ class Pickup extends GameObject {
     applyEffect(target) {
         switch (this.type) {
             case 'heal':
-                // 恢复生命值
+                // 恢复生命值 - 新的heal方法会自动显示治疗数字
                 target.heal(this.value);
-                // 创建治疗特效
-                spawnDamageNumber(target.x, target.y - target.size / 2, `+${this.value}`, 20, 'green', 0.8);
                 break;
                 
             case 'magnetize':

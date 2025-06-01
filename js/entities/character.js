@@ -267,17 +267,18 @@ class Character extends GameObject {
 
         // 确保伤害数值有效
         const safeAmount = isNaN(amount) ? 1 : Math.max(0, amount);
-        const armor = this.getStat('armor') || 0;
         
-        // 计算实际伤害
-        const actualDamage = Math.max(1, safeAmount - armor);
+        // 使用新的伤害计算和显示系统
+        const damageResult = calculateAndShowDamage(this, safeAmount, source, 'normal');
+        const actualDamage = damageResult.damage;
         
         // 减少生命值
         this.health -= actualDamage;
 
         // 如果是Boss，添加Boss受伤日志
         if (this instanceof BossEnemy) {
-            console.log(`[BOSS_TAKE_DAMAGE] Boss ${this.name || (this.type && this.type.name) || 'UnknownBoss'} took ${actualDamage} damage. New HP: ${this.health}/${this.maxHealth}`);
+            const critText = damageResult.isCrit ? ' (CRIT!)' : '';
+            console.log(`[BOSS_TAKE_DAMAGE] Boss ${this.name || (this.type && this.type.name) || 'UnknownBoss'} took ${actualDamage} damage${critText}. New HP: ${this.health}/${this.maxHealth}`);
         }
 
         // 确保生命值不是NaN
@@ -285,9 +286,6 @@ class Character extends GameObject {
             console.error('Character health became NaN after damage calculation!');
             this.health = 0; // 设置为0，触发死亡
         }
-
-        // 创建伤害数字 - 修改为合适的大小
-        spawnDamageNumber(this.x, this.y - this.size / 2, actualDamage.toString(), 'rgb(255, 80, 80)', GAME_FONT_SIZE * 0.8);
 
         // 设置无敌时间
         this.invincibleTime = 0.1;
@@ -308,8 +306,8 @@ class Character extends GameObject {
         // 增加生命值
         this.health = Math.min(this.health + amount, this.getStat('health'));
 
-        // 创建治疗数字 - 修改为合适的大小
-        spawnDamageNumber(this.x, this.y - this.size / 2, `+${Math.ceil(amount)}`, 'rgb(50, 200, 50)', GAME_FONT_SIZE * 0.8);
+        // 使用新的伤害显示系统显示治疗
+        calculateAndShowDamage(this, amount, null, 'heal');
     }
 
     /**
