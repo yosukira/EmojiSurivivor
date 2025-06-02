@@ -85,6 +85,20 @@ class BubbleProjectile extends Projectile {
                 return;
             }
             
+            // 检查强制释放时间，防止永久困住
+            if (this.trapStartTime && Date.now() - this.trapStartTime > this.maxTrapTime) {
+                // 超过最大困住时间，强制释放
+                this.burst();
+                return;
+            }
+            
+            // 检查困住状态是否被其他因素清除
+            if (!this.trapped.statusEffects || !this.trapped.statusEffects.bubbleTrap || this.trapped.statusEffects.bubbleTrap.bubble !== this) {
+                // 困住状态已被清除或被其他泡泡覆盖，当前泡泡爆炸
+                this.burst();
+                return;
+            }
+            
             // 更新位置
             this.x = this.trapped.x;
             this.y = this.trapped.y;
@@ -101,8 +115,7 @@ class BubbleProjectile extends Projectile {
             // 边界检查：如果泡泡位置离开了有效区域，强制销毁
             const worldSize = Math.max(GAME_WIDTH, GAME_HEIGHT);
             if (Math.abs(this.x) > worldSize * 1.5 || Math.abs(this.y) > worldSize * 1.5) {
-                this.isGarbage = true;
-                this.isActive = false;
+                this.burst(); // 改为爆炸而不是直接标记为垃圾
                 return;
             }
         } else {
@@ -203,6 +216,13 @@ class BubbleProjectile extends Projectile {
      * @param {Enemy} enemy - 敌人
      */
     trapEnemy(enemy) {
+        // 检查敌人是否已经被其他泡泡困住
+        if (enemy.statusEffects && enemy.statusEffects.bubbleTrap) {
+            // 敌人已经被困住，直接爆炸
+            this.burst();
+            return;
+        }
+        
         // Boss免疫泡泡控制，但依然显示动画和造成伤害
         if (enemy.isBoss || (enemy.type && enemy.type.isBoss)) {
             this.hitTargets.add(enemy); // 添加到已命中列表，防止重复命中
@@ -221,20 +241,23 @@ class BubbleProjectile extends Projectile {
         // 添加到已命中列表
         this.hitTargets.add(enemy);
         
-        // 添加减速效果
+        // 确保敌人有状态效果对象
         if (!enemy.statusEffects) {
             enemy.statusEffects = {};
         }
         
+        // 保存敌人原始速度（如果还没有保存的话）
+        const originalSpeed = enemy.statusEffects.bubbleTrap ? enemy.statusEffects.bubbleTrap.originalSpeed : enemy.speed;
+        
         // 添加特殊的困住效果，增加对敌人死亡状态的检测
         enemy.statusEffects.bubbleTrap = {
             duration: this.trapDuration,
-            originalSpeed: enemy.speed,
+            originalSpeed: originalSpeed,
             source: this.owner,
             bubble: this // 保存对泡泡实例的引用
         };
         
-        // 几乎停止移动（改为完全停止）
+        // 完全停止移动
         enemy.speed = 0;
         
         // 保存敌人当前的updateMovement方法，以便后续恢复
@@ -242,10 +265,22 @@ class BubbleProjectile extends Projectile {
             enemy._originalUpdateMovement = enemy.updateMovement;
             // 覆盖敌人的updateMovement方法，防止它移动
             enemy.updateMovement = function(dt) {
-                // 被困住时不移动
+                // 被困住时不移动，但需要检查困住状态是否还存在
+                if (!this.statusEffects || !this.statusEffects.bubbleTrap) {
+                    // 困住状态已被清除，恢复正常移动
+                    if (this._originalUpdateMovement) {
+                        this.updateMovement = this._originalUpdateMovement;
+                        delete this._originalUpdateMovement;
+                        this.updateMovement(dt); // 调用恢复后的移动方法
+                    }
+                }
                 return;
             };
         }
+        
+        // 设置困住时间限制，防止永久困住
+        this.trapStartTime = Date.now();
+        this.maxTrapTime = Math.max(this.trapDuration * 1000, 5000); // 最少5秒，防止永久困住
     }
 
     /**
@@ -259,27 +294,7 @@ class BubbleProjectile extends Projectile {
         this.isBursting = true;
         
         // 释放被困住的敌人
-        if (this.trapped && !this.trapped.isGarbage && this.trapped.isActive) {
-            // 移除困住效果
-            if (this.trapped.statusEffects && this.trapped.statusEffects.bubbleTrap) {
-                // 恢复原有速度
-                this.trapped.speed = this.trapped.statusEffects.bubbleTrap.originalSpeed;
-                // 删除困住效果
-                delete this.trapped.statusEffects.bubbleTrap;
-                
-                // 恢复原始的updateMovement方法
-                if (this.trapped._originalUpdateMovement) {
-                    this.trapped.updateMovement = this.trapped._originalUpdateMovement;
-                    delete this.trapped._originalUpdateMovement;
-                }
-            }
-            
-            // 再次造成伤害
-            this.trapped.takeDamage(this.damage, this.owner);
-        } else if (this.trapped) {
-            // 敌人已死亡或消失，但仍需清理状态效果（防止引用错误）
-            this.trapped = null;
-        }
+        this.releaseTrappedEnemy();
         
         // 创建爆炸效果
         this.createBurstEffect();
@@ -297,6 +312,45 @@ class BubbleProjectile extends Projectile {
             this.isGarbage = true;
             this.isActive = false;
         }, this.burstDelay * 1000);
+    }
+
+    /**
+     * 释放被困住的敌人
+     */
+    releaseTrappedEnemy() {
+        if (this.trapped) {
+            // 无论敌人是否还活着，都尝试清理状态
+            if (this.trapped.isActive && !this.trapped.isGarbage && this.trapped.health > 0) {
+                // 敌人还活着，正常释放
+                if (this.trapped.statusEffects && this.trapped.statusEffects.bubbleTrap) {
+                    // 恢复原有速度
+                    this.trapped.speed = this.trapped.statusEffects.bubbleTrap.originalSpeed || this.trapped.type.speed || ENEMY_BASE_STATS.speed;
+                    // 删除困住效果
+                    delete this.trapped.statusEffects.bubbleTrap;
+                }
+                
+                // 恢复原始的updateMovement方法
+                if (this.trapped._originalUpdateMovement) {
+                    this.trapped.updateMovement = this.trapped._originalUpdateMovement;
+                    delete this.trapped._originalUpdateMovement;
+                }
+                
+                // 再次造成伤害
+                this.trapped.takeDamage(this.damage, this.owner);
+            } else {
+                // 敌人已死亡或消失，仍需清理可能残留的状态效果
+                if (this.trapped.statusEffects && this.trapped.statusEffects.bubbleTrap) {
+                    delete this.trapped.statusEffects.bubbleTrap;
+                }
+                if (this.trapped._originalUpdateMovement) {
+                    this.trapped.updateMovement = this.trapped._originalUpdateMovement;
+                    delete this.trapped._originalUpdateMovement;
+                }
+            }
+            
+            // 清除引用
+            this.trapped = null;
+        }
     }
 
     /**
@@ -911,7 +965,8 @@ class ChaosDiceProjectile extends Projectile {
                         duration: effectDuration,
                         tickInterval: effectDuration / 4,
                         tickTimer: 0,
-                        source: this.owner
+                        source: this.owner,
+                        icon: '🔥' // 添加燃烧图标
                     };
                 }
                 break;
@@ -3570,7 +3625,8 @@ class VolcanoEruption {
                 duration: this.burnDuration,
                 tickInterval: this.burnDuration / 4,
                 tickTimer: this.burnDuration / 4,
-                source: this.owner
+                source: this.owner,
+                icon: '🔥' // 添加燃烧图标
             };
         }
     }

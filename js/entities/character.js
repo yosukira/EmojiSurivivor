@@ -157,26 +157,20 @@ class Character extends GameObject {
      */
     updateStatusEffects(dt) {
         // console.log(`Character updateStatusEffects dt: ${dt.toFixed(4)}, Entity: ${this.constructor.name}`); // 注释掉这行日志
-
-        // 更新眩晕免疫计时器
+        
+        // 更新眩晕免疫时间
         if (this.stunImmunityTimer > 0) {
             this.stunImmunityTimer -= dt;
-            if (this.stunImmunityTimer < 0) {
-                this.stunImmunityTimer = 0;
-            }
-            if (!this.statusEffects.stun && this.stunImmunityTimer > 0) {
-                console.log(`Stun immunity active for ${this.constructor.name}. Remaining: ${this.stunImmunityTimer.toFixed(2)}`);
-            }
+            if (this.stunImmunityTimer < 0) this.stunImmunityTimer = 0;
         }
 
         // 更新眩晕效果
         if (this.statusEffects.stun) {
-            console.log(`Updating stun for ${this.constructor.name}. Remaining duration: ${this.statusEffects.stun.duration.toFixed(2)}, Immunity timer: ${this.stunImmunityTimer.toFixed(2)}`);
             this.statusEffects.stun.duration -= dt;
             if (this.statusEffects.stun.duration <= 0) {
-                console.log(`Stun duration reached zero for ${this.constructor.name}. Clearing stun. Starting immunity.`);
-                this.statusEffects.stun = null;
-                this.stunImmunityTimer = 1.0;
+                delete this.statusEffects.stun;
+                // 眩晕结束后给予短暂免疫时间，防止连续眩晕
+                this.stunImmunityTimer = 0.1;
             }
         }
 
@@ -225,14 +219,34 @@ class Character extends GameObject {
             this.statusEffects.burn.tickTimer -= dt;
 
             if (this.statusEffects.burn.tickTimer <= 0) {
-                // 造成伤害
-                this.takeDamage(this.statusEffects.burn.damage, this.statusEffects.burn.source);
+                // 燃烧伤害直接扣血，不受暴击和护甲影响
+                const burnDamage = this.statusEffects.burn.damage;
+                this.health -= burnDamage;
+                
+                // 显示燃烧伤害数字
+                if (typeof spawnDamageNumber !== 'undefined') {
+                    const offsetY = this.size ? this.size / 2 : 20;
+                    spawnDamageNumber(
+                        this.x, 
+                        this.y - offsetY, 
+                        Math.floor(burnDamage).toString(), 
+                        '#FF4444', // 燃烧伤害用红色
+                        GAME_FONT_SIZE * 0.7, 
+                        0.7,
+                        false
+                    );
+                }
+                
+                // 检查是否死亡
+                if (this.health <= 0) {
+                    this.onDeath(this.statusEffects.burn.source);
+                }
 
                 // 重置计时器
                 this.statusEffects.burn.tickTimer = this.statusEffects.burn.tickInterval;
             }
             if (this.statusEffects.burn.duration <= 0) {
-                this.statusEffects.burn = null;
+                delete this.statusEffects.burn;
             }
         }
 
@@ -241,16 +255,42 @@ class Character extends GameObject {
             this.statusEffects.poison.duration -= dt;
             this.statusEffects.poison.tickTimer -= dt;
 
+            // 每隔一段时间造成中毒伤害
             if (this.statusEffects.poison.tickTimer <= 0) {
-                // 造成伤害
+                // 造成中毒伤害
                 this.takeDamage(this.statusEffects.poison.damage, this.statusEffects.poison.source);
-
                 // 重置计时器
                 this.statusEffects.poison.tickTimer = this.statusEffects.poison.tickInterval;
             }
 
             if (this.statusEffects.poison.duration <= 0) {
-                this.statusEffects.poison = null;
+                delete this.statusEffects.poison;
+            }
+        }
+
+        // 更新泡泡困住效果
+        if (this.statusEffects.bubbleTrap) {
+            this.statusEffects.bubbleTrap.duration -= dt;
+            
+            // 如果困住时间结束或泡泡对象不存在，清除困住状态
+            if (this.statusEffects.bubbleTrap.duration <= 0 || 
+                !this.statusEffects.bubbleTrap.bubble || 
+                this.statusEffects.bubbleTrap.bubble.isGarbage || 
+                !this.statusEffects.bubbleTrap.bubble.isActive) {
+                
+                // 恢复原有速度
+                if (this.statusEffects.bubbleTrap.originalSpeed !== undefined) {
+                    this.speed = this.statusEffects.bubbleTrap.originalSpeed;
+                }
+                
+                // 恢复原始的updateMovement方法
+                if (this._originalUpdateMovement) {
+                    this.updateMovement = this._originalUpdateMovement;
+                    delete this._originalUpdateMovement;
+                }
+                
+                // 删除困住效果
+                delete this.statusEffects.bubbleTrap;
             }
         }
     }
@@ -330,6 +370,30 @@ class Character extends GameObject {
     }
 
     /**
+     * 检查是否被眩晕
+     * @returns {boolean} 是否被眩晕
+     */
+    isStunned() {
+        return this.statusEffects && this.statusEffects.stun && this.statusEffects.stun.duration > 0;
+    }
+
+    /**
+     * 检查是否被冻结
+     * @returns {boolean} 是否被冻结
+     */
+    isFrozen() {
+        return this.statusEffects && this.statusEffects.freeze && this.statusEffects.freeze.duration > 0;
+    }
+
+    /**
+     * 检查是否被泡泡困住
+     * @returns {boolean} 是否被泡泡困住
+     */
+    isBubbleTrapped() {
+        return this.statusEffects && this.statusEffects.bubbleTrap && this.statusEffects.bubbleTrap.duration > 0;
+    }
+
+    /**
      * 获取当前速度
      * @returns {number} 当前速度
      */
@@ -341,18 +405,10 @@ class Character extends GameObject {
         } else if (this.statusEffects.slow) {
             speed *= this.statusEffects.slow.factor;
         }
-        if (this.isStunned()) {
+        if (this.isStunned() || this.isFrozen() || this.isBubbleTrapped()) {
             speed = 0;
         }
         return speed;
-    }
-
-    /**
-     * 检查是否被眩晕
-     * @returns {boolean} 是否被眩晕
-     */
-    isStunned() {
-        return this.statusEffects.stun !== null;
     }
 
     /**
@@ -377,62 +433,155 @@ class Character extends GameObject {
     /**
      * 绘制状态效果图标
      * @param {CanvasRenderingContext2D} ctx - 画布上下文
-     * @param {{x: number, y: number}} screenPos - 屏幕坐标
+     * @param {{x: number, y: number}} screenPos - 角色在屏幕上的位置
      */
     drawStatusEffects(ctx, screenPos) {
-        if (!this.isActive || this.isGarbage) return;
+        if (!this.statusEffects) return;
 
-        let iconYOffset = -this.size * 0.8; // 图标基准Y偏移，稍微调高一点给旋转星星留空间
-        const iconSpacing = GAME_FONT_SIZE * 0.5; 
+        const iconSize = 16;
+        const iconSpacing = 18;
+        let iconIndex = 0;
 
+        // 燃烧效果 - 添加特殊的火焰动画
+        if (this.statusEffects.burn) {
+            const iconX = screenPos.x - 30 + iconIndex * iconSpacing;
+            const iconY = screenPos.y - this.size / 2 - 25;
+            
+            // 绘制火焰特效
+            this.drawBurnEffect(ctx, screenPos);
+            
+            // 绘制燃烧图标
+            ctx.font = `${iconSize}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = '#FF4500';
+            ctx.fillText('🔥', iconX, iconY);
+            iconIndex++;
+        }
+
+        // 眩晕效果
+        if (this.statusEffects.stun) {
+            const iconX = screenPos.x - 30 + iconIndex * iconSpacing;
+            const iconY = screenPos.y - this.size / 2 - 25;
+            
+            ctx.font = `${iconSize}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = '#FFFF00';
+            ctx.fillText('💫', iconX, iconY);
+            iconIndex++;
+        }
+
+        // 减速效果
+        if (this.statusEffects.slow) {
+            const iconX = screenPos.x - 30 + iconIndex * iconSpacing;
+            const iconY = screenPos.y - this.size / 2 - 25;
+            
+            ctx.font = `${iconSize}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = '#87CEEB';
+            ctx.fillText('🐌', iconX, iconY);
+            iconIndex++;
+        }
+
+        // 冻结效果
+        if (this.statusEffects.freeze) {
+            const iconX = screenPos.x - 30 + iconIndex * iconSpacing;
+            const iconY = screenPos.y - this.size / 2 - 25;
+            
+            ctx.font = `${iconSize}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = '#ADD8E6';
+            ctx.fillText('❄️', iconX, iconY);
+            iconIndex++;
+        }
+
+        // 中毒效果
+        if (this.statusEffects.poison) {
+            const iconX = screenPos.x - 30 + iconIndex * iconSpacing;
+            const iconY = screenPos.y - this.size / 2 - 25;
+            
+            ctx.font = `${iconSize}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = '#32CD32';
+            ctx.fillText('☠️', iconX, iconY);
+            iconIndex++;
+        }
+
+        // 泡泡困住效果
+        if (this.statusEffects.bubbleTrap) {
+            const iconX = screenPos.x - 30 + iconIndex * iconSpacing;
+            const iconY = screenPos.y - this.size / 2 - 25;
+            
+            ctx.font = `${iconSize}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = '#87CEEB';
+            ctx.fillText('🫧', iconX, iconY);
+            iconIndex++;
+        }
+    }
+
+    /**
+     * 绘制燃烧特效
+     * @param {CanvasRenderingContext2D} ctx - 画布上下文
+     * @param {{x: number, y: number}} screenPos - 角色在屏幕上的位置
+     */
+    drawBurnEffect(ctx, screenPos) {
+        if (!this.statusEffects || !this.statusEffects.burn) return;
+        
+        // 初始化燃烧特效计时器
+        if (!this.burnEffectTimer) {
+            this.burnEffectTimer = 0;
+        }
+        
+        // 更新燃烧特效计时器（使用全局deltaTime）
+        this.burnEffectTimer += deltaTime || 0.016;
+        
         ctx.save();
-        ctx.font = `${GAME_FONT_SIZE * 0.5}px 'Segoe UI Emoji', Arial`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-
-        // 绘制眩晕图标 (旋转的星星)
-        if (this.statusEffects.stun && this.statusEffects.stun.duration > 0) {
-            const stunRadius = this.size * 0.5; // 星星旋转半径
-            const angularSpeed = 4; // 星星旋转速度 (弧度/秒)
-            const numStars = 3;
-            const starEmoji = '⭐'; // 修改为⭐
-            ctx.fillStyle = 'yellow';
-
-            for (let i = 0; i < numStars; i++) {
-                const angle = (gameTime * angularSpeed + (i * (Math.PI * 2 / numStars))) % (Math.PI * 2);
-                const starX = screenPos.x + Math.cos(angle) * stunRadius;
-                const starY = screenPos.y + iconYOffset + Math.sin(angle) * stunRadius * 0.5; // Y方向椭圆一些
-                ctx.fillText(starEmoji, starX, starY);
-            }
-            iconYOffset -= iconSpacing * 1.5; // 为旋转星星多留一些空间再显示其他图标
+        
+        // 绘制多个火焰粒子
+        const numFlames = 6;
+        for (let i = 0; i < numFlames; i++) {
+            const angle = (this.burnEffectTimer * 2 + i * (Math.PI * 2 / numFlames)) % (Math.PI * 2);
+            const radius = 8 + Math.sin(this.burnEffectTimer * 3 + i) * 3;
+            const flameX = screenPos.x + Math.cos(angle) * radius;
+            const flameY = screenPos.y + Math.sin(angle) * radius - 5;
+            
+            // 火焰颜色渐变
+            const intensity = 0.7 + Math.sin(this.burnEffectTimer * 4 + i) * 0.3;
+            const red = Math.floor(255 * intensity);
+            const green = Math.floor(100 * intensity);
+            const blue = 0;
+            
+            // 绘制火焰粒子
+            ctx.fillStyle = `rgba(${red}, ${green}, ${blue}, ${intensity * 0.8})`;
+            ctx.beginPath();
+            ctx.arc(flameX, flameY, 2 + Math.sin(this.burnEffectTimer * 5 + i) * 1, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // 绘制火焰核心
+            ctx.fillStyle = `rgba(255, 200, 0, ${intensity * 0.6})`;
+            ctx.beginPath();
+            ctx.arc(flameX, flameY, 1, 0, Math.PI * 2);
+            ctx.fill();
         }
-
-        // 绘制减速图标 (🐌)
-        if (this.statusEffects.slow && this.statusEffects.slow.duration > 0 && this.statusEffects.slow.icon) {
-            ctx.fillText(this.statusEffects.slow.icon, screenPos.x, screenPos.y + iconYOffset);
-            iconYOffset -= iconSpacing; 
-        }
-
-        // 绘制燃烧图标 (🔥)
-        if (this.statusEffects.burn && this.statusEffects.burn.duration > 0 && this.statusEffects.burn.icon) {
-            ctx.globalAlpha = 0.8; 
-            ctx.fillStyle = 'orange'; 
-            ctx.fillText(this.statusEffects.burn.icon, screenPos.x, screenPos.y + iconYOffset);
-            ctx.globalAlpha = 1.0;
-            ctx.fillStyle = 'white'; // 恢复默认颜色
-            iconYOffset -= iconSpacing;
-        }
-
-        // 绘制中毒图标 (☠️)
-        if (this.statusEffects.poison && this.statusEffects.poison.duration > 0 && this.statusEffects.poison.icon) {
-            ctx.globalAlpha = 0.8;
-            ctx.fillStyle = 'green'; 
-            ctx.fillText(this.statusEffects.poison.icon, screenPos.x, screenPos.y + iconYOffset);
-            ctx.globalAlpha = 1.0;
-            ctx.fillStyle = 'white'; // 恢复默认颜色
-            iconYOffset -= iconSpacing; // 如果还有其他图标
-        }
-
+        
+        // 绘制燃烧光环
+        const glowRadius = this.size / 2 + 5 + Math.sin(this.burnEffectTimer * 2) * 2;
+        const gradient = ctx.createRadialGradient(screenPos.x, screenPos.y, 0, screenPos.x, screenPos.y, glowRadius);
+        gradient.addColorStop(0, 'rgba(255, 100, 0, 0)');
+        gradient.addColorStop(0.7, 'rgba(255, 50, 0, 0.1)');
+        gradient.addColorStop(1, 'rgba(255, 0, 0, 0)');
+        
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(screenPos.x, screenPos.y, glowRadius, 0, Math.PI * 2);
+        ctx.fill();
+        
         ctx.restore();
     }
 }

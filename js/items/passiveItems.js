@@ -403,8 +403,8 @@ class EmptyBottle extends PassiveItem {
 }
 
 /**
- * 石像鬼雕像
- * 增加项目数量
+ * 石像鬼
+ * 增加投射物数量
  */
 class Gargoyle extends PassiveItem {
     /**
@@ -419,14 +419,12 @@ class Gargoyle extends PassiveItem {
      * @returns {Object} - 增益
      */
     getBonuses() {
-        // 分级加成：2/4/6/8级+1，10级+2
-        let projectileBonus = 0;
-        if (this.level >= 2) projectileBonus += 1;
-        if (this.level >= 4) projectileBonus += 1;
-        if (this.level >= 6) projectileBonus += 1;
-        if (this.level >= 8) projectileBonus += 1;
-        if (this.level === 10) projectileBonus += 2;
-        // 只对Projectile类生效，场地召唤类不受影响（在武器/投射物生成处判断ownerStats.projectileCountBonus）
+        // 每级+1个投射物，10级+2个
+        let projectileBonus = this.level;
+        if (this.level === 10) {
+            projectileBonus += 1; // 10级额外+1个，总共+2个
+        }
+        
         return {
             projectileCountBonus: projectileBonus
         };
@@ -434,48 +432,15 @@ class Gargoyle extends PassiveItem {
 }
 
 /**
- * 魔法水晶
- * 增加经验获取
- */
-class MagicCrystal extends PassiveItem {
-    /**
-     * 构造函数
-     */
-    constructor() {
-        super("魔法水晶", "💎", 10, "增加经验获取");
-    }
-
-    /**
-     * 获取增益
-     * @returns {Object} - 增益
-     */
-    getBonuses() {
-        let expBonus = (this.level - 1) * 0.1; // 每级增加10%经验获取
-        
-        // 10级特殊效果：额外增加20%经验获取和偶尔双倍经验
-        if (this.level === 10) {
-            return {
-                experienceMultiplier: 1 + expBonus + 0.2,
-                doubleExpChance: 0.15 // 15%几率获得双倍经验
-            };
-        }
-        
-        return {
-            experienceMultiplier: 1 + expBonus
-        };
-    }
-}
-
-/**
  * 神秘卡片
- * 增加幸运值
+ * 增加暴击率和暴击伤害
  */
 class MysteryCard extends PassiveItem {
     /**
      * 构造函数
      */
     constructor() {
-        super("神秘卡片", "🃏", 10, "增加幸运值");
+        super("神秘卡片", "🃏", 10, "增加暴击率和暴击伤害");
     }
 
     /**
@@ -483,51 +448,20 @@ class MysteryCard extends PassiveItem {
      * @returns {Object} - 增益
      */
     getBonuses() {
-        let luckBonus = this.level; // 每级增加1点幸运值
+        let critChance = this.level * 0.03; // 每级增加3%暴击率
+        let critMultiplier = this.level * 0.1; // 每级增加0.1倍暴击伤害
         
-        // 10级特殊效果：额外增加3点幸运值和物品发现率
+        // 10级特殊效果：额外增加10%暴击率和1倍暴击伤害
         if (this.level === 10) {
             return {
-                luckBonus: luckBonus + 3,
-                itemDiscoveryRate: 0.1 // 增加10%物品发现率
+                critChance: critChance + 0.1, // 总共40%暴击率
+                critMultiplier: critMultiplier + 1.0 // 总共2倍暴击伤害
             };
         }
         
         return {
-            luckBonus: luckBonus
-        };
-    }
-}
-
-/**
- * 咒术护符
- * 增加投射物穿透
- */
-class OccultCharm extends PassiveItem {
-    /**
-     * 构造函数
-     */
-    constructor() {
-        super("咒术护符", "🔮", 10, "增加投射物穿透");
-    }
-
-    /**
-     * 获取增益
-     * @returns {Object} - 增益
-     */
-    getBonuses() {
-        let pierceBonus = Math.floor(this.level / 2); // 每2级增加1次穿透
-        
-        // 10级特殊效果：额外增加2次穿透和增加投射物范围
-        if (this.level === 10) {
-            return {
-                projectilePierceBonus: pierceBonus + 2,
-                projectileAreaMultiplier: 1.2 // 增加20%投射物范围
-            };
-        }
-        
-        return {
-            projectilePierceBonus: pierceBonus
+            critChance: critChance,
+            critMultiplier: critMultiplier
         };
     }
 }
@@ -556,42 +490,6 @@ class BarrierRune extends PassiveItem {
 }
 
 /**
- * 寒冰之心
- * 增加减速效果和冻结几率
- */
-class FrostHeart extends PassiveItem {
-    /**
-     * 构造函数
-     */
-    constructor() {
-        super("寒冰之心", "❄️", 10, "增加减速效果和冻结几率");
-    }
-
-    /**
-     * 获取增益
-     * @returns {Object} - 增益
-     */
-    getBonuses() {
-        let slowStrength = 0.1 + (this.level - 1) * 0.05; // 基础10%减速，每级增加5%
-        let freezeChance = (this.level - 1) * 0.02; // 每级增加2%冻结几率
-        
-        // 10级特殊效果：额外减速和冻结几率，偶尔造成范围冻结
-        if (this.level === 10) {
-            return {
-                slowStrength: slowStrength + 0.1,
-                freezeChance: freezeChance + 0.05,
-                areaFreezeChance: 0.12 // 12%几率造成范围冻结
-            };
-        }
-        
-        return {
-            slowStrength: slowStrength,
-            freezeChance: freezeChance
-        };
-    }
-}
-
-/**
  * 龙息香料
  * 增加燃烧伤害和燃烧几率
  */
@@ -614,7 +512,7 @@ class DragonSpice extends PassiveItem {
         // 10级特殊效果：额外燃烧伤害和几率，并有几率造成爆炸
         if (this.level === 10) {
             return {
-                burnDamage: burnDamage + 3,
+                burnDamage: burnDamage + 5, // 10级额外+5燃烧伤害，满级总共16点
                 burnChance: burnChance + 0.1,
                 explosionChance: 0.15 // 15%几率火焰爆炸
             };
@@ -623,114 +521,6 @@ class DragonSpice extends PassiveItem {
         return {
             burnDamage: burnDamage,
             burnChance: burnChance
-        };
-    }
-}
-
-/**
- * 雷光护符
- * 增加闪电伤害和链接数
- */
-class ThunderAmulet extends PassiveItem {
-    /**
-     * 构造函数
-     */
-    constructor() {
-        super("雷光护符", "⚡", 10, "增加闪电伤害和链接");
-    }
-
-    /**
-     * 获取增益
-     * @returns {Object} - 增益
-     */
-    getBonuses() {
-        let lightningDamage = 5 + (this.level - 1) * 2; // 基础5点闪电伤害，每级增加2点
-        let chainCount = 1 + Math.floor((this.level - 1) / 2); // 基础1次链接，每2级增加1次
-        
-        // 10级特殊效果：额外闪电伤害和链接，并有几率触发范围电击
-        if (this.level === 10) {
-            return {
-                lightningDamage: lightningDamage + 5,
-                lightningChainCount: chainCount + 1,
-                areaShockChance: 0.2 // 20%几率触发范围电击
-            };
-        }
-        
-        return {
-            lightningDamage: lightningDamage,
-            lightningChainCount: chainCount
-        };
-    }
-}
-
-/**
- * 毒素宝珠
- * 增加毒素伤害和持续时间
- */
-class PoisonOrb extends PassiveItem {
-    /**
-     * 构造函数
-     */
-    constructor() {
-        super("毒素宝珠", "☠️", 10, "增加毒素伤害和持续时间");
-    }
-
-    /**
-     * 获取增益
-     * @returns {Object} - 增益
-     */
-    getBonuses() {
-        let poisonDamage = 1 + (this.level - 1) * 0.5; // 基础1点毒素伤害，每级增加0.5点
-        let poisonDuration = 3 + (this.level - 1) * 0.3; // 基础3秒持续时间，每级增加0.3秒
-        
-        // 10级特殊效果：额外毒素伤害和持续时间，并有几率扩散
-        if (this.level === 10) {
-            return {
-                poisonDamage: poisonDamage + 2,
-                poisonDuration: poisonDuration + 1,
-                spreadChance: 0.25 // 25%几率毒素扩散到附近敌人
-            };
-        }
-        
-        return {
-            poisonDamage: poisonDamage,
-            poisonDuration: poisonDuration
-        };
-    }
-}
-
-/**
- * 磁力球
- * 增加拾取吸引范围和吸引强度
- */
-class MagnetSphere extends PassiveItem {
-    /**
-     * 构造函数
-     */
-    constructor() {
-        super("磁力球", "🧲", 10, "增加拾取吸引范围和强度");
-    }
-
-    /**
-     * 获取增益
-     * @returns {Object} - 增益
-     */
-    getBonuses() {
-        let magnetRange = 30 + (this.level - 1) * 20; // 基础30点吸引范围，每级增加20点
-        let magnetStrength = 1 + (this.level - 1) * 0.2; // 基础1倍吸引强度，每级增加0.2倍
-        
-        // 10级特殊效果：额外吸引范围和强度，并自动收集经验宝石
-        if (this.level === 10) {
-            return {
-                magnetRange: magnetRange + 50,
-                magnetStrength: magnetStrength + 0.5,
-                autoCollect: true // 自动收集30码范围内的经验宝石
-            };
-        }
-        
-        return {
-            magnetRange: magnetRange,
-            magnetStrength: magnetStrength
         };
     }
 }
@@ -1007,15 +797,9 @@ const PASSIVE_ITEMS = [
     Wings,
     EmptyBottle,
     Gargoyle,
-    MagicCrystal,
     MysteryCard,
-    OccultCharm,
     BarrierRune,
-    FrostHeart,
     DragonSpice,
-    ThunderAmulet,
-    PoisonOrb,
-    MagnetSphere,
     AncientTreeSap
 ];
 
@@ -1061,15 +845,9 @@ function registerCriticalPassives() {
     const otherClasses = [
         { ref: EmptyBottle, name: "EmptyBottle" },
         { ref: Gargoyle, name: "Gargoyle" },
-        { ref: MagicCrystal, name: "MagicCrystal" },
         { ref: MysteryCard, name: "MysteryCard" },
-        { ref: OccultCharm, name: "OccultCharm" },
         { ref: BarrierRune, name: "BarrierRune" },
-        { ref: FrostHeart, name: "FrostHeart" },
         { ref: DragonSpice, name: "DragonSpice" },
-        { ref: ThunderAmulet, name: "ThunderAmulet" },
-        { ref: PoisonOrb, name: "PoisonOrb" },
-        { ref: MagnetSphere, name: "MagnetSphere" },
         { ref: SoulRelic, name: "SoulRelic" }
     ];
     

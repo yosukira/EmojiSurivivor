@@ -631,12 +631,9 @@ window.DebugPanel = {
             { name: "基础投射物数量", stat: "projectileCountBonus", format: (val) => val.toFixed(0) },
             { name: "基础攻击间隔", stat: "cooldownMultiplier", format: (val) => `${(val*100).toFixed(0)}%` },
             { name: "基础燃烧伤害", stat: "burnDamage", format: (val) => val.toFixed(1) },
-            { name: "基础闪电伤害", stat: "lightningDamage", format: (val) => val.toFixed(1) },
-            { name: "基础毒素伤害", stat: "poisonDamage", format: (val) => val.toFixed(1) },
             { name: "最大生命值", stat: "maxHealth", format: (val) => val.toFixed(0) },
-            { name: "护甲值", stat: "armor", format: (val) => val.toFixed(1) },
-            { name: "减伤百分比", stat: "damageReductionPercent", format: (val) => `${(val*100).toFixed(1)}%` },
             { name: "基础暴击率", stat: "critChance", format: (val) => `${(val*100).toFixed(0)}%` },
+            { name: "暴击伤害倍率", stat: "critMultiplier", format: (val) => `${val.toFixed(1)}x` },
             { name: "拾取范围", stat: "pickupRadius", format: (val) => val.toFixed(0) }
         ];
         
@@ -688,11 +685,7 @@ window.DebugPanel = {
             
             Object.entries(statElements).forEach(([stat, info]) => {
                 let value;
-                if (stat === 'damageReductionPercent') {
-                    // 计算减伤百分比
-                    const armor = player.getStat('armor');
-                    value = 1 - 1 / (1 + armor / 100);
-                } else if (stat === 'speed') {
+                if (stat === 'speed') {
                     // 这里用getCurrentSpeed而不是getStat
                     value = player.getCurrentSpeed ? player.getCurrentSpeed() : player.getStat('speed');
                 } else {
@@ -824,12 +817,9 @@ window.DebugPanel = {
             { name: "基础投射物数量", stat: "projectileCountBonus", format: (val) => val.toFixed(0) },
             { name: "基础攻击间隔", stat: "cooldownMultiplier", format: (val) => `${(val*100).toFixed(0)}%` },
             { name: "基础燃烧伤害", stat: "burnDamage", format: (val) => val.toFixed(1) },
-            { name: "基础闪电伤害", stat: "lightningDamage", format: (val) => val.toFixed(1) },
-            { name: "基础毒素伤害", stat: "poisonDamage", format: (val) => val.toFixed(1) },
             { name: "最大生命值", stat: "maxHealth", format: (val) => val.toFixed(0) },
-            { name: "护甲值", stat: "armor", format: (val) => val.toFixed(1) },
-            { name: "减伤百分比", stat: "damageReductionPercent", format: (val) => `${(val*100).toFixed(1)}%` },
             { name: "基础暴击率", stat: "critChance", format: (val) => `${(val*100).toFixed(0)}%` },
+            { name: "暴击伤害倍率", stat: "critMultiplier", format: (val) => `${val.toFixed(1)}x` },
             { name: "拾取范围", stat: "pickupRadius", format: (val) => val.toFixed(0) }
         ];
         
@@ -893,11 +883,7 @@ window.DebugPanel = {
             
             Object.entries(statElements).forEach(([stat, info]) => {
                 let value;
-                if (stat === 'damageReductionPercent') {
-                    // 计算减伤百分比
-                    const armor = player.getStat('armor');
-                    value = 1 - 1 / (1 + armor / 100);
-                } else if (stat === 'speed') {
+                if (stat === 'speed') {
                     // 这里用getCurrentSpeed而不是getStat
                     value = player.getCurrentSpeed ? player.getCurrentSpeed() : player.getStat('speed');
                 } else {

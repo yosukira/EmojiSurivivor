@@ -188,6 +188,17 @@ class Player extends Character {
                 }
             });
             return Math.max(0, baseStat + bonus);
+        } else if (statName === 'critMultiplier') {
+            // 暴击伤害倍数：基础2.0倍，然后加上被动道具加成
+            baseStat = 2.0;
+            let bonus = 0;
+            this.passiveItems.forEach(item => {
+                if (item && typeof item.getBonuses === 'function') {
+                    const bonuses = item.getBonuses();
+                    if (typeof bonuses.critMultiplier === 'number') bonus += bonuses.critMultiplier;
+                }
+            });
+            return baseStat + bonus;
         } else {
             baseStat = PLAYER_DEFAULT_STATS[statName] || 0;
         }
@@ -224,7 +235,10 @@ class Player extends Character {
             for (const possibleStatName of statNames) {
                 if (bonuses[possibleStatName] !== undefined) {
                     const bonus = bonuses[possibleStatName];
-                    if (possibleStatName.endsWith('Multiplier')) {
+                    // 特殊处理：critMultiplier是倍数值，应该直接加算到基础值上
+                    if (possibleStatName === 'critMultiplier') {
+                        additive += bonus;
+                    } else if (possibleStatName.endsWith('Multiplier')) {
                         multiplier *= bonus;
                     } else {
                         additive += bonus;

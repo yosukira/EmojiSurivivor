@@ -28,8 +28,7 @@ function forceRegisterPassiveItems() {
     // 手动添加所有被动物品类
     const passiveClasses = [
         Spinach, Wings, Bracer, HollowHeart, AncientTreeSap, 
-        EmptyBottle, Gargoyle, BarrierRune, FrostHeart, 
-        DragonSpice, ThunderAmulet, PoisonOrb, MagnetSphere, SoulRelic
+        EmptyBottle, Gargoyle, BarrierRune, DragonSpice, MysteryCard, SoulRelic
     ];
     
     passiveClasses.forEach(cls => {

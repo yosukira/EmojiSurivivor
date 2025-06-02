@@ -195,7 +195,7 @@ class Enemy extends Character {
         this.updateStatusEffects(dt);
 
         // 更新移动
-        if (!this.isStunned() && !this.isDashing && !this.isShootingBeam) {
+        if (!this.isStunned() && !this.isFrozen() && !this.isDashing && !this.isShootingBeam) {
             this.updateMovement(dt);
         } else if (this.isDashing) {
             // 正在冲刺，更新冲刺逻辑
@@ -203,16 +203,13 @@ class Enemy extends Character {
         }
 
         // 如果是远程敌人，尝试进行远程攻击
-        if (this.isRanged && this.target && this.attackCooldown <= 0 && !this.isStunned()) {
+        if (this.isRanged && this.target && this.attackCooldown <= 0 && !this.isStunned() && !this.isFrozen()) {
             const distSq = this.getDistanceSquared(this.target);
             if (distSq <= this.attackRange * this.attackRange && distSq >= 100 * 100) {
                 this.performRangedAttack();
                 this.attackCooldown = this.attackCooldownTime;
             }
         }
-
-        // 处理状态效果
-        this.handleStatusEffects(dt);
 
         // 更新时间增长系数
         this.lastTimeScalingUpdate += dt;
@@ -253,8 +250,8 @@ class Enemy extends Character {
      * @param {number} dt - 时间增量
      */
     updateSpecialAbilities(dt) {
-        // 如果没有目标或被眩晕，不更新特殊能力
-        if (!this.target || this.isStunned()) return;
+        // 如果没有目标或被眩晕/冻结，不更新特殊能力
+        if (!this.target || this.isStunned() || this.isFrozen()) return;
 
         // 地狱犬冲刺
         if (this.type && this.type.canDash) {
@@ -298,23 +295,24 @@ class Enemy extends Character {
             } else {
                 this._dogState.mode = 'circle';
             }
-            // 行为
-            if (!this.isDashing) {
+            // 行为 - 只有在不被眩晕/冻结时才能移动
+            if (!this.isDashing && !this.isStunned() && !this.isFrozen()) {
+                const currentSpeed = this.getCurrentSpeed();
                 if (this._dogState.mode === 'leave') {
-                    this.x -= (dx / dist) * this.getCurrentSpeed() * dt;
-                    this.y -= (dy / dist) * this.getCurrentSpeed() * dt;
+                    this.x -= (dx / dist) * currentSpeed * dt;
+                    this.y -= (dy / dist) * currentSpeed * dt;
                     this._dogState.circleReady = false;
                 } else if (this._dogState.mode === 'approach') {
-                    this.x += (dx / dist) * this.getCurrentSpeed() * dt;
-                    this.y += (dy / dist) * this.getCurrentSpeed() * dt;
+                    this.x += (dx / dist) * currentSpeed * dt;
+                    this.y += (dy / dist) * currentSpeed * dt;
                     this._dogState.circleReady = false;
                 } else {
                     // 转圈前先平滑移动到圆周边缘
                     if (!this._dogState.circleReady) {
                         const toEdge = safeDistance - dist;
                         if (Math.abs(toEdge) > 2) {
-                            this.x += (dx / dist) * Math.min(Math.abs(toEdge), this.getCurrentSpeed() * dt) * Math.sign(toEdge);
-                            this.y += (dy / dist) * Math.min(Math.abs(toEdge), this.getCurrentSpeed() * dt) * Math.sign(toEdge);
+                            this.x += (dx / dist) * Math.min(Math.abs(toEdge), currentSpeed * dt) * Math.sign(toEdge);
+                            this.y += (dy / dist) * Math.min(Math.abs(toEdge), currentSpeed * dt) * Math.sign(toEdge);
                         } else {
                             this._dogState.circleReady = true;
                             this._dogState.angle = Math.atan2(this.y - this.target.y, this.x - this.target.x);
@@ -372,7 +370,7 @@ class Enemy extends Character {
                 this._dogState.lastX = this.x;
                 this._dogState.lastY = this.y;
                 // 冲刺判定
-                if (this.dashCooldown <= 0 && dist > safeDistance * 0.8 && dist < safeDistance * 2.5) { // 放宽冲刺条件
+                if (this.dashCooldown <= 0 && dist > dashRange * 1.1) {
                     this.startDash();
                 }
             }
@@ -642,12 +640,20 @@ class Enemy extends Character {
             return;
         }
 
+        // 如果被眩晕、冻结或泡泡困住，不能移动
+        if (this.isStunned() || this.isFrozen() || this.isBubbleTrapped()) {
+            return;
+        }
+
         const dx = this.target.x - this.x;
         const dy = this.target.y - this.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
 
         if (distance > (this.size / 2)) { // 只有在距离大于一定值时才移动
-            const moveSpeed = this.stats.speed * dt * (this.statusEffects && this.statusEffects.slow ? this.statusEffects.slow.factor : 1);
+            // 获取当前速度，考虑所有状态效果
+            const currentSpeed = this.getCurrentSpeed();
+            const moveSpeed = currentSpeed * dt;
+            
             this.x += (dx / distance) * moveSpeed;
             this.y += (dy / distance) * moveSpeed;
 
@@ -657,15 +663,6 @@ class Enemy extends Character {
             } else if (dx < 0) {
                 this.facingRight = false;
             }
-            // 如果dx === 0，保持当前朝向
-        }
-
-        // 处理卡住的情况 (简化版)
-        this.checkAndHandleStuck(dt);
-
-        // 检查与目标的碰撞并攻击
-        if (this.target && this.checkCollision(this.target)) {
-            this.attack(this.target);
         }
     }
 
@@ -1223,56 +1220,31 @@ class Enemy extends Character {
     }
 
     /**
-     * 处理状态效果
-     * @param {number} dt - 时间增量
+     * 检查是否被冻结
+     * @returns {boolean} 是否被冻结
      */
-    handleStatusEffects(dt) {
-        // 如果没有状态效果，直接返回
-        if (!this.statusEffects) return;
+    isFrozen() {
+        return this.statusEffects && this.statusEffects.freeze && this.statusEffects.freeze.duration > 0;
+    }
 
-        // 处理眩晕状态
-        if (this.statusEffects.stun) {
-            this.statusEffects.stun.duration -= dt;
-            if (this.statusEffects.stun.duration <= 0) {
-                delete this.statusEffects.stun;
-            }
+    /**
+     * 获取当前速度
+     * @returns {number} 当前速度
+     */
+    getCurrentSpeed() {
+        // 如果被眩晕或冻结，速度为0
+        if (this.isStunned() || this.isFrozen()) {
+            return 0;
         }
-
-        // 处理减速状态
-        if (this.statusEffects.slow) {
-            this.statusEffects.slow.duration -= dt;
-            if (this.statusEffects.slow.duration <= 0) {
-                // 恢复原速度
-                this.speed = this.type.speed || ENEMY_BASE_STATS.speed;
-                delete this.statusEffects.slow;
-            }
+        
+        // 获取基础速度
+        let speed = this.getStat('speed') || this.stats.speed;
+        
+        // 如果被减速，应用减速效果
+        if (this.statusEffects && this.statusEffects.slow && this.statusEffects.slow.duration > 0) {
+            speed *= this.statusEffects.slow.factor;
         }
-
-        // 处理燃烧状态
-        if (this.statusEffects.burn) {
-            this.statusEffects.burn.duration -= dt;
-            this.statusEffects.burn.tickTimer -= dt;
-
-            // 燃烧伤害每0.5秒触发一次
-            if (this.statusEffects.burn.tickTimer <= 0) {
-                const burnDamage = this.statusEffects.burn.damagePerTick;
-                this.takeDamage(burnDamage, this.statusEffects.burn.source);
-
-                // 重置计时器
-                this.statusEffects.burn.tickTimer = 0.5;
-            }
-
-            if (this.statusEffects.burn.duration <= 0) {
-                delete this.statusEffects.burn;
-            }
-        }
-
-        // 处理冻结状态
-        if (this.statusEffects.freeze) {
-            this.statusEffects.freeze.duration -= dt;
-            if (this.statusEffects.freeze.duration <= 0) {
-                delete this.statusEffects.freeze;
-            }
-        }
+        
+        return speed;
     }
 } 

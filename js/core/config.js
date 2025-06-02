@@ -68,7 +68,7 @@ const PLAYER_DEFAULT_STATS = {
     maxPassives: 20,
     // 添加遗漏的属性
     critChance: 0.05,        // 基础暴击率 5%
-    critMultiplier: 1.5,     // 基础暴击伤害倍数
+    critMultiplier: 2.0,     // 基础暴击伤害倍数
     luck: 1.0,               // 基础幸运值
     magnetBonus: 0           // 磁铁加成
 };

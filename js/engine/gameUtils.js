@@ -160,21 +160,21 @@ function calculateAndShowDamage(target, baseDamage, attacker = null, damageType 
     let displayText = '';
     
     if (damageType === 'normal') {
+        // 先应用护甲减伤
+        if (target && typeof target.getStat === 'function') {
+            const armor = target.getStat('armor') || 0;
+            finalDamage = Math.max(1, finalDamage - armor);
+        }
+        
         // 暴击检测 - 只有玩家攻击时才能暴击
         if (attacker && attacker === player) {
             const critChance = attacker.getStat('critChance') || 0.05; // 默认5%暴击率
-            const critMultiplier = attacker.getStat('critMultiplier') || 1.5; // 默认1.5倍暴击伤害
+            const critMultiplier = attacker.getStat('critMultiplier') || 2.0; // 默认2.0倍暴击伤害
             
             if (Math.random() < critChance) {
                 isCrit = true;
                 finalDamage *= critMultiplier;
             }
-        }
-        
-        // 应用护甲减伤
-        if (target && typeof target.getStat === 'function') {
-            const armor = target.getStat('armor') || 0;
-            finalDamage = Math.max(1, finalDamage - armor);
         }
         
         displayText = Math.floor(finalDamage).toString();

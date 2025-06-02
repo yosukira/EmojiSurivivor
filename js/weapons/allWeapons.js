@@ -724,7 +724,7 @@ class FireBladeWeapon extends Weapon {
             count: 1 + Math.floor((this.level - 1) / 3),
             pierce: Math.floor(this.level / 4),
             duration: 1.2,
-            burnDamage: 2 + Math.floor(this.level / 3),  // 降低成长
+            burnDamage: 3 + Math.floor((this.level - 1) * 1),  // 基础燃烧伤害改为3，每级增加1
             burnDuration: 2 + Math.floor(this.level / 3),
             aoeEffect: this.level === 10,  // 10级获得群体燃烧效果
             aoeRange: 80  // 群体效果范围
@@ -743,7 +743,12 @@ class FireBladeWeapon extends Weapon {
         const pierce = this.stats.pierce;
         const duration = this.stats.duration * (ownerStats.durationMultiplier || 1);
         const size = GAME_FONT_SIZE * (ownerStats.areaMultiplier || 1);
-        const burnDamage = this.stats.burnDamage * (ownerStats.damageMultiplier || 1);
+        
+        // 修复燃烧伤害计算：基础武器燃烧伤害 + 被动道具燃烧伤害加成
+        const baseBurnDamage = this.stats.burnDamage * (ownerStats.damageMultiplier || 1);
+        const passiveBurnDamage = owner.getStat('burnDamage') || 0;
+        const burnDamage = baseBurnDamage + passiveBurnDamage;
+        
         const burnDuration = this.stats.burnDuration * (ownerStats.durationMultiplier || 1);
         const hasAoe = this.stats.aoeEffect;
         const aoeRange = this.stats.aoeRange * (ownerStats.areaMultiplier || 1);
@@ -1348,9 +1353,12 @@ class ChaosDiceWeapon extends Weapon {
         const dualEffect = this.stats.dualEffect;
         const size = GAME_FONT_SIZE * 1.2;
         
+        // 记录创建的骰子数量
+        let createdDice = 0;
+        
         // 投掷多个骰子
         enemies.forEach(enemy => {
-            if (projectiles.length >= projectileCount || !enemy || enemy.isGarbage || !enemy.isActive) return;
+            if (createdDice >= projectileCount || !enemy || enemy.isGarbage || !enemy.isActive) return;
             
             // 计算方向
             const dx = enemy.x - owner.x;
@@ -1390,10 +1398,11 @@ class ChaosDiceWeapon extends Weapon {
             
             dice.owner = owner;
             projectiles.push(dice);
+            createdDice++;
         });
         
         // 如果没有找到合适的敌人目标，向随机方向投掷
-        if (projectiles.length === 0) {
+        if (createdDice === 0) {
             for (let i = 0; i < projectileCount; i++) {
                 // 随机角度
                 const angle = Math.random() * Math.PI * 2;
@@ -2199,7 +2208,8 @@ class FireBladeProjectile extends Projectile {
                 duration: burnDuration,
                 tickInterval: tickInterval, 
                 tickTimer: tickInterval, // 立即开始计时
-                source: source // 记录伤害来源
+                source: source, // 记录伤害来源
+                icon: '🔥' // 添加燃烧图标
             };
         }
     }
@@ -2245,7 +2255,8 @@ class FireBladeProjectile extends Projectile {
                         duration: reducedDuration,
                         tickInterval: tickInterval,
                         tickTimer: tickInterval,
-                        source: source
+                        source: source,
+                        icon: '🔥' // 添加燃烧图标
                     };
                 }
                 
@@ -2866,7 +2877,7 @@ class VolcanoStaffWeapon extends Weapon {
             radius: 70 + (this.level - 1) * 5,  // 爆发半径
             eruptions: 3 + Math.floor((this.level - 1) / 2),  // 爆发次数
             eruptionDelay: 0.5,  // 爆发间隔
-            burnDamage: 2 + Math.floor((this.level - 1) * 0.5),  // 燃烧伤害
+            burnDamage: 3 + Math.floor((this.level - 1) * 1),  // 基础燃烧伤害改为3，每级增加1
             burnDuration: 3.0,  // 燃烧持续时间固定为3秒
             lavaPuddle: this.level === 10,  // 10级才有熔岩池
             lavaDuration: 2.0  // 熔岩池持续时间固定为2秒
@@ -2890,7 +2901,12 @@ class VolcanoStaffWeapon extends Weapon {
         const radius = this.stats.radius * (ownerStats.areaMultiplier || 1);
         const eruptions = this.stats.eruptions;
         const eruptionDelay = this.stats.eruptionDelay / (ownerStats.attackSpeedMultiplier || 1);
-        const burnDamage = this.stats.burnDamage * (ownerStats.damageMultiplier || 1);
+        
+        // 修复燃烧伤害计算：基础武器燃烧伤害 + 被动道具燃烧伤害加成
+        const baseBurnDamage = this.stats.burnDamage * (ownerStats.damageMultiplier || 1);
+        const passiveBurnDamage = owner.getStat('burnDamage') || 0;
+        const burnDamage = baseBurnDamage + passiveBurnDamage;
+        
         const burnDuration = this.stats.burnDuration * (ownerStats.durationMultiplier || 1);
         const lavaPuddle = this.stats.lavaPuddle;
         const lavaDuration = this.stats.lavaDuration * (ownerStats.durationMultiplier || 1);
