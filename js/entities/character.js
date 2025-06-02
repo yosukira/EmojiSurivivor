@@ -102,8 +102,8 @@ class Character extends GameObject {
                 return;
             }
             
-            // 应用普通减速效果
-            if (!this.statusEffects.slow || actualSlowStrength < this.statusEffects.slow.factor) {
+            // 应用普通减速效果 - 修改逻辑，允许刷新减速效果
+            if (!this.statusEffects.slow || !this.statusEffects.slow.isAuraEffect) {
                 const originalSpeed = this.statusEffects.slow ? this.statusEffects.slow.originalSpeed : currentBaseSpeed;
                 this.statusEffects[type] = {
                     ...effectData,
@@ -113,6 +113,7 @@ class Character extends GameObject {
                     isAuraEffect: false
                 };
                 this.speed = originalSpeed * actualSlowStrength;
+                console.log(`Slow effect applied to ${this.constructor.name}. Factor: ${actualSlowStrength}, Duration: ${effectData.duration}`);
             }
             return;
         }
@@ -131,7 +132,21 @@ class Character extends GameObject {
             this.statusEffects[type] = { ...effectData, icon: '⭐', duration: newDuration }; 
             return; 
         }
+
+        // 对于燃烧效果 - 总是刷新或应用新的燃烧效果
+        if (type === 'burn') {
+            // 直接应用新的燃烧效果，覆盖旧的
+            this.statusEffects[type] = { 
+                ...effectData, 
+                icon: '🔥',
+                tickInterval: effectData.tickInterval || 1.0,
+                tickTimer: effectData.tickTimer || 1.0
+            };
+            console.log(`Burn effect applied to ${this.constructor.name}. Damage: ${effectData.damage}, Duration: ${effectData.duration}`);
+            return;
+        }
         
+        // 其他效果直接应用或覆盖
         this.statusEffects[type] = { ...effectData };
     }
 
@@ -170,7 +185,7 @@ class Character extends GameObject {
             if (this.statusEffects.stun.duration <= 0) {
                 delete this.statusEffects.stun;
                 // 眩晕结束后给予短暂免疫时间，防止连续眩晕
-                this.stunImmunityTimer = 0.1;
+                this.stunImmunityTimer = 0.05; // 减少免疫时间到0.05秒
             }
         }
 
@@ -439,88 +454,122 @@ class Character extends GameObject {
         if (!this.statusEffects) return;
 
         const iconSize = 16;
-        const iconSpacing = 18;
-        let iconIndex = 0;
+        const iconSpacing = 20;
+        let activeEffectsCount = 0;
+        
+        // 先统计有多少个活跃的状态效果
+        if (this.statusEffects.stun && this.statusEffects.stun.duration > 0) activeEffectsCount++;
+        if (this.statusEffects.burn && this.statusEffects.burn.duration > 0) activeEffectsCount++;
+        if (this.statusEffects.slow && this.statusEffects.slow.duration > 0) activeEffectsCount++;
+        if (this.statusEffects.freeze && this.statusEffects.freeze.duration > 0) activeEffectsCount++;
+        if (this.statusEffects.poison && this.statusEffects.poison.duration > 0) activeEffectsCount++;
+        if (this.statusEffects.bubbleTrap && this.statusEffects.bubbleTrap.duration > 0) activeEffectsCount++;
 
-        // 燃烧效果 - 添加特殊的火焰动画
-        if (this.statusEffects.burn) {
-            const iconX = screenPos.x - 30 + iconIndex * iconSpacing;
-            const iconY = screenPos.y - this.size / 2 - 25;
+        // 计算图标起始位置 - 在角色正上方，居中对齐
+        const baseIconY = screenPos.y - this.size / 2 - 25; // 稍微再高一点
+        const startX = screenPos.x - ((activeEffectsCount - 1) * iconSpacing) / 2; // 居中计算起始X
+        
+        let iconIndex = 0;
+        
+        // 眩晕效果 - 显示旋转的星星
+        if (this.statusEffects.stun && this.statusEffects.stun.duration > 0) {
+            const stunRadius = this.size * 0.6;
+            const angularSpeed = 4;
+            const numStars = 3;
+            
+            ctx.save();
+            ctx.font = `${iconSize * 0.8}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            for (let i = 0; i < numStars; i++) {
+                const angle = (gameTime * angularSpeed + (i * (Math.PI * 2 / numStars))) % (Math.PI * 2);
+                const starX = screenPos.x + Math.cos(angle) * stunRadius;
+                const starY = screenPos.y - this.size / 2 - 10 + Math.sin(angle) * stunRadius * 0.3;
+                
+                ctx.fillStyle = '#FFFF00';
+                ctx.fillText('⭐', starX, starY);
+            }
+            ctx.restore();
+            iconIndex++;
+        }
+
+        // 燃烧效果
+        if (this.statusEffects.burn && this.statusEffects.burn.duration > 0) {
+            const iconX = startX + iconIndex * iconSpacing;
+            const iconY = baseIconY;
             
             // 绘制火焰特效
             this.drawBurnEffect(ctx, screenPos);
             
             // 绘制燃烧图标
+            ctx.save();
             ctx.font = `${iconSize}px Arial`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillStyle = '#FF4500';
             ctx.fillText('🔥', iconX, iconY);
-            iconIndex++;
-        }
-
-        // 眩晕效果
-        if (this.statusEffects.stun) {
-            const iconX = screenPos.x - 30 + iconIndex * iconSpacing;
-            const iconY = screenPos.y - this.size / 2 - 25;
-            
-            ctx.font = `${iconSize}px Arial`;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillStyle = '#FFFF00';
-            ctx.fillText('💫', iconX, iconY);
+            ctx.restore();
             iconIndex++;
         }
 
         // 减速效果
-        if (this.statusEffects.slow) {
-            const iconX = screenPos.x - 30 + iconIndex * iconSpacing;
-            const iconY = screenPos.y - this.size / 2 - 25;
+        if (this.statusEffects.slow && this.statusEffects.slow.duration > 0) {
+            const iconX = startX + iconIndex * iconSpacing;
+            const iconY = baseIconY;
             
+            ctx.save();
             ctx.font = `${iconSize}px Arial`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillStyle = '#87CEEB';
             ctx.fillText('🐌', iconX, iconY);
+            ctx.restore();
             iconIndex++;
         }
 
         // 冻结效果
-        if (this.statusEffects.freeze) {
-            const iconX = screenPos.x - 30 + iconIndex * iconSpacing;
-            const iconY = screenPos.y - this.size / 2 - 25;
+        if (this.statusEffects.freeze && this.statusEffects.freeze.duration > 0) {
+            const iconX = startX + iconIndex * iconSpacing;
+            const iconY = baseIconY;
             
+            ctx.save();
             ctx.font = `${iconSize}px Arial`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillStyle = '#ADD8E6';
             ctx.fillText('❄️', iconX, iconY);
+            ctx.restore();
             iconIndex++;
         }
 
         // 中毒效果
-        if (this.statusEffects.poison) {
-            const iconX = screenPos.x - 30 + iconIndex * iconSpacing;
-            const iconY = screenPos.y - this.size / 2 - 25;
+        if (this.statusEffects.poison && this.statusEffects.poison.duration > 0) {
+            const iconX = startX + iconIndex * iconSpacing;
+            const iconY = baseIconY;
             
+            ctx.save();
             ctx.font = `${iconSize}px Arial`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillStyle = '#32CD32';
             ctx.fillText('☠️', iconX, iconY);
+            ctx.restore();
             iconIndex++;
         }
 
         // 泡泡困住效果
-        if (this.statusEffects.bubbleTrap) {
-            const iconX = screenPos.x - 30 + iconIndex * iconSpacing;
-            const iconY = screenPos.y - this.size / 2 - 25;
+        if (this.statusEffects.bubbleTrap && this.statusEffects.bubbleTrap.duration > 0) {
+            const iconX = startX + iconIndex * iconSpacing;
+            const iconY = baseIconY;
             
+            ctx.save();
             ctx.font = `${iconSize}px Arial`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillStyle = '#87CEEB';
             ctx.fillText('🫧', iconX, iconY);
+            ctx.restore();
             iconIndex++;
         }
     }

@@ -157,6 +157,16 @@ class GhostEnemy extends Character {
         const fadeFactor = Math.max(0.2, 1 - (this.lifetime / this.maxLifetime) * 0.8); // 淡出到 0.2 而不是 0
         const alpha = baseAlpha * fadeFactor;
 
+        // 绘制椭圆形阴影（在绘制幽灵之前）
+        ctx.save();
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.2)'; // 幽灵的阴影稍微淡一些
+        ctx.beginPath();
+        const ghostSize = this.size; // 幽灵的显示大小
+        const shadowCenterY = screenPos.y + ghostSize / 2 + 3; // 3是额外偏移，比普通敌人小一点
+        ctx.ellipse(screenPos.x, shadowCenterY, ghostSize / 2.5, ghostSize / 7, 0, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.restore();
+
         ctx.save();
         ctx.globalAlpha = alpha;
         ctx.font = `${this.size}px 'Segoe UI Emoji', Arial`;

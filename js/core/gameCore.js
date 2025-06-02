@@ -260,6 +260,20 @@ function update(dt) {
         }
     }
 
+    // 检查敌人与玩家的碰撞（近战攻击）
+    if (player && !player.isGarbage && player.isActive) {
+        for (let i = 0; i < enemies.length; i++) {
+            const enemy = enemies[i];
+            if (!enemy.isGarbage && enemy.isActive && enemy.attackCooldown <= 0) {
+                // 检查碰撞
+                if (enemy.checkCollision(player)) {
+                    // 敌人攻击玩家
+                    enemy.attack(player);
+                }
+            }
+        }
+    }
+
     // 更新投射物
     for (let i = 0; i < projectiles.length; i++) {
         if (!projectiles[i].isGarbage && projectiles[i].isActive) {

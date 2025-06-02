@@ -170,9 +170,10 @@ const ENEMY_TYPES = [
         xpMult: 1.4,
         weight: 4,
         minTime: 540, // 9分钟后开始刷新
+        attackInterval: 0.8, // 进一步缩短攻击间隔
         appliesBurn: true, // 燃烧效果
-        burnDamage: 3,
-        burnDuration: 3
+        burnDamage: 2, // 改成2点伤害
+        burnDuration: 4 // 增加燃烧持续时间
     },
     {
         name: "冰霜精灵",
@@ -184,23 +185,25 @@ const ENEMY_TYPES = [
         xpMult: 1.4,
         weight: 4,
         minTime: 540, // 9分钟后开始刷新
+        attackInterval: 0.8, // 进一步缩短攻击间隔
         appliesSlow: true, // 减速效果
-        slowFactor: 0.5,
-        slowDuration: 2
+        slowFactor: 0.4, // 更强的减速，减速到40%
+        slowDuration: 3 // 增加减速持续时间
     },
     {
         name: "雷电精灵",
         emoji: "⚡",
-        svgPath: "assets/enemy/lightingwisp.png",
+        svgPath: "assets/enemy/lightningwisp.png",
         healthMult: 0.6,
         speedMult: 1.2,
         damageMult: 0.7,
         xpMult: 1.4,
         weight: 4,
         minTime: 540, // 9分钟后开始刷新
+        attackInterval: 0.8, // 进一步缩短攻击间隔
         appliesStun: true, // 眩晕效果
-        stunChance: 0.3,
-        stunDuration: 0.5 // 修改为0.5秒
+        stunChance: 0.9, // 90%眩晕几率
+        stunDuration: 1.5 // 1.5秒眩晕时间
     },
     {
         name: "炸弹",

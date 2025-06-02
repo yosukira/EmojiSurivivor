@@ -81,6 +81,8 @@ class Enemy extends Character {
         this.reward = type.xpMult || 1;
         // 攻击冷却
         this.attackCooldown = 0;
+        // 攻击间隔
+        this.attackInterval = type.attackInterval || 1.5; // 增加默认攻击间隔到1.5秒，让特殊效果更容易观察
         // 是否是远程敌人
         this.isRanged = type.isRanged || false;
         // 远程攻击范围
@@ -127,7 +129,7 @@ class Enemy extends Character {
         // 地狱犬冲刺
         if (type.canDash) {
             this.dashCooldown = 0;
-            this.dashCooldownTime = type.dashCooldown || 3;
+            this.dashCooldownTime = type.dashCooldown || 1.5; // 减少冷却时间从3秒到1.5秒
             this.dashSpeed = type.dashSpeed || 2.5;
             this.dashDuration = type.dashDuration || 0.8;
             this.isDashing = false;
@@ -280,16 +282,16 @@ class Enemy extends Character {
                 this._dogState.circleReady = false;
                 return;
             }
-            const dashRange = (this.dashSpeed || 3.75) * (this.dashDuration || 1.2) * 0.7 * 60;
-            const safeDistance = dashRange * 0.6; // 降低安全距离
+            const dashRange = (this.dashSpeed || 2.5) * (this.dashDuration || 0.8) * 60; // 修正计算，移除0.7倍数
+            const safeDistance = Math.min(dashRange * 0.8, 120); // 进一步减小安全距离到120，让地狱犬更靠近玩家
             const dx = this.target.x - this.x;
             const dy = this.target.y - this.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
-            // 状态切换
-            if (dist < safeDistance * 0.7) { // 降低离开阈值
+            // 状态切换 - 调整阈值让地狱犬更频繁进入approach模式
+            if (dist < safeDistance * 0.5) { // 更小的离开阈值
                 this._dogState.mode = 'leave';
                 this._dogState.circleReady = false;
-            } else if (dist > safeDistance * 1.3) { // 提高接近阈值
+            } else if (dist > safeDistance * 1.4) { // 降低接近阈值，更容易进入approach模式
                 this._dogState.mode = 'approach';
                 this._dogState.circleReady = false;
             } else {
@@ -331,47 +333,46 @@ class Enemy extends Character {
                 const moved = Math.abs(this.x - this._dogState.lastX) + Math.abs(this.y - this._dogState.lastY);
                 if (moved < 0.5) {
                     this._dogState.stuckTimer += dt;
-                    if (this._dogState.stuckTimer > 1.0) { // 从0.5增加到1.0秒
-                        // 计算平滑跳跃
-                        if (!this._dogState.isJumping) {
-                            const jumpX = (Math.random() - 0.5) * 12; // 从16减少到12
-                            const jumpY = (Math.random() - 0.5) * 12;
-                            this._dogState.targetJumpX = this.x + jumpX;
-                            this._dogState.targetJumpY = this.y + jumpY;
-                            this._dogState.jumpStartX = this.x;
-                            this._dogState.jumpStartY = this.y;
-                            this._dogState.jumpProgress = 0;
-                            this._dogState.isJumping = true;
-                        } else {
-                            // 处理跳跃进度
-                            this._dogState.jumpProgress += dt * 3; // 三分之一秒完成跳跃
-                            if (this._dogState.jumpProgress >= 1) {
-                                // 跳跃完成
-                                this.x = this._dogState.targetJumpX;
-                                this.y = this._dogState.targetJumpY;
-                                this._dogState.isJumping = false;
-                                this._dogState.stuckTimer = 0;
-                                this._dogState.circleReady = false;
-                                this._dogState.mode = 'approach'; // 卡住时切换到approach状态
-                            } else {
-                                // 平滑插值
-                                const progress = Math.sin(this._dogState.jumpProgress * Math.PI / 2);
-                                this.x = this._dogState.jumpStartX + (this._dogState.targetJumpX - this._dogState.jumpStartX) * progress;
-                                this.y = this._dogState.jumpStartY + (this._dogState.targetJumpY - this._dogState.jumpStartY) * progress;
-                            }
-                        }
+                    if (this._dogState.stuckTimer > 0.8) { // 降低卡住检测时间
+                        // 更激进的反卡逻辑
+                        const jumpDistance = 25; // 增加跳跃距离
+                        const angle = Math.random() * Math.PI * 2;
+                        this.x += Math.cos(angle) * jumpDistance;
+                        this.y += Math.sin(angle) * jumpDistance;
+                        this._dogState.stuckTimer = 0;
+                        this._dogState.mode = 'approach'; // 强制切换到approach模式
+                        this._dogState.circleReady = false;
+                        console.log("地狱犬反卡处理：跳跃脱困");
                     }
                 } else {
-                    this._dogState.stuckTimer = Math.max(0, this._dogState.stuckTimer - dt);
-                    if (this._dogState.isJumping) {
-                        this._dogState.isJumping = false; // 如果正常移动了，取消跳跃状态
-                    }
+                    this._dogState.stuckTimer = Math.max(0, this._dogState.stuckTimer - dt * 2); // 更快恢复卡住计时器
                 }
                 this._dogState.lastX = this.x;
                 this._dogState.lastY = this.y;
-                // 冲刺判定
-                if (this.dashCooldown <= 0 && dist > dashRange * 1.1) {
-                    this.startDash();
+                // 冲刺判定 - 多种触发条件，让地狱犬更频繁冲刺
+                if (this.dashCooldown <= 0) {
+                    let shouldDash = false;
+                    
+                    // 条件1：距离较远时冲刺（主要条件）
+                    if (dist > 180) {
+                        shouldDash = true;
+                    }
+                    // 条件2：在circle模式下随机冲刺（增加随机性）
+                    else if (this._dogState.mode === 'circle' && this._dogState.circleReady && Math.random() < 0.008) { // 每帧约0.8%几率
+                        shouldDash = true;
+                    }
+                    // 条件3：被卡住时间过长，强制冲刺突破
+                    else if (this._dogState.stuckTimer > 0.5) {
+                        shouldDash = true;
+                    }
+                    // 条件4：approach模式下距离适中时也可以冲刺
+                    else if (this._dogState.mode === 'approach' && dist > 120 && Math.random() < 0.012) { // 每帧约1.2%几率
+                        shouldDash = true;
+                    }
+                    
+                    if (shouldDash) {
+                        this.startDash();
+                    }
                 }
             }
         }
@@ -479,9 +480,19 @@ class Enemy extends Character {
         if (this.dashTimer >= this.dashDuration) {
             this.isDashing = false;
             this.dashCooldown = this.dashCooldownTime;
-            // 冲刺结束后彻底重置AI状态，防止卡住
+            // 冲刺结束后优化AI状态，让地狱犬更激进
             if (this._dogState) {
-                this._dogState.mode = 'circle';
+                // 如果冲刺后距离仍然较远，立即切换到approach模式
+                if (this.target) {
+                    const dx = this.target.x - this.x;
+                    const dy = this.target.y - this.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist > 150) {
+                        this._dogState.mode = 'approach';
+                    } else {
+                        this._dogState.mode = 'circle';
+                    }
+                }
                 this._dogState.stuckTimer = 0;
                 this._dogState.lastX = this.x;
                 this._dogState.lastY = this.y;
@@ -695,47 +706,71 @@ class Enemy extends Character {
         if (this.type) {
             // 处理燃烧效果 (火焰精灵)
             if (this.type.appliesBurn) {
-                if (!target.statusEffects) {
-                    target.statusEffects = {};
-                }
-
-                // 应用燃烧效果
-                const burnDamage = this.type.burnDamage || (this.damage * 0.3);
+                const burnDamage = this.type.burnDamage || (this.stats.damage * 0.3);
                 const burnDuration = this.type.burnDuration || 3;
+                
+                // 使用玩家的燃烧应用方法或直接设置状态效果
+                if (target && typeof target.applyStatusEffect === 'function') {
+                    // 如果目标有applyStatusEffect方法，使用它
+                    target.applyStatusEffect('burn', {
+                        damage: burnDamage,
+                        duration: burnDuration,
+                        tickInterval: 1.0, // 每秒伤害一次
+                        tickTimer: 1.0,
+                        source: this,
+                        icon: '🔥'
+                    });
+                } else {
+                    // 直接设置状态效果（为了兼容性）
+                    if (!target.statusEffects) {
+                        target.statusEffects = {};
+                    }
 
-                target.statusEffects.burn = {
-                    damage: burnDamage,
-                    duration: burnDuration,
-                    tickInterval: burnDuration / 4, // 4次伤害
-                    tickTimer: burnDuration / 4,
-                    source: this
-                };
+                    target.statusEffects.burn = {
+                        damage: burnDamage,
+                        duration: burnDuration,
+                        tickInterval: 1.0, // 每秒伤害一次
+                        tickTimer: 1.0,
+                        source: this,
+                        icon: '🔥'
+                    };
+                }
             }
 
             // 处理减速效果 (冰霜精灵)
             if (this.type.appliesSlow) {
-                if (!target.statusEffects) {
-                    target.statusEffects = {};
-                }
-
-                // 应用减速效果
-                const slowFactor = this.type.slowFactor || 0.6;
+                const slowFactor = this.type.slowFactor || 0.5;
                 const slowDuration = this.type.slowDuration || 2;
 
-                // 不再直接修改速度，而是使用新的应用减速效果的逻辑
-                this.applySlowEffect(target, slowFactor, slowDuration);
+                // 使用玩家的减速应用方法或直接调用applySlowEffect
+                if (target && typeof target.applyStatusEffect === 'function') {
+                    // 如果目标有applyStatusEffect方法，使用它
+                    target.applyStatusEffect('slow', {
+                        factor: slowFactor,
+                        duration: slowDuration,
+                        source: this,
+                        icon: '🐌'
+                    });
+                } else {
+                    // 否则使用我们自己的减速效果应用逻辑
+                    this.applySlowEffect(target, slowFactor, slowDuration);
+                }
             }
 
-            // 处理眩晕效果 (雷电精灵)
+            // 处理眩晕效果 (雷电精灵) - 提高几率到80%便于测试
             if (this.type.appliesStun) {
-                const stunChance = this.type.stunChance || 0.3;
-                const stunDuration = this.type.stunDuration || 0.5;
+                const stunChance = this.type.stunChance || 0.8; // 提高到80%
+                const stunDuration = this.type.stunDuration || 1.0; // 增加持续时间到1秒
 
                 if (Math.random() < stunChance) {
                     // 调用目标的 applyStatusEffect 方法以确保免疫逻辑得到遵守
                     if (target && typeof target.applyStatusEffect === 'function') {
-                        console.log(`敌人 ${this.type.name} 尝试对 ${target.constructor.name} 施加眩晕。持续时间: ${stunDuration}`);
-                        target.applyStatusEffect('stun', { duration: stunDuration, source: this });
+                        console.log(`敌人 ${this.type.name} 对 ${target.constructor.name} 施加眩晕。持续时间: ${stunDuration}`);
+                        target.applyStatusEffect('stun', { 
+                            duration: stunDuration, 
+                            source: this,
+                            icon: '⭐'
+                        });
                     } else {
                         console.warn("目标没有 applyStatusEffect 方法或目标为空。");
                     }
@@ -1033,6 +1068,16 @@ class Enemy extends Character {
             }
             ctx.restore();
         }
+
+        // 绘制椭圆形阴影（在绘制敌人之前）
+        ctx.save();
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+        ctx.beginPath();
+        const enemySize = this.size * 2; // 敌人的显示大小
+        const shadowCenterY = screenPos.y + enemySize / 2 + 5; // 5是额外偏移，可调
+        ctx.ellipse(screenPos.x, shadowCenterY, enemySize / 2.5, enemySize / 7, 0, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.restore();
 
         // 绘制敌人
         try {
