@@ -44,109 +44,74 @@ class Character extends GameObject {
      * @param {Object} effectData - 效果数据 (例如 { duration: 1, factor: 0.5, damage: 5, tickInterval: 0.5, source: null })
      */
     applyStatusEffect(type, effectData) {
+        // 确保statusEffects对象正确初始化（修复精灵特殊效果问题）
+        if (!this.statusEffects || typeof this.statusEffects !== 'object') {
+            console.warn(`[DEBUG] statusEffects对象无效，重新初始化: ${this.constructor.name}`);
+            this.statusEffects = {
+                stun: null,
+                slow: null,
+                burn: null,
+                poison: null
+            };
+        }
+        
+        // 确保所有必需的状态效果类型都存在
+        const requiredTypes = ['stun', 'slow', 'burn', 'poison'];
+        for (const requiredType of requiredTypes) {
+            if (!this.statusEffects.hasOwnProperty(requiredType)) {
+                console.warn(`[DEBUG] 缺少状态效果类型 ${requiredType}，添加到 ${this.constructor.name}`);
+                this.statusEffects[requiredType] = null;
+            }
+        }
+        
         if (!this.statusEffects.hasOwnProperty(type)) {
             console.warn(`Unknown status effect type: ${type}`);
             return;
         }
 
-        // 对于减速效果，需要特殊处理
+        // 对于减速效果 - 直接应用，不做任何检查
         if (type === 'slow') {
-            if (this.getStat && this.getStat('slowImmunity')) {
-                if (this.statusEffects.slow) {
-                    delete this.statusEffects.slow;
-                    this.speed = this.getStat('speed');
-                }
-                this._pendingNormalSlow = null;
-                return;
-            }
-            let slowResistance = 0;
-            if (this.getStat && typeof this.getStat('slowResistance') === 'number') {
-                slowResistance = this.getStat('slowResistance');
-            }
-            const actualSlowStrength = effectData.factor * (1 - slowResistance);
             const currentBaseSpeed = this.getStat('speed');
+            const actualSlowStrength = effectData.factor || 0.5;
             
-            if (effectData.isAuraEffect) {
-                // 进入毒圈时始终覆盖为光环减速，保存当前普通减速
-                if (this.statusEffects.slow && !this.statusEffects.slow.isAuraEffect) {
-                    this._pendingNormalSlow = { ...this.statusEffects.slow };
-                }
-                // 每次进入毒圈都强制覆盖光环减速，并刷新duration
-                this.statusEffects[type] = {
-                    ...effectData,
-                    factor: actualSlowStrength,
-                    originalSpeed: currentBaseSpeed,
-                    icon: '🐌',
-                    isAuraEffect: true,
-                    duration: effectData.duration || 0.5 // 每帧都重置duration，防止被清理
-                };
-                this.speed = currentBaseSpeed * actualSlowStrength;
-                return;
-            }
-            
-            // 离开毒圈时恢复普通减速
-            if (effectData._restoreFromAura) {
-                if (this._pendingNormalSlow) {
-                    this.statusEffects.slow = { ...this._pendingNormalSlow };
-                    this.speed = currentBaseSpeed * this._pendingNormalSlow.factor;
-                } else {
-                    delete this.statusEffects.slow;
-                    this.speed = currentBaseSpeed;
-                }
-                this._pendingNormalSlow = null;
-                return;
-            }
-            
-            // 如果当前有光环slow，普通slow不生效
-            if (this.statusEffects.slow && this.statusEffects.slow.isAuraEffect && !effectData.isAuraEffect) {
-                return;
-            }
-            
-            // 应用普通减速效果 - 修改逻辑，允许刷新减速效果
-            if (!this.statusEffects.slow || !this.statusEffects.slow.isAuraEffect) {
-                const originalSpeed = this.statusEffects.slow ? this.statusEffects.slow.originalSpeed : currentBaseSpeed;
-                this.statusEffects[type] = {
-                    ...effectData,
-                    factor: actualSlowStrength,
-                    originalSpeed: originalSpeed,
-                    icon: '🐌',
-                    isAuraEffect: false
-                };
-                this.speed = originalSpeed * actualSlowStrength;
-                console.log(`Slow effect applied to ${this.constructor.name}. Factor: ${actualSlowStrength}, Duration: ${effectData.duration}`);
-            }
+            // 直接覆盖任何现有的减速效果
+            this.statusEffects[type] = {
+                ...effectData,
+                factor: actualSlowStrength,
+                originalSpeed: currentBaseSpeed,
+                icon: '🐌',
+                isAuraEffect: false
+            };
+            this.speed = currentBaseSpeed * actualSlowStrength;
             return;
         }
 
-        // 对于眩晕效果
+        // 对于眩晕效果 - 检查免疫状态
         if (type === 'stun') {
             // 如果当前正被眩晕或处于眩晕免疫中，则不施加新的眩晕
             if (this.statusEffects.stun || this.stunImmunityTimer > 0) {
                 console.log(`Stun application blocked for ${this.constructor.name}. Has stun: ${!!this.statusEffects.stun}, Immunity timer: ${this.stunImmunityTimer.toFixed(2)}`);
                 return;
             }
-            // 如果新的眩晕效果比现有的弱（虽然上面已经return了，但保留逻辑完整性）
-            // 确保 effectData.duration 存在且有效
-            const newDuration = (effectData && typeof effectData.duration === 'number') ? effectData.duration : 0;
+            
+            const newDuration = (effectData && typeof effectData.duration === 'number') ? effectData.duration : 1.0;
             console.log(`Stun applied via applyStatusEffect to ${this.constructor.name}. Duration: ${newDuration.toFixed(2)}, Current Stun Immunity: ${this.stunImmunityTimer.toFixed(2)}`);
             this.statusEffects[type] = { ...effectData, icon: '⭐', duration: newDuration }; 
             return; 
         }
 
-        // 对于燃烧效果 - 总是刷新或应用新的燃烧效果
+        // 对于燃烧效果 - 直接应用
         if (type === 'burn') {
-            // 直接应用新的燃烧效果，覆盖旧的
             this.statusEffects[type] = { 
                 ...effectData, 
                 icon: '🔥',
                 tickInterval: effectData.tickInterval || 1.0,
                 tickTimer: effectData.tickTimer || 1.0
             };
-            console.log(`Burn effect applied to ${this.constructor.name}. Damage: ${effectData.damage}, Duration: ${effectData.duration}`);
             return;
         }
         
-        // 其他效果直接应用或覆盖
+        // 其他效果直接应用
         this.statusEffects[type] = { ...effectData };
     }
 
@@ -184,8 +149,8 @@ class Character extends GameObject {
             this.statusEffects.stun.duration -= dt;
             if (this.statusEffects.stun.duration <= 0) {
                 delete this.statusEffects.stun;
-                // 眩晕结束后给予短暂免疫时间，防止连续眩晕
-                this.stunImmunityTimer = 0.05; // 减少免疫时间到0.05秒
+                // 眩晕结束后给予免疫时间，防止连续眩晕
+                this.stunImmunityTimer = 1.0; // 恢复到1.0秒免疫时间
             }
         }
 

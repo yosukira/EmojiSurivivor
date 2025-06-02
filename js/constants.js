@@ -170,7 +170,7 @@ const ENEMY_TYPES = [
         xpMult: 1.4,
         weight: 4,
         minTime: 540, // 9分钟后开始刷新
-        attackInterval: 0.8, // 进一步缩短攻击间隔
+        attackInterval: 0.2, // 大幅缩短攻击间隔，让特殊效果可以持续触发
         appliesBurn: true, // 燃烧效果
         burnDamage: 2, // 改成2点伤害
         burnDuration: 4 // 增加燃烧持续时间
@@ -185,7 +185,7 @@ const ENEMY_TYPES = [
         xpMult: 1.4,
         weight: 4,
         minTime: 540, // 9分钟后开始刷新
-        attackInterval: 0.8, // 进一步缩短攻击间隔
+        attackInterval: 0.2, // 大幅缩短攻击间隔，让特殊效果可以持续触发
         appliesSlow: true, // 减速效果
         slowFactor: 0.4, // 更强的减速，减速到40%
         slowDuration: 3 // 增加减速持续时间
@@ -200,7 +200,7 @@ const ENEMY_TYPES = [
         xpMult: 1.4,
         weight: 4,
         minTime: 540, // 9分钟后开始刷新
-        attackInterval: 0.8, // 进一步缩短攻击间隔
+        attackInterval: 0.2, // 大幅缩短攻击间隔，让特殊效果可以持续触发
         appliesStun: true, // 眩晕效果
         stunChance: 0.9, // 90%眩晕几率
         stunDuration: 1.5 // 1.5秒眩晕时间

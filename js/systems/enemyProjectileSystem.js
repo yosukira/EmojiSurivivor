@@ -144,7 +144,12 @@ class EnemyProjectile {
         }
         // 确保玩家有statusEffects对象
         if (!player.statusEffects) {
-            player.statusEffects = {};
+            player.statusEffects = {
+                stun: null,
+                slow: null,
+                burn: null,
+                poison: null
+            };
         }
         
         // 保存原有速度（如果没有已存在的减速效果）

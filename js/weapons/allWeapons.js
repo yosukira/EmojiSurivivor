@@ -2187,7 +2187,12 @@ class FireBladeProjectile extends Projectile {
      */
     applyBurnEffect(enemy, source) {
         if (!enemy.statusEffects) {
-            enemy.statusEffects = {};
+            enemy.statusEffects = {
+                stun: null,
+                slow: null,
+                burn: null,
+                poison: null
+            };
         }
         
         // 使用武器类中计算好的燃烧伤害和持续时间
@@ -2233,7 +2238,12 @@ class FireBladeProjectile extends Projectile {
             // 如果在范围内，添加较弱的燃烧效果
             if (distSq <= this.aoeRange * this.aoeRange) {
                 if (!nearbyEnemy.statusEffects) {
-                    nearbyEnemy.statusEffects = {};
+                    nearbyEnemy.statusEffects = {
+                        stun: null,
+                        slow: null,
+                        burn: null,
+                        poison: null
+                    };
                 }
                 
                 const reducedDamage = this.burnDamage * 0.7; // 70%的伤害

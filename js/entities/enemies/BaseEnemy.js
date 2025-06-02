@@ -723,7 +723,12 @@ class Enemy extends Character {
                 } else {
                     // 直接设置状态效果（为了兼容性）
                     if (!target.statusEffects) {
-                        target.statusEffects = {};
+                        target.statusEffects = {
+                            stun: null,
+                            slow: null,
+                            burn: null,
+                            poison: null
+                        };
                     }
 
                     target.statusEffects.burn = {
@@ -782,7 +787,12 @@ class Enemy extends Character {
             // 处理毒素效果 (精英僵尸)
             if (this.type.hasPoisonAura && this.type.poisonDamage) {
                 if (!target.statusEffects) {
-                    target.statusEffects = {};
+                    target.statusEffects = {
+                        stun: null,
+                        slow: null,
+                        burn: null,
+                        poison: null
+                    };
                 }
 
                 // 应用中毒效果

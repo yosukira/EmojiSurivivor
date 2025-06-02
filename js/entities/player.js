@@ -11,6 +11,15 @@ class Player extends Character {
     constructor(x, y) {
         // 调用父类构造函数
         super(x, y, EMOJI.PLAYER, GAME_FONT_SIZE * 1.2, PLAYER_DEFAULT_STATS);
+        
+        // 显式初始化statusEffects，确保包含所有状态效果类型
+        this.statusEffects = {
+            stun: null,
+            slow: null,
+            burn: null,
+            poison: null
+        };
+        
         // 等级
         this.level = 1;
 
@@ -1143,8 +1152,13 @@ class Player extends Character {
         this.y = canvas.height / 2;
         // 重置生命值
         this.health = this.maxHealth;
-        // 重置状态效果
-        this.statusEffects = {};
+        // 重置状态效果 - 正确初始化所有状态效果类型
+        this.statusEffects = {
+            stun: null,
+            slow: null,
+            burn: null,
+            poison: null
+        };
         // 重置速度
         this.speed = PLAYER_DEFAULT_STATS.speed;
         this.baseSpeed = PLAYER_DEFAULT_STATS.speed;
@@ -1176,8 +1190,13 @@ class Player extends Character {
         }
         // 重新计算所有属性
         this.calculateStats();
-        // 清空所有状态效果
-        this.statusEffects = {};
+        // 清空所有状态效果 - 正确初始化所有状态效果类型
+        this.statusEffects = {
+            stun: null,
+            slow: null,
+            burn: null,
+            poison: null
+        };
         this.invincibleSources = {};
         // 重置所有被动和武器的临时状态
         if (this.weapons) {
