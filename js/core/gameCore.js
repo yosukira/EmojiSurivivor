@@ -12,108 +12,155 @@
 // 注意：对象池已在gameStateManager.js中声明
 
 /**
+ * 强制注册被动物品到BASE_PASSIVES数组
+ */
+function forceRegisterPassiveItems() {
+    console.log("强制注册被动物品到BASE_PASSIVES...");
+    
+    // 确保BASE_PASSIVES存在
+    if (typeof window.BASE_PASSIVES === 'undefined') {
+        window.BASE_PASSIVES = [];
+    }
+    
+    // 清空现有数组
+    BASE_PASSIVES.length = 0;
+    
+    // 手动添加所有被动物品类
+    const passiveClasses = [
+        Spinach, Wings, Bracer, HollowHeart, AncientTreeSap, 
+        EmptyBottle, Gargoyle, BarrierRune, FrostHeart, 
+        DragonSpice, ThunderAmulet, PoisonOrb, MagnetSphere, SoulRelic
+    ];
+    
+    passiveClasses.forEach(cls => {
+        if (cls && typeof cls === 'function') {
+            BASE_PASSIVES.push(cls);
+            console.log(`已注册被动物品: ${cls.name}`);
+        } else {
+            console.error(`无效的被动物品类:`, cls);
+        }
+    });
+    
+    console.log(`BASE_PASSIVES注册完成，共 ${BASE_PASSIVES.length} 个被动物品`);
+    return BASE_PASSIVES;
+}
+
+/**
  * 初始化游戏
  */
 function init() {
-    resetGame(); //确保在初始化前重置所有状态
+    try {
+        console.log("Game initialization started");
+        
+        // 获取Canvas和Context
+        canvas = document.getElementById('gameCanvas');
+        ctx = canvas.getContext('2d');
+        
+        // 强制注册被动物品
+        forceRegisterPassiveItems();
+        
+        resetGame(); //确保在初始化前重置所有状态
 
-    console.log("初始化游戏...");
+        console.log("初始化游戏...");
+        
+        // 获取画布和上下文
+        canvas = document.getElementById('gameCanvas');
+        ctx = canvas.getContext('2d');
 
-    // 获取画布和上下文
-    canvas = document.getElementById('gameCanvas');
-    ctx = canvas.getContext('2d');
+        // 设置画布尺寸
+        canvas.width = GAME_WIDTH;
+        canvas.height = GAME_HEIGHT;
 
-    // 设置画布尺寸
-    canvas.width = GAME_WIDTH;
-    canvas.height = GAME_HEIGHT;
+        // 创建离屏画布
+        offscreenCanvas = document.createElement('canvas');
+        offscreenCanvas.width = GAME_WIDTH;
+        offscreenCanvas.height = GAME_HEIGHT;
+        offscreenCtx = offscreenCanvas.getContext('2d');
 
-    // 创建离屏画布
-    offscreenCanvas = document.createElement('canvas');
-    offscreenCanvas.width = GAME_WIDTH;
-    offscreenCanvas.height = GAME_HEIGHT;
-    offscreenCtx = offscreenCanvas.getContext('2d');
+        // 从预加载的资源中获取图像
+        playerImage = loadedAssets.player;
+        backgroundImage = loadedAssets.background;
 
-    // 从预加载的资源中获取图像
-    playerImage = loadedAssets.player;
-    backgroundImage = loadedAssets.background;
+        if (!playerImage) {
+            console.error("玩家图片未能从预加载资源中获取！");
+        }
+        if (!backgroundImage) {
+            console.warn("背景图片未能从预加载资源中获取，将使用纯色背景。");
+        }
 
-    if (!playerImage) {
-        console.error("玩家图片未能从预加载资源中获取！");
+        // 清空对象池和活动列表
+        inactiveProjectiles = [];
+        inactiveDamageNumbers = [];
+        projectiles = [];
+        enemyProjectiles = []; // 清空敌人投射物
+        damageNumbers = [];
+        enemies = [];
+        xpGems = [];
+        worldObjects = [];
+        visualEffects = [];
+        activeGhosts = []; // 清空活动的幽灵
+
+        // 重置状态
+        isGameOver = false;
+        isPaused = false;
+        isLevelUp = false;
+        gameTime = 0;
+        killCount = 0;
+
+        // 创建玩家
+        player = new Player(GAME_WIDTH / 2, GAME_HEIGHT / 2);
+        window.player = player;
+
+        // 添加初始武器
+        player.addWeapon(new DaggerWeapon());
+
+        // 重置敌人和Boss管理器
+        enemyManager.spawnTimer = 0;
+        enemyManager.currentSpawnInterval = 3.5; // 使用更长的初始生成间隔
+        enemyManager.difficultyTimer = 0;
+        bossManager.nextBossTime = FIRST_BOSS_TIME;
+        bossManager.currentBoss = null;
+        bossManager.bossWarningTimer = 0;
+        bossManager.showingWarning = false;
+        bossManager.defeatedBossCount = 0; // 确保重置Boss击败计数
+        bossManager.pendingBossType = null; // 确保重置待生成的Boss类型
+
+        // 重置UI
+        document.getElementById('gameOverScreen').classList.add('hidden');
+        document.getElementById('levelUpScreen').classList.add('hidden');
+        document.getElementById('pauseScreen').classList.add('hidden');
+        document.getElementById('startScreen').classList.add('hidden');
+
+        // 重置相机位置和状态
+        cameraManager.setPosition(player.x, player.y);
+        cameraManager.deactivateBossArena();
+
+        // 开始游戏循环
+        lastTime = performance.now();
+        if (animationFrameId) {
+            cancelAnimationFrame(animationFrameId);
+            animationFrameId = null;
+        }
+        animationFrameId = requestAnimationFrame(gameLoop);
+
+        // 更新UI
+        updateUI();
+
+        // 标记游戏为运行状态
+        isGameRunning = true;
+
+        // 游戏实际开始时显示游戏内主要UI
+        const topLeftUI = document.getElementById('topLeftUI');
+        const topRightUI = document.getElementById('topRightUI');
+        const bottomLeftUI = document.getElementById('bottomLeftUI');
+        if (topLeftUI) topLeftUI.classList.remove('hidden');
+        if (topRightUI) topRightUI.classList.remove('hidden');
+        if (bottomLeftUI) bottomLeftUI.classList.remove('hidden');
+
+        console.log("Emoji 幸存者 - 重构版 已初始化。游戏开始！");
+    } catch (error) {
+        console.error("游戏初始化错误:", error);
     }
-    if (!backgroundImage) {
-        console.warn("背景图片未能从预加载资源中获取，将使用纯色背景。");
-    }
-
-    // 清空对象池和活动列表
-    inactiveProjectiles = [];
-    inactiveDamageNumbers = [];
-    projectiles = [];
-    enemyProjectiles = []; // 清空敌人投射物
-    damageNumbers = [];
-    enemies = [];
-    xpGems = [];
-    worldObjects = [];
-    visualEffects = [];
-    activeGhosts = []; // 清空活动的幽灵
-
-    // 重置状态
-    isGameOver = false;
-    isPaused = false;
-    isLevelUp = false;
-    gameTime = 0;
-    killCount = 0;
-
-    // 创建玩家
-    player = new Player(GAME_WIDTH / 2, GAME_HEIGHT / 2);
-    window.player = player;
-
-    // 添加初始武器
-    player.addWeapon(new DaggerWeapon());
-
-    // 重置敌人和Boss管理器
-    enemyManager.spawnTimer = 0;
-    enemyManager.currentSpawnInterval = 3.5; // 使用更长的初始生成间隔
-    enemyManager.difficultyTimer = 0;
-    bossManager.nextBossTime = FIRST_BOSS_TIME;
-    bossManager.currentBoss = null;
-    bossManager.bossWarningTimer = 0;
-    bossManager.showingWarning = false;
-    bossManager.defeatedBossCount = 0; // 确保重置Boss击败计数
-    bossManager.pendingBossType = null; // 确保重置待生成的Boss类型
-
-    // 重置UI
-    document.getElementById('gameOverScreen').classList.add('hidden');
-    document.getElementById('levelUpScreen').classList.add('hidden');
-    document.getElementById('pauseScreen').classList.add('hidden');
-    document.getElementById('startScreen').classList.add('hidden');
-
-    // 重置相机位置和状态
-    cameraManager.setPosition(player.x, player.y);
-    cameraManager.deactivateBossArena();
-
-    // 开始游戏循环
-    lastTime = performance.now();
-    if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId);
-        animationFrameId = null;
-    }
-    animationFrameId = requestAnimationFrame(gameLoop);
-
-    // 更新UI
-    updateUI();
-
-    // 标记游戏为运行状态
-    isGameRunning = true;
-
-    // 游戏实际开始时显示游戏内主要UI
-    const topLeftUI = document.getElementById('topLeftUI');
-    const topRightUI = document.getElementById('topRightUI');
-    const bottomLeftUI = document.getElementById('bottomLeftUI');
-    if (topLeftUI) topLeftUI.classList.remove('hidden');
-    if (topRightUI) topRightUI.classList.remove('hidden');
-    if (bottomLeftUI) bottomLeftUI.classList.remove('hidden');
-
-    console.log("Emoji 幸存者 - 重构版 已初始化。游戏开始！");
 }
 
 /**
