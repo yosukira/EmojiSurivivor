@@ -940,29 +940,49 @@ window.DebugPanel = {
 };
 
 const tryUpdateDebugPanelOnPlayerReady = () => {
-    if (window.DebugPanel && window.DebugPanel.panel && typeof player !== 'undefined' && player) {
+    if (typeof player !== 'undefined' && player && window.DebugPanel && window.DebugPanel.updateInvincibleButton) {
         window.DebugPanel.updateInvincibleButton();
     }
 };
 
-let playerCheckIntervalId = setInterval(() => {
-    if (typeof player !== 'undefined' && player && (player.id !== undefined || player.x !== undefined)) {
-        tryUpdateDebugPanelOnPlayerReady();
+// 当页面加载时尝试更新
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        setTimeout(tryUpdateDebugPanelOnPlayerReady, 100);
+    });
+} else {
+    setTimeout(tryUpdateDebugPanelOnPlayerReady, 100);
+}
+
+// 定期检查并更新无敌按钮状态
+setInterval(() => {
+    if (typeof player !== 'undefined' && player && window.DebugPanel && window.DebugPanel.updateInvincibleButton) {
+        window.DebugPanel.updateInvincibleButton();
     }
 }, 1000);
+
+// 武器已经在 allWeapons.js 中定义，无需重复添加到 BASE_WEAPONS
+console.log('Debug panel loaded. Weapons are defined in allWeapons.js');
 
 // 添加一个命令：显示当前所有被动道具的详细信息
 debugCommands.passives = {
     help: "显示当前所有被动道具的详细信息",
     action: () => {
         if (!player || !player.passiveItems) {
+            console.log("玩家或被动道具列表不存在");
             return;
         }
         
+        console.log("===== 被动道具信息 =====");
         player.passiveItems.forEach((passive, index) => {
             console.log(`${index + 1}. ${passive.name} (Lv ${passive.level})`);
             console.log(`   描述: ${passive.description}`);
-            console.log(`   属性加成:`, passive.bonuses);
+            if (passive.bonuses) {
+                console.log(`   属性加成:`, passive.bonuses);
+            }
+            if (typeof passive.getBonuses === 'function') {
+                console.log(`   当前加成:`, passive.getBonuses());
+            }
         });
         
         // 输出玩家当前计算后的属性
@@ -974,530 +994,64 @@ debugCommands.passives = {
         ];
         
         stats.forEach(stat => {
-            console.log(`${stat}: ${player.getStat(stat)}`);
+            try {
+                const value = player.getStat(stat);
+                console.log(`${stat}: ${value}`);
+            } catch (e) {
+                console.log(`${stat}: 获取失败 (${e.message})`);
+            }
         });
     }
 };
 
-// 创建缺失的武器类
-// 由于这些类在项目中可能不存在，我们在debug.js中创建它们，确保debug面板可以显示这些选项
-// 这些只是基本实现，真正使用时应替换为正确的实现
-
-// 藤蔓种子
-if (typeof VineSeedWeapon === 'undefined') {
-    class VineSeedWeapon extends Weapon {
-        static Name = "藤蔓种子";
-        static Emoji = "🌱";
-        static MaxLevel = 10;
-
-        constructor() {
-            super(VineSeedWeapon.Name, VineSeedWeapon.Emoji, 2.0, VineSeedWeapon.MaxLevel);
-        }
-
-        calculateStats() {
-            this.stats = {
-                damage: 4 + (this.level - 1) * 1.5,
-                cooldown: Math.max(1.8, 2.0 - (this.level - 1) * 0.03),
-                count: Math.floor(1 + (this.level - 1) / 3),
-                radius: 45 + (this.level - 1) * 3,
-                slowFactor: 0.15 + (this.level - 1) * 0.03,
-                duration: 3.5
-            };
+// 添加一个命令：显示当前所有武器的详细信息
+debugCommands.weapons = {
+    help: "显示当前所有武器的详细信息",
+    action: () => {
+        if (!player || !player.weapons) {
+            console.log("玩家或武器列表不存在");
+            return;
         }
         
-        /**
-         * 更新武器状态
-         * @param {number} dt - 时间增量
-         * @param {Player} owner - 拥有者
-         */
-        update(dt, owner) {
-            // 如果没有统计信息，计算统计信息
-            if (!this.stats) {
-                this.calculateStats();
+        console.log("===== 武器信息 =====");
+        player.weapons.forEach((weapon, index) => {
+            console.log(`${index + 1}. ${weapon.name} (Lv ${weapon.level})`);
+            if (weapon.stats) {
+                console.log(`   属性:`, weapon.stats);
             }
-            
-            // 增加冷却计时器
-            this.cooldownTimer += dt;
-            
-            // 如果冷却结束，发射藤蔓
-            if (this.cooldownTimer >= this.stats.cooldown) {
-                // 重置冷却计时器
-                this.cooldownTimer = 0;
-                
-                // 发射藤蔓攻击
-                this.castVine(owner);
-            }
-        }
-        
-        /**
-         * 发射藤蔓攻击
-         * @param {Player} owner - 拥有者
-         */
-        castVine(owner) {
-            // 获取基础伤害乘数
-            const damageMultiplier = owner.getStat ? owner.getStat('damageMultiplier') : 1;
-            const finalDamage = this.stats.damage * damageMultiplier;
-            
-            // 获取范围乘数
-            const areaMultiplier = owner.getStat ? owner.getStat('areaMultiplier') : 1;
-            const finalRadius = this.stats.radius * areaMultiplier;
-            
-            // 获取持续时间乘数
-            const durationMultiplier = owner.getStat ? owner.getStat('durationMultiplier') : 1;
-            const finalDuration = this.stats.duration * durationMultiplier;
-            
-            // 寻找目标位置
-            for (let i = 0; i < this.stats.count; i++) {
-                // 寻找随机敌人
-                let targetEnemy = owner.findRandomEnemy(400);
-                
-                if (targetEnemy) {
-                    // 如果找到敌人，在敌人位置创建藤蔓
-                    if (typeof VineHazard === 'function') {
-                        const vine = new VineHazard(
-                            targetEnemy.x,
-                            targetEnemy.y,
-                            finalRadius,
-                            finalDamage,
-                            0.5, // 攻击间隔
-                            this.stats.slowFactor,
-                            finalDuration,
-                            owner
-                        );
-                        
-                        // 添加到全局数组
-                        if (typeof hazards !== 'undefined') {
-                            hazards.push(vine);
-                        }
-                    }
-                }
-            }
-        }
-
-        getInitialDescription() {
-            return "种植藤蔓，减速并伤害范围内敌人。";
-        }
-
-        getCurrentDescription() {
-            return `种植${this.stats.count}个藤蔓，减速敌人${Math.round(this.stats.slowFactor * 100)}%并造成${this.stats.damage}伤害。`;
-        }
+            console.log(`   冷却时间: ${weapon.cooldownTimer.toFixed(2)}/${weapon.baseCooldown}`);
+        });
     }
-    window.VineSeedWeapon = VineSeedWeapon;
-}
+};
 
-// 光棱塔
-if (typeof LaserPrismWeapon === 'undefined') {
-    class LaserPrismWeapon extends Weapon {
-        static Name = "光棱塔";
-        static Emoji = "🔆";
-        static MaxLevel = 10;
-
-        constructor() {
-            super(LaserPrismWeapon.Name, LaserPrismWeapon.Emoji, 1.5, LaserPrismWeapon.MaxLevel);
-        }
-
-        calculateStats() {
-            this.stats = {
-                damage: 15 + (this.level - 1) * 5,
-                cooldown: Math.max(0.8, 1.5 - (this.level - 1) * 0.07),
-                count: 1 + Math.floor((this.level - 1) / 2),
-                beamWidth: 15, // 固定宽度，不随等级增加
-                duration: 1.0 + (this.level - 1) * 0.1,
-                piercing: this.level >= 5
-            };
+// 添加一个命令：清理垃圾对象
+debugCommands.cleanup = {
+    help: "手动清理游戏中的垃圾对象",
+    action: () => {
+        let cleaned = 0;
+        
+        // 清理敌人
+        if (typeof enemies !== 'undefined') {
+            const beforeCount = enemies.length;
+            enemies = enemies.filter(e => e && !e.isGarbage && e.isActive);
+            cleaned += beforeCount - enemies.length;
         }
         
-        /**
-         * 更新武器状态
-         * @param {number} dt - 时间增量
-         * @param {Player} owner - 拥有者
-         */
-        update(dt, owner) {
-            // 如果没有统计信息，计算统计信息
-            if (!this.stats) {
-                this.calculateStats();
-            }
-            
-            // 增加冷却计时器
-            this.cooldownTimer += dt;
-            
-            // 如果冷却结束，发射激光
-            if (this.cooldownTimer >= this.stats.cooldown) {
-                // 重置冷却计时器
-                this.cooldownTimer = 0;
-                
-                // 发射激光攻击
-                this.fireLaser(owner);
-            }
+        // 清理投射物
+        if (typeof projectiles !== 'undefined') {
+            const beforeCount = projectiles.length;
+            projectiles = projectiles.filter(p => p && !p.isGarbage && p.isActive);
+            cleaned += beforeCount - projectiles.length;
         }
         
-        /**
-         * 发射激光攻击
-         * @param {Player} owner - 拥有者
-         */
-        fireLaser(owner) {
-            // 获取基础伤害乘数
-            const damageMultiplier = owner.getStat ? owner.getStat('damageMultiplier') : 1;
-            const finalDamage = this.stats.damage * damageMultiplier;
-            
-            // 获取持续时间乘数
-            const durationMultiplier = owner.getStat ? owner.getStat('durationMultiplier') : 1;
-            const finalDuration = this.stats.duration * durationMultiplier;
-            
-            // 计算激光方向，确保数量固定 - 修复闪烁问题
-            const beamCount = this.stats.count;
-            
-            // 使用固定的起始角度，而不是随机角度，这样每次生成的激光位置都固定
-            const startAngle = (gameTime * 0.5) % (Math.PI * 2); // 随时间缓慢旋转
-            const angleStep = Math.PI * 2 / beamCount;
-            
-            for (let i = 0; i < beamCount; i++) {
-                const angle = startAngle + angleStep * i;
-                const dirX = Math.cos(angle);
-                const dirY = Math.sin(angle);
-                
-                // 使用LaserBeamAttack类创建激光
-                if (typeof LaserBeamAttack === 'function') {
-                    const beam = new LaserBeamAttack(
-                        owner,
-                        dirX,
-                        dirY,
-                        200, // 激光长度缩短为200（从300减少）
-                        this.stats.beamWidth,
-                        finalDamage,
-                        finalDuration,
-                        2.0, // 旋转速度
-                        this.stats.piercing // 是否穿透
-                    );
-                    
-                    // 添加到投射物数组
-                    if (typeof projectiles !== 'undefined') {
-                        projectiles.push(beam);
-                    }
-                }
-            }
+        // 清理危险区域
+        if (typeof hazards !== 'undefined') {
+            const beforeCount = hazards.length;
+            hazards = hazards.filter(h => h && !h.isGarbage && h.isActive);
+            cleaned += beforeCount - hazards.length;
         }
-
-        getInitialDescription() {
-            return "发射激光光束，造成持续伤害。";
-        }
-
-        getCurrentDescription() {
-            return `发射${this.stats.count}束激光，造成${this.stats.damage}伤害。${this.stats.piercing ? '激光可以穿透敌人。' : ''}`;
-        }
+        
+        console.log(`清理了 ${cleaned} 个垃圾对象`);
     }
-    window.LaserPrismWeapon = LaserPrismWeapon;
-}
-
-// 毒瓶
-if (typeof PoisonVialWeapon === 'undefined') {
-    class PoisonVialWeapon extends Weapon {
-        static Name = "毒瓶";
-        static Emoji = "🧪";
-        static MaxLevel = 10;
-
-        constructor() {
-            super(PoisonVialWeapon.Name, PoisonVialWeapon.Emoji, 1.8, PoisonVialWeapon.MaxLevel);
-        }
-
-        calculateStats() {
-            this.stats = {
-                damage: 8 + (this.level - 1) * 2,
-                cooldown: Math.max(1.0, 1.8 - (this.level - 1) * 0.08),
-                count: 1 + Math.floor((this.level - 1) / 3),
-                poisonDamage: 3 + (this.level - 1) * 1,
-                poisonDuration: Math.min(5, 3 + (this.level - 1) * 0.3),
-                area: 60 + (this.level - 1) * 5,
-                projectileSpeed: 250 + (this.level - 1) * 10,
-                toxicCloud: this.level >= 7
-            };
-        }
-        
-        /**
-         * 更新武器状态
-         * @param {number} dt - 时间增量
-         * @param {Player} owner - 拥有者
-         */
-        update(dt, owner) {
-            // 如果没有统计信息，计算统计信息
-            if (!this.stats) {
-                this.calculateStats();
-            }
-            
-            // 增加冷却计时器
-            this.cooldownTimer += dt;
-            
-            // 如果冷却结束，投掷毒瓶
-            if (this.cooldownTimer >= this.stats.cooldown) {
-                // 重置冷却计时器
-                this.cooldownTimer = 0;
-                
-                // 投掷毒瓶
-                this.throwPoisonVial(owner);
-            }
-        }
-        
-        /**
-         * 投掷毒瓶
-         * @param {Player} owner - 拥有者
-         */
-        throwPoisonVial(owner) {
-            // 获取基础伤害乘数
-            const damageMultiplier = owner.getStat ? owner.getStat('damageMultiplier') : 1;
-            const finalDamage = this.stats.damage * damageMultiplier;
-            const finalPoisonDamage = this.stats.poisonDamage * damageMultiplier;
-            
-            // 获取范围乘数
-            const areaMultiplier = owner.getStat ? owner.getStat('areaMultiplier') : 1;
-            const finalArea = this.stats.area * areaMultiplier;
-            
-            // 获取持续时间乘数
-            const durationMultiplier = owner.getStat ? owner.getStat('durationMultiplier') : 1;
-            const finalPoisonDuration = this.stats.poisonDuration * durationMultiplier;
-            
-            // 获取投射物速度乘数
-            const projSpeedMultiplier = owner.getStat ? owner.getStat('projectileSpeedMultiplier') : 1;
-            const finalSpeed = this.stats.projectileSpeed * projSpeedMultiplier;
-            
-            // 对每个毒瓶
-            for (let i = 0; i < this.stats.count; i++) {
-                // 寻找目标
-                const target = owner.findRandomEnemy(300);
-                
-                // 确定方向
-                let dirX, dirY;
-                
-                if (target) {
-                    // 计算方向
-                    const dx = target.x - owner.x;
-                    const dy = target.y - owner.y;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
-                    
-                    if (dist > 0) {
-                        dirX = dx / dist;
-                        dirY = dy / dist;
-                    } else {
-                        // 随机方向
-                        const angle = Math.random() * Math.PI * 2;
-                        dirX = Math.cos(angle);
-                        dirY = Math.sin(angle);
-                    }
-                } else {
-                    // 随机方向
-                    const angle = Math.random() * Math.PI * 2;
-                    dirX = Math.cos(angle);
-                    dirY = Math.sin(angle);
-                }
-                
-                // 计算速度
-                const vx = dirX * finalSpeed;
-                const vy = dirY * finalSpeed;
-                
-                // 创建毒瓶投射物
-                if (typeof PoisonVialProjectile === 'function') {
-                    const vial = new PoisonVialProjectile(
-                        owner.x,
-                        owner.y,
-                        24, // 大小
-                        vx,
-                        vy,
-                        finalDamage,
-                        4.0, // 存在时间
-                        damageMultiplier,
-                        finalArea,
-                        finalPoisonDamage,
-                        finalPoisonDuration,
-                        this.stats.toxicCloud
-                    );
-                    
-                    // 添加到投射物数组
-                    if (typeof projectiles !== 'undefined') {
-                        projectiles.push(vial);
-                    }
-                }
-            }
-        }
-
-        getInitialDescription() {
-            return "投掷毒瓶，造成毒素伤害。";
-        }
-
-        getCurrentDescription() {
-            return `投掷${this.stats.count}个毒瓶，造成${this.stats.damage}伤害并使敌人中毒，每秒造成${this.stats.poisonDamage}点伤害，持续${this.stats.poisonDuration.toFixed(1)}秒。${this.stats.toxicCloud ? '毒瓶爆炸后留下毒云。' : ''}`;
-        }
-    }
-    window.PoisonVialWeapon = PoisonVialWeapon;
-}
-
-// 冰晶杖
-if (typeof FrostStaffWeapon === 'undefined') {
-    class FrostStaffWeapon extends Weapon {
-        static Name = "冰晶杖";
-        static Emoji = "❄️";
-        static MaxLevel = 10;
-
-        constructor() {
-            super(FrostStaffWeapon.Name, FrostStaffWeapon.Emoji, 1.5, FrostStaffWeapon.MaxLevel);
-        }
-
-        calculateStats() {
-            this.stats = {
-                damage: 9 + (this.level - 1) * 3,
-                cooldown: Math.max(1.0, 1.5 - (this.level - 1) * 0.06),
-                count: 1 + Math.floor((this.level - 1) / 2),
-                freezeDuration: 0.7 + (this.level - 1) * 0.1,
-                slowFactor: 0.3 + (this.level - 1) * 0.03,
-                projectileSpeed: 300 + (this.level - 1) * 10,
-                pierce: Math.floor((this.level - 1) / 3),
-                split: this.level >= 8
-            };
-        }
-        
-        /**
-         * 更新武器状态
-         * @param {number} dt - 时间增量
-         * @param {Player} owner - 拥有者
-         */
-        update(dt, owner) {
-            // 如果没有统计信息，计算统计信息
-            if (!this.stats) {
-                this.calculateStats();
-            }
-            
-            // 增加冷却计时器
-            this.cooldownTimer += dt;
-            
-            // 如果冷却结束，发射冰晶
-            if (this.cooldownTimer >= this.stats.cooldown) {
-                // 重置冷却计时器
-                this.cooldownTimer = 0;
-                
-                // 发射冰晶
-                this.shootFrostCrystal(owner);
-            }
-        }
-        
-        /**
-         * 发射冰晶
-         * @param {Player} owner - 拥有者
-         */
-        shootFrostCrystal(owner) {
-            // 获取基础伤害乘数
-            const damageMultiplier = owner.getStat ? owner.getStat('damageMultiplier') : 1;
-            const finalDamage = this.stats.damage * damageMultiplier;
-            
-            // 获取穿透加成
-            const pierceBonus = owner.getStat ? owner.getStat('pierceBonus') || 0 : 0;
-            const finalPierce = this.stats.pierce + pierceBonus;
-            
-            // 获取持续时间乘数
-            const durationMultiplier = owner.getStat ? owner.getStat('durationMultiplier') : 1;
-            const finalFreezeDuration = this.stats.freezeDuration * durationMultiplier;
-            
-            // 获取速度乘数
-            const speedMultiplier = owner.getStat ? owner.getStat('projectileSpeedMultiplier') : 1;
-            const finalSpeed = this.stats.projectileSpeed * speedMultiplier;
-            
-            // 寻找附近敌人而不是考虑玩家朝向
-            const targets = [];
-            
-            // 如果有enemies数组
-            if (typeof enemies !== 'undefined') {
-                // 获取可视范围内的敌人
-                const maxRange = 300; // 最大索敌范围，改为300与飞刀一致
-                
-                // 筛选视野内的敌人
-                const visibleEnemies = enemies.filter(enemy => {
-                    if (!enemy || enemy.isGarbage || !enemy.isActive) return false;
-                    
-                    const dx = enemy.x - owner.x;
-                    const dy = enemy.y - owner.y;
-                    const distSq = dx * dx + dy * dy;
-                    
-                    return distSq <= maxRange * maxRange;
-                });
-                
-                // 按距离排序
-                const sortedEnemies = visibleEnemies.sort((a, b) => {
-                    const distA = (a.x - owner.x) * (a.x - owner.x) + (a.y - owner.y) * (a.y - owner.y);
-                    const distB = (b.x - owner.x) * (b.x - owner.x) + (b.y - owner.y) * (b.y - owner.y);
-                    return distA - distB;
-                });
-                
-                // 取最近的几个敌人作为目标
-                targets.push(...sortedEnemies.slice(0, this.stats.count));
-            }
-            
-            // 对每个目标发射冰晶
-            for (let i = 0; i < this.stats.count; i++) {
-                let vx, vy;
-                
-                // 如果有目标，瞄准目标
-                if (i < targets.length) {
-                    const target = targets[i];
-                    const dx = target.x - owner.x;
-                    const dy = target.y - owner.y;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
-                    
-                    vx = dx / dist * finalSpeed;
-                    vy = dy / dist * finalSpeed;
-                } else {
-                    // 没有目标时随机方向
-                    const angle = Math.random() * Math.PI * 2;
-                    vx = Math.cos(angle) * finalSpeed;
-                    vy = Math.sin(angle) * finalSpeed;
-                }
-                
-                // 创建冰晶投射物
-                if (typeof FrostCrystalProjectile === 'function') {
-                    const crystal = new FrostCrystalProjectile(
-                        owner.x,
-                        owner.y,
-                        24, // 大小
-                        vx,
-                        vy,
-                        finalDamage,
-                        finalPierce,
-                        4.0, // 存在时间
-                        damageMultiplier,
-                        finalFreezeDuration,
-                        this.stats.slowFactor,
-                        this.stats.split
-                    );
-                    
-                    // 添加到投射物数组
-                    if (typeof projectiles !== 'undefined') {
-                        projectiles.push(crystal);
-                    }
-                }
-            }
-        }
-
-        getInitialDescription() {
-            return "发射冰晶，冻结并减速敌人。";
-        }
-
-        getCurrentDescription() {
-            return `发射${this.stats.count}个冰晶，造成${this.stats.damage}伤害，冻结敌人${this.stats.freezeDuration.toFixed(1)}秒并减速${Math.round(this.stats.slowFactor * 100)}%。${this.stats.split ? '冰晶碰撞后分裂成多个碎片。' : ''}`;
-        }
-    }
-    window.FrostStaffWeapon = FrostStaffWeapon;
-}
-
-// 将新武器添加到BASE_WEAPONS数组中
-if (typeof BASE_WEAPONS !== 'undefined') {
-    // 添加新武器到BASE_WEAPONS
-    if (typeof VineSeedWeapon === 'function') BASE_WEAPONS.push(VineSeedWeapon);
-    if (typeof LaserPrismWeapon === 'function') BASE_WEAPONS.push(LaserPrismWeapon);
-    if (typeof PoisonVialWeapon === 'function') BASE_WEAPONS.push(PoisonVialWeapon);
-    if (typeof FrostStaffWeapon === 'function') BASE_WEAPONS.push(FrostStaffWeapon);
-    
-    console.log('Debug weapons added to BASE_WEAPONS:', 
-        [VineSeedWeapon, LaserPrismWeapon, PoisonVialWeapon, FrostStaffWeapon]
-            .filter(w => typeof w === 'function')
-            .map(w => w.Name || '')
-    );
-} else {
-    console.error('BASE_WEAPONS not found! Make sure weapon files are loaded first.');
-}
+};
  
