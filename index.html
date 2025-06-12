@@ -364,7 +364,48 @@
         <span id="bossHealthValueText"></span>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.js"></script>
-    <script src="js/phaserGame.js"></script>
+    <!-- 游戏脚本 -->
+    <!-- 核心脚本 -->
+    <script src="js/core/config.js"></script>
+    <script src="js/constants.js"></script>
+    <script src="js/core/cameraManager.js"></script>
+
+    <!-- 管理器脚本 -->
+    <script src="js/managers/assetManager.js"></script>
+    <script src="js/managers/gameStateManager.js"></script>
+    <script src="js/managers/enemyManager.js"></script>
+    <script src="js/managers/uiManager.js"></script>
+
+    <!-- 系统脚本 -->
+    <script src="js/systems/utils.js"></script>
+    <script src="js/systems/inputHandler.js"></script>
+    <script src="js/systems/upgradeSystem.js"></script>
+    <script src="js/systems/enemyProjectileSystem.js"></script>
+
+    <!-- 实体脚本 -->
+    <script src="js/entities/gameObject.js"></script>
+    <script src="js/entities/character.js"></script>
+    <script src="js/entities/player.js"></script>
+    <script src="js/entities/enemies/EnemyUtils.js"></script>
+    <script src="js/entities/enemies/BaseEnemy.js"></script>
+    <script src="js/entities/enemies/BossEnemy.js"></script>
+    <script src="js/entities/enemies/GhostEnemy.js"></script>
+    <script src="js/entities/pickups.js"></script>
+    <script src="js/entities/damageNumber.js"></script>
+
+    <!-- 武器脚本 -->
+    <script src="js/weapons/weapon.js"></script>
+    <script src="js/weapons/projectile.js"></script>
+    <script src="js/weapons/allWeapons.js"></script>
+    <script src="js/weapons/newProjectiles.js"></script>
+
+    <!-- 被动物品脚本 -->
+    <script src="js/items/passiveItems.js"></script>
+
+    <!-- 游戏核心脚本 -->
+    <script src="js/core/gameCore.js"></script>
+
+    <!-- 游戏主脚本 -->
+    <script src="js/game.js"></script>
 </body>
 </html>
